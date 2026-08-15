@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Finance Dashboard - AICC Enterprise</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-fixed-variant": "#264191",
+                      "inverse-surface": "#213145",
+                      "surface-container-high": "#dce9ff",
+                      "surface": "#f8f9ff",
+                      "on-surface": "#0b1c30",
+                      "tertiary-fixed-dim": "#ffb691",
+                      "surface-container": "#e5eeff",
+                      "on-error-container": "#93000a",
+                      "primary-fixed-dim": "#b6c4ff",
+                      "tertiary": "#4b1c00",
+                      "tertiary-container": "#6e2c00",
+                      "on-background": "#0b1c30",
+                      "on-secondary-fixed-variant": "#930013",
+                      "surface-container-low": "#eff4ff",
+                      "primary-container": "#1e3a8a",
+                      "on-surface-variant": "#444651",
+                      "outline-variant": "#c5c5d3",
+                      "on-tertiary-container": "#f39461",
+                      "error": "#ba1a1a",
+                      "secondary-fixed-dim": "#ffb3ad",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-tint": "#4059aa",
+                      "on-primary-fixed": "#00164e",
+                      "background": "#f8f9ff",
+                      "tertiary-fixed": "#ffdbcb",
+                      "primary-fixed": "#dce1ff",
+                      "outline": "#757682",
+                      "on-error": "#ffffff",
+                      "surface-container-highest": "#d3e4fe",
+                      "surface-bright": "#f8f9ff",
+                      "secondary-fixed": "#ffdad7",
+                      "on-primary-container": "#90a8ff",
+                      "on-secondary": "#ffffff",
+                      "secondary-container": "#da3437",
+                      "surface-variant": "#d3e4fe",
+                      "secondary": "#b61722",
+                      "inverse-primary": "#b6c4ff",
+                      "surface-dim": "#cbdbf5",
+                      "on-secondary-fixed": "#410004",
+                      "primary": "#00236f",
+                      "on-tertiary-fixed": "#341100",
+                      "on-tertiary-fixed-variant": "#773205",
+                      "on-tertiary": "#ffffff",
+                      "on-primary": "#ffffff",
+                      "inverse-on-surface": "#eaf1ff",
+                      "on-secondary-container": "#fffbff",
+                      "error-container": "#ffdad6"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "xs": "4px",
+                      "xl": "32px",
+                      "base": "4px",
+                      "gutter": "24px",
+                      "container-max": "1440px",
+                      "md": "16px",
+                      "sm": "8px",
+                      "margin-desktop": "40px",
+                      "lg": "24px",
+                      "margin-mobile": "16px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Inter"
+                      ],
+                      "title-lg": [
+                              "Inter"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "title-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-sm": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }
+        body {
+            background-color: #F8FAFC;
+        }
+        
+        /* Data Table Styling */
+        .zebra-table tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
+        .zebra-table tbody tr:nth-child(odd) {
+            background-color: #F8FAFC;
+        }
+        .zebra-table td, .zebra-table th {
+            padding-top: 12px;
+            padding-bottom: 12px;
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+        
+        /* Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-paid {
+            background-color: #D1FAE5;
+            color: #065F46;
+        }
+        .status-partial {
+            background-color: #FEF3C7;
+            color: #92400E;
+        }
+        .status-unpaid {
+            background-color: #FEE2E2;
+            color: #991B1B;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden text-on-surface bg-surface font-body-md">
+<nav class="fixed left-0 right-0 top-0 z-50 border-b border-outline-variant bg-surface-container-lowest/95 backdrop-blur-sm">
+  <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-3 px-4 py-3 md:px-8">
+    <div class="flex items-center gap-2 text-sm font-semibold text-primary">
+      <span class="material-symbols-outlined text-base">view_module</span>
+      <span>Pages</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 text-xs font-medium text-on-surface-variant">
+      <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="event-builder.html">Event Builder</a>
+      <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="coordinator-dashboard.html">Coordinator</a>
+      <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="planner-dashboard.html">Planner</a>
+      <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="admin-panel.html">Admin</a>
+      <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="finance-dashboard.html">Finance</a>
+      <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="index.html">Home</a>
+    </div>
+  </div>
+</nav>
+<!-- SideNavBar (Shared Component) -->
+<nav class="hidden md:flex bg-primary dark:bg-primary-container text-on-primary dark:text-on-primary-container fixed left-0 top-0 h-full w-64 flex-col py-6 space-y-4 z-20">
+<!-- Brand Header -->
+<div class="px-6 pb-6">
+<div class="flex items-center gap-3">
+<img alt="AICC Logo" class="w-10 h-10 rounded" data-alt="A minimalist white geometric icon representing a convention center on a solid blue background, high quality corporate logo style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCN5CoLq9XRBT6Pvp4eTVY8KWEJmrNQiloPjlp6R-eZaPQyjSJgsSQNPIbPHcA1wBGGbpMKkXhfHbHr-zQEKyJzhAC1Vn4mz5RZaY1yv1OjchjBAuVevcMzAxHdB3iaZz4EMV6DzU9lxYsu2dRZvOfsszEbgbaDZrVumuwBaPPdqoPKAget8jc8zKVTKZOYtU-sUsyuz0pw14dUyJ2iFCZ-mV5y84paacRIiJTRYWE0Ua-zfNdMSgVk"/>
+<div>
+<h1 class="text-headline-md font-headline-md font-bold text-on-primary dark:text-on-primary-container tracking-tight">AICC Logistics</h1>
+<p class="text-label-md font-label-md opacity-80">Convention Management</p>
+</div>
+</div>
+<button class="mt-6 w-full flex items-center justify-center gap-2 bg-on-primary-fixed-variant text-on-primary rounded-lg px-4 py-2 hover:bg-on-primary-fixed-variant/80 transition-colors font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                New Event
+            </button>
+</div>
+<!-- Main Navigation -->
+<div class="flex-1 overflow-y-auto space-y-1">
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 mx-2 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="dashboard.html">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 mx-2 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="calendar.html">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+                Calendar
+            </a>
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 mx-2 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="venues.html">
+<span class="material-symbols-outlined" data-icon="location_on">location_on</span>
+                Venues
+            </a>
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 mx-2 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="reports.html">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                Reports
+            </a>
+<!-- Active: Finance -->
+<a class="flex items-center gap-3 bg-on-primary-fixed-variant dark:bg-primary text-on-primary dark:text-on-primary-container rounded-lg px-4 py-3 mx-2 transition-all text-label-md font-label-md cursor-pointer active:scale-95 duration-100 shadow-inner" href="finance-dashboard.html">
+<span class="material-symbols-outlined" data-icon="payments" data-weight="fill">payments</span>
+                Finance
+            </a>
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 mx-2 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="admin-panel.html">
+<span class="material-symbols-outlined" data-icon="admin_panel_settings">admin_panel_settings</span>
+                Admin
+            </a>
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 mx-2 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="index.html">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+                Home
+            </a>
+</div>
+<!-- Footer Navigation -->
+<div class="mt-auto space-y-1 pt-4 px-2 border-t border-on-primary-fixed-variant">
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                Reports
+            </a>
+<a class="flex items-center gap-3 text-primary-fixed dark:text-outline-variant hover:bg-on-primary-fixed-variant/50 px-4 py-3 transition-all rounded-lg text-label-md font-label-md cursor-pointer active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Logout
+            </a>
+</div>
+</nav>
+<!-- Main Wrapper -->
+<div class="flex-1 flex flex-col md:ml-64 w-full h-full relative">
+<!-- TopNavBar (Shared Component) -->
+<header class="bg-surface-container-lowest dark:bg-inverse-surface flex justify-between items-center w-full px-margin-desktop h-16 max-w-container-max mx-auto border-b border-outline-variant dark:border-outline z-10 docked top-0">
+<!-- Left: Brand / Search -->
+<div class="flex items-center gap-6">
+<!-- Mobile Menu Button (hidden on md) -->
+<button class="md:hidden text-on-surface-variant p-2 -ml-2 rounded-lg hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<span class="text-title-lg font-title-lg font-bold text-primary dark:text-primary-fixed-dim">AICC Enterprise</span>
+<!-- Search Bar (on_left) -->
+<div class="hidden md:flex relative w-64 ml-4">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant text-[20px]" data-icon="search">search</span>
+<input class="w-full h-10 pl-10 pr-4 rounded-full border border-outline-variant bg-surface-bright focus:border-primary focus:ring-1 focus:ring-primary text-body-md font-body-md outline-none transition-shadow" placeholder="Search invoices..." type="text"/>
+</div>
+</div>
+<!-- Right: Actions & Profile -->
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors rounded-full hover:bg-surface-container-low cursor-pointer active:opacity-70">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors rounded-full hover:bg-surface-container-low cursor-pointer active:opacity-70">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="p-2 text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors rounded-full hover:bg-surface-container-low cursor-pointer active:opacity-70 mr-4">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<!-- Profile Image -->
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer active:opacity-70">
+<img alt="Administrator profile" class="h-full w-full object-cover" data-alt="A professional corporate headshot of an administrator in a well-lit modern office, neutral background, sharp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIYWH3tjpwrnwl9nuF3kQkrqWCzvE1dn9Yfl-T9-uwfqJM9LodavcZFEtVAgt8ozM_A6MXWybJdG5nrMyZRVJv5ZSVbaCWzQkvCPaNkCCtY7MttbwblvLSm8aux3g4ZWaytd0aTZ2wDJauOgn687bW6N0QCou2RbOCgY5HaSzOCQ4mltgNQYwaNQ5vjet9T7qGBzVxkWsNXVoxzl7aEbsEk0ud887e14LC2BPkUqdOLVhg-2FmByqp"/>
+</div>
+</div>
+</header>
+<!-- Canvas Area -->
+<main class="flex-1 overflow-y-auto p-margin-mobile md:p-margin-desktop bg-[#F8FAFC]">
+<div class="max-w-container-max mx-auto h-full flex flex-col gap-6">
+<!-- Page Header & Actions -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface">Finance</h2>
+<p class="text-body-md font-body-md text-on-surface-variant mt-1">Manage outstanding invoices and payments.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 border border-outline-variant bg-surface-container-lowest text-on-surface rounded-DEFAULT hover:bg-surface-container-low transition-colors font-label-md text-label-md shadow-sm">
+                            Mark as Paid
+                        </button>
+<button class="px-4 py-2 bg-[#1E3A8A] text-white rounded-DEFAULT hover:bg-primary-container/90 transition-colors font-label-md text-label-md flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+                            Generate Invoice
+                        </button>
+</div>
+</div>
+<!-- Main Content Area: Data Table Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+<!-- Table Header Controls -->
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+<h3 class="text-title-lg font-title-lg text-on-surface">Outstanding Invoices</h3>
+<div class="flex gap-2">
+<button class="p-2 text-on-surface-variant border border-outline-variant rounded hover:bg-surface-container-low transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]" data-icon="filter_list">filter_list</span>
+</button>
+<button class="p-2 text-on-surface-variant border border-outline-variant rounded hover:bg-surface-container-low transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]" data-icon="download">download</span>
+</button>
+</div>
+</div>
+<!-- Table Wrapper -->
+<div class="overflow-x-auto flex-1">
+<table class="w-full text-left text-body-md font-body-md text-on-surface zebra-table">
+<thead class="text-label-md font-label-md text-on-surface-variant bg-surface-container-low border-b border-outline-variant">
+<tr>
+<th class="w-12 text-center" scope="col">
+<input class="rounded border-outline-variant text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</th>
+<th scope="col">Invoice #</th>
+<th scope="col">Client</th>
+<th scope="col">Event</th>
+<th class="text-right" scope="col">Amount</th>
+<th scope="col">Due Date</th>
+<th scope="col">Status</th>
+<th class="text-right" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/50">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="text-center">
+<input class="rounded border-outline-variant text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</td>
+<td class="font-medium text-primary">INV-2023-084</td>
+<td>Global Tech Summit</td>
+<td>Main Hall Booking (3 Days)</td>
+<td class="text-right font-medium">Br 250,000</td>
+<td>Oct 15, 2023</td>
+<td><span class="status-badge status-unpaid">Unpaid</span></td>
+<td class="text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="text-center">
+<input class="rounded border-outline-variant text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</td>
+<td class="font-medium text-primary">INV-2023-082</td>
+<td>Ethiopian Coffee Expo</td>
+<td>Exhibition Space &amp; Catering</td>
+<td class="text-right font-medium">Br 120,500</td>
+<td>Oct 10, 2023</td>
+<td><span class="status-badge status-partial">Partial</span></td>
+<td class="text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="text-center">
+<input class="rounded border-outline-variant text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</td>
+<td class="font-medium text-primary">INV-2023-079</td>
+<td>Pan-African Medical Conf.</td>
+<td>Auditorium A + AV Setup</td>
+<td class="text-right font-medium">Br 45,000</td>
+<td>Oct 05, 2023</td>
+<td><span class="status-badge status-unpaid">Unpaid</span></td>
+<td class="text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="text-center">
+<input class="rounded border-outline-variant text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</td>
+<td class="font-medium text-primary">INV-2023-078</td>
+<td>Min. of Trade Annual Gala</td>
+<td>Grand Ballroom</td>
+<td class="text-right font-medium">Br 300,000</td>
+<td>Sep 30, 2023</td>
+<td><span class="status-badge status-paid">Paid</span></td>
+<td class="text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-surface-container-lowest transition-colors group">
+<td class="text-center">
+<input class="rounded border-outline-variant text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</td>
+<td class="font-medium text-primary">INV-2023-075</td>
+<td>Addis Auto Show</td>
+<td>Outdoor Plaza + Power</td>
+<td class="text-right font-medium">Br 175,000</td>
+<td>Sep 25, 2023</td>
+<td><span class="status-badge status-paid">Paid</span></td>
+<td class="text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 opacity-0 group-hover:opacity-100 focus:opacity-100">
+<span class="material-symbols-outlined text-[20px]" data-icon="more_vert">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination (Static for demo) -->
+<div class="border-t border-outline-variant px-6 py-4 flex items-center justify-between bg-surface-bright">
+<span class="text-label-md font-label-md text-on-surface-variant">Showing 1 to 5 of 24 entries</span>
+<div class="flex gap-1">
+<button class="p-1 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-low disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[18px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="px-3 py-1 border border-primary bg-primary text-on-primary rounded text-label-md font-label-md">1</button>
+<button class="px-3 py-1 border border-outline-variant text-on-surface rounded hover:bg-surface-container-low text-label-md font-label-md">2</button>
+<button class="px-3 py-1 border border-outline-variant text-on-surface rounded hover:bg-surface-container-low text-label-md font-label-md">3</button>
+<button class="p-1 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-low">
+<span class="material-symbols-outlined text-[18px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
