@@ -1,48 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../store/AppContext';
-import { UserIcon, BuildingOfficeIcon, ShieldCheckIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-
-const portals = [
-  {
-    role: 'CLIENT',
-    userId: 1,
-    title: 'Client Portal',
-    desc: 'Submit inquiries, review proposals, accept events.',
-    icon: UserIcon,
-    color: 'navy',
-  },
-  {
-    role: 'VENDOR',
-    userId: 2,
-    title: 'Vendor Portal',
-    desc: 'View assignments, accept or decline.',
-    icon: BuildingOfficeIcon,
-    color: 'amber',
-  },
-  {
-    role: 'COORDINATOR',
-    userId: 4,
-    title: 'Coordinator Portal',
-    desc: 'Manage events, vendors, and assignments.',
-    icon: ShieldCheckIcon,
-    color: 'rose',
-  },
-];
+import { CheckCircleIcon } from '@heroicons/react/24/outline';
 
 const Login = () => {
   const { dispatch } = useApp();
   const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (userId, role) => {
-    const user = { id: userId, role, fullName: portals.find(p => p.userId === userId)?.title || 'User' };
-    dispatch({ type: 'LOGIN', payload: user });
-    const path = {
-      CLIENT: '/client/dashboard',
-      VENDOR: '/vendor/dashboard',
-      COORDINATOR: '/coordinator/dashboard',
-    }[role];
-    navigate(path);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const response = await axios.post('http://localhost:8080/api/auth/login', {
+        username,
+        password,
+      });
+      const { accessToken, role } = response.data;
+
+      const user = { username, fullName: username, role, token: accessToken };
+      dispatch({ type: 'LOGIN', payload: user });
+
+      const path = {
+        CLIENT: '/client/dashboard',
+        VENDOR: '/vendor/dashboard',
+        COORDINATOR: '/coordinator/dashboard',
+      }[role] || '/login';
+      navigate(path);
+    } catch (err) {
+      setError('Invalid username or password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -75,32 +69,48 @@ const Login = () => {
         </div>
       </div>
 
-      {/* Login cards */}
+      {/* Login form */}
       <div className="flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <h2 className="text-2xl font-bold text-slate-800">Welcome back</h2>
-          <p className="text-sm text-slate-500 mt-1 mb-6">Demo mode — pick a role to explore its portal.</p>
+          <p className="text-sm text-slate-500 mt-1 mb-6">Sign in to your account.</p>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm border border-red-200">
+              {error}
+            </div>
+          )}
+
           <div className="space-y-4">
-            {portals.map((p) => (
-              <div
-                key={p.role}
-                className="bg-white rounded-xl shadow-card border border-slate-200/60 p-4 flex items-center gap-4 hover:shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer"
-                onClick={() => handleLogin(p.userId, p.role)}
-              >
-                <div className={`p-3 rounded-xl bg-${p.color}/10 text-${p.color}`}>
-                  <p.icon className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-slate-800">{p.title}</h4>
-                  <p className="text-sm text-slate-500">{p.desc}</p>
-                </div>
-                <button className="btn-outline text-sm">Enter</button>
-              </div>
-            ))}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-navy/40"
+                placeholder="Enter your username"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-navy/40"
+                placeholder="Enter your password"
+              />
+            </div>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="w-full bg-navy text-white py-2.5 rounded-lg font-semibold hover:bg-navy/90 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
           </div>
-          <p className="mt-6 text-center text-xs text-slate-400">
-            Demo users: client1 · vendor1 · vendor2 · coordinator1
-          </p>
         </div>
       </div>
     </div>
