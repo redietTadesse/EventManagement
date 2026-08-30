@@ -31,3 +31,5 @@ build/
 
 ### VS Code ###
 .vscode/
+eventmanagement/.env
+**/application-local.properties
