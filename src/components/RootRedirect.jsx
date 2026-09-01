@@ -10,7 +10,7 @@ export default function RootRedirect() {
     return <div className="text-center py-10">Loading...</div>;
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/" replace />;
   switch (user.role) {
     case 'CLIENT': return <Navigate to="/client/dashboard" replace />;
     case 'COORDINATOR': return <Navigate to="/coordinator/dashboard" replace />;

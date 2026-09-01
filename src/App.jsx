@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
+import PortalSelect from './components/PortalSelect';
 import Login from './components/Login';
 import ClientDashboard from './client/ClientDashboard';
 import NewInquiry from './client/NewInquiry';
@@ -14,8 +15,10 @@ import VendorDashboard from './vendor/VendorDashboard';
 function AppRoutes() {
   return (
     <Routes>
+      {/* Public: portal selection comes before login */}
+      <Route path="/" element={<PortalSelect />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/login/:portal?" element={<Login />} />
 
       {/* Client routes */}
       <Route
