@@ -32,8 +32,8 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Error: Invalid username or password!");
         }
 
-        String jwt = jwtUtils.generateJwtToken(user.getUsername());
-        return ResponseEntity.ok(new JwtResponse(jwt));
+        String jwt = jwtUtils.generateJwtToken(user.getUsername(), user.getRole().name());
+        return ResponseEntity.ok(new JwtResponse(jwt, user.getRole().name()));
     }
 
     @PostMapping("/register")
