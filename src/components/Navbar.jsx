@@ -16,6 +16,7 @@ const Navbar = () => {
       { to: '/client/dashboard', label: 'Dashboard' },
       { to: '/client/inquiries/new', label: 'New Inquiry' },
       { to: '/client/inquiries', label: 'My Inquiries' },
+      { to: '/client/vendors', label: 'Vendors' },
     ],
     VENDOR: [
       { to: '/vendor/dashboard', label: 'Dashboard' },

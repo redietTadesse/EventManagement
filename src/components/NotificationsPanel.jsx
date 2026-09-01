@@ -29,7 +29,19 @@ const NotificationsPanel = ({ limit = 5 }) => {
           <p className="py-4 text-sm text-slate-500">No notifications</p>
         ) : (
           myNotifications.slice(0, limit).map(n => (
-            <InlineNotification key={n.id} notification={n} />
+            <InlineNotification 
+              key={n.id} 
+              notification={n} 
+              onAction={(notification, action) => {
+                // Handle quick actions from notifications
+                console.log('Quick action:', action, 'for notification:', notification.id);
+                // Navigate based on action type
+                if (action === 'view' && notification.type === 'ASSIGNMENT') {
+                  // Would navigate to assignment detail
+                  console.log('Navigate to assignment');
+                }
+              }}
+            />
           ))
         )}
       </div>

@@ -2,14 +2,17 @@ import React, { useState } from 'react';
 import { useApp } from '../store/AppContext';
 import RatingStars from './RatingStars';
 
-const VendorRatingForm = ({ vendor, eventId, className = '' }) => {
+const VendorRatingForm = ({ vendor, eventId }) => {
   const { dispatch } = useApp();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = () => {
-    if (rating === 0) return;
+    if (rating === 0) {
+      alert('Please select a rating');
+      return;
+    }
     dispatch({
       type: 'RATE_VENDOR',
       payload: { eventId, vendorId: vendor.id, rating, comment },
@@ -17,41 +20,38 @@ const VendorRatingForm = ({ vendor, eventId, className = '' }) => {
     setSubmitted(true);
   };
 
-  return (
-    <div className={`p-3 border border-slate-200 rounded-lg ${className}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-full bg-ice flex items-center justify-center text-navy font-bold text-sm flex-shrink-0">
-            {vendor.companyName.charAt(0)}
-          </div>
-          <span className="text-sm font-medium text-slate-800 truncate">{vendor.companyName}</span>
-        </div>
-        {submitted ? (
-          <span className="text-xs font-medium text-green">✓ Thank you for rating!</span>
-        ) : (
-          <RatingStars rating={rating} onRate={setRating} />
-        )}
+  if (submitted) {
+    return (
+      <div className="p-3 bg-green/10 border border-green/20 rounded-lg">
+        <p className="text-sm text-green-800">Thanks for rating {vendor.companyName}!</p>
       </div>
-      {!submitted ? (
-        <>
-          <textarea
-            rows={2}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Short feedback for this vendor (optional)"
-            className="mt-2 w-full rounded-lg border-slate-300 shadow-sm focus:border-navy focus:ring-navy text-sm"
-          />
-          <div className="mt-2 flex justify-end">
-            <button onClick={handleSubmit} disabled={rating === 0} className="btn-primary text-xs py-1 px-3">
-              Submit Rating
-            </button>
-          </div>
-        </>
-      ) : (
-        <p className="text-xs text-slate-500 mt-1">
-          {rating}/5 — {comment || 'No comment'}
-        </p>
-      )}
+    );
+  }
+
+  return (
+    <div className="border rounded-lg p-3 bg-white">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="w-10 h-10 rounded-full bg-ice flex items-center justify-center text-navy font-bold">
+          {vendor.companyName.charAt(0)}
+        </div>
+        <div>
+          <p className="font-medium text-slate-800">{vendor.companyName}</p>
+          <p className="text-xs text-slate-500">{vendor.serviceCategory.replace('_', ' ')}</p>
+        </div>
+      </div>
+      <div className="mt-2">
+        <RatingStars rating={rating} onRate={setRating} />
+      </div>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Optional comment..."
+        rows={2}
+        className="w-full mt-2 rounded-lg border-slate-300 text-sm"
+      />
+      <button onClick={handleSubmit} className="btn-primary w-full mt-2 text-sm">
+        Submit Rating
+      </button>
     </div>
   );
 };

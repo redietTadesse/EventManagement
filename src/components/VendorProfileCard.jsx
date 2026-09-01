@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import RatingStars from './RatingStars';
 import { PhoneIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 
-const VendorProfileCard = ({ vendor, assignments }) => {
+const VendorProfileCard = ({ vendor, assignments, highlight }) => {
   const avgRating = vendor.ratings?.length
     ? (vendor.ratings.reduce((sum, r) => sum + r.rating, 0) / vendor.ratings.length).toFixed(1)
     : vendor.rating?.toFixed(1) || '—';
@@ -17,7 +17,12 @@ const VendorProfileCard = ({ vendor, assignments }) => {
           {vendor.companyName.charAt(0)}
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-slate-800 truncate">{vendor.companyName}</h4>
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-semibold text-slate-800 truncate">{vendor.companyName}</h4>
+            {highlight && (
+              <span className="badge badge-green flex-shrink-0 whitespace-nowrap">{highlight}</span>
+            )}
+          </div>
           <p className="text-sm text-slate-500 capitalize">{vendor.serviceCategory.replace('_', ' ')}</p>
           <div className="flex items-center gap-2 mt-1">
             <RatingStars rating={avgRating === '—' ? 0 : parseFloat(avgRating)} readonly />
