@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.User;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.JwtResponse;
 import com.aicc.eventmanagement.payload.LoginRequest;
 import com.aicc.eventmanagement.payload.SignupRequest;
@@ -38,6 +39,13 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
+        // Public self-registration may only create CLIENT accounts.
+        // Vendor and Coordinator accounts are provisioned by administration (see db/admin_seed.sql).
+        if (signUpRequest.getRole() != Role.CLIENT) {
+            return ResponseEntity.badRequest()
+                    .body("Error: Only client accounts can self-register. Staff accounts are created by administration.");
+        }
+
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
             return ResponseEntity.badRequest().body("Error: Username is already taken!");
         }
@@ -50,7 +58,8 @@ public class AuthController {
                 .username(signUpRequest.getUsername())
                 .email(signUpRequest.getEmail())
                 .passwordHash(encoder.encode(signUpRequest.getPassword()))
-                .role(signUpRequest.getRole())
+                .fullName(signUpRequest.getFullName())
+                .role(Role.CLIENT)
                 .isActive(true)
                 .build();
 
