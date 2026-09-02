@@ -55,6 +55,9 @@ public class VendorAssignment {
     @Column(columnDefinition = "TEXT")
     private String declineReason;
 
+    @Column(name = "vendor_rating")
+    private Double vendorRating;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

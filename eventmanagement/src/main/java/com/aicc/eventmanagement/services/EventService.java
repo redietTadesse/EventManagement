@@ -20,18 +20,36 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final InquiryRepository inquiryRepository;
+    private final VendorService vendorService;
 
     @Transactional
     public Event createEvent(Event event) {
         log.info("Creating event: {}", event.getName());
-        
+
         // Validate inquiry exists
         if (event.getInquiry() != null && event.getInquiry().getId() != null) {
             inquiryRepository.findById(event.getInquiry().getId())
                     .orElseThrow(() -> new RuntimeException("Inquiry not found with id: " + event.getInquiry().getId()));
         }
-        
-        return eventRepository.save(event);
+
+        // Set initial status if not set
+        if (event.getStatus() == null) {
+            event.setStatus(EventStatus.EVENT_CREATED);
+        }
+
+        Event saved = eventRepository.save(event);
+
+        // AUTO-ASSIGN VENDORS AFTER EVENT CREATION
+        try {
+            vendorService.autoAssignForEvent(saved);
+            log.info("Auto-assignment triggered for event {}", saved.getId());
+        } catch (Exception e) {
+            log.error("Auto-assignment failed for event {}: {}", saved.getId(), e.getMessage());
+            // Event still created, vendors need manual assignment
+            // Status remains EVENT_CREATED or becomes NEEDS_COORDINATOR
+        }
+
+        return saved;
     }
 
     public Event getEventById(Long id) {

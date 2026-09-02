@@ -11,6 +11,9 @@ import AllInquiries from './coordinator/AllInquiries';
 import InquiryDetail from './coordinator/InquiryDetail';
 import Events from './coordinator/Events';
 import VendorDashboard from './vendor/VendorDashboard';
+import VendorManagement from './admin/VendorManagement';
+import VendorForm from './admin/VendorForm';
+import VendorDetail from './admin/VendorDetail';
 
 function AppRoutes() {
   return (
@@ -78,6 +81,40 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['VENDOR']}>
             <VendorDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin routes */}
+      <Route
+        path="/admin/vendors"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <VendorManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/vendors/new"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <VendorForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/vendors/:id/edit"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <VendorForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/vendors/:id"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <VendorDetail />
           </ProtectedRoute>
         }
       />
