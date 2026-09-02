@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS vendors (
     INDEX idx_user_id (user_id),
     INDEX idx_service_category (service_category),
     INDEX idx_is_active (is_active),
-    CONSTRAINT fk_vendor_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    INDEX idx_rating (rating)
 );
 
 -- 1.6. Vendor Booked Dates table
@@ -109,7 +109,9 @@ CREATE TABLE IF NOT EXISTS vendor_assignments (
     INDEX idx_event_id (event_id),
     INDEX idx_vendor_id (vendor_id),
     INDEX idx_status (status),
-    CONSTRAINT fk_assignment_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+    INDEX idx_assigned_at (assigned_at),
+    CONSTRAINT fk_assignment_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+    CONSTRAINT fk_assignment_vendor FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE
 );
 
 -- 6. Notifications (Member 3 will use)
