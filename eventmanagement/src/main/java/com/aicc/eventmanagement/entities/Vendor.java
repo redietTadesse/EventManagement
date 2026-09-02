@@ -23,7 +23,8 @@ public class Vendor {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
+    @Column(name = "user_id")
+    private Long userId;
 
     @NotBlank(message = "Company name is required")
     @Size(max = 255, message = "Company name must not exceed 255 characters")
@@ -50,6 +51,7 @@ public class Vendor {
     private Integer rating;
 
     @Column(name = "is_active")
+    @Builder.Default
     private boolean isActive = true;
 
     @OneToMany(mappedBy = "vendor", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

@@ -27,5 +27,8 @@ public interface VendorRepository extends JpaRepository<Vendor, Long> {
     @Query("SELECT v FROM Vendor v WHERE v.companyName LIKE %:name%")
     List<Vendor> findByCompanyNameContaining(@Param("name") String name);
 
+    @Query("SELECT COUNT(v) FROM Vendor v WHERE v.serviceCategory = :category AND v.isActive = true")
+    long countActiveByCategory(@Param("category") String category);
+
     boolean existsByUserId(Long userId);
 }
