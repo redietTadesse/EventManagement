@@ -3,6 +3,7 @@ package com.aicc.eventmanagement.services;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
@@ -23,6 +24,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
@@ -38,6 +41,9 @@ class InquiryServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private WorkflowEngine workflowEngine;   // NEW: mock the engine
 
     @InjectMocks
     private InquiryService inquiryService;
@@ -174,6 +180,9 @@ class InquiryServiceTest {
         assertThat(result).allMatch(inquiry -> inquiry.getClientId().equals(1L));
     }
 
+    // ============================================================
+    // FIXED: Valid status transition – now includes Role and mocks engine
+    // ============================================================
     @Test
     @DisplayName("Should update inquiry status with valid transition")
     void shouldUpdateInquiryStatusWithValidTransition() {
@@ -190,11 +199,23 @@ class InquiryServiceTest {
         when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
         when(inquiryRepository.save(any(Inquiry.class))).thenReturn(inquiry);
 
-        Inquiry result = inquiryService.updateInquiryStatus(1L, EventStatus.PROPOSAL_SENT);
+        // Stub the workflow engine to accept the transition (do nothing)
+        doNothing().when(workflowEngine).validateTransition(
+                EventStatus.INQUIRY_SUBMITTED,
+                EventStatus.PROPOSAL_SENT,
+                Role.COORDINATOR
+        );
+
+        // Now call with role
+        Inquiry result = inquiryService.updateInquiryStatus(1L, EventStatus.PROPOSAL_SENT, Role.COORDINATOR);
 
         assertThat(result.getStatus()).isEqualTo(EventStatus.PROPOSAL_SENT);
+        verify(workflowEngine).validateTransition(EventStatus.INQUIRY_SUBMITTED, EventStatus.PROPOSAL_SENT, Role.COORDINATOR);
     }
 
+    // ============================================================
+    // FIXED: Invalid transition – now expects IllegalStateException
+    // ============================================================
     @Test
     @DisplayName("Should throw exception for invalid status transition")
     void shouldThrowExceptionForInvalidTransition() {
@@ -205,15 +226,29 @@ class InquiryServiceTest {
                 .eventType("conference")
                 .eventDate(LocalDate.now().plusDays(30))
                 .expectedAttendees(200)
-                .status(EventStatus.COMPLETED)
+                .status(EventStatus.COMPLETED)   // COMPLETED has no outgoing transitions
                 .build();
 
         when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
 
-        assertThatThrownBy(() -> inquiryService.updateInquiryStatus(1L, EventStatus.INQUIRY_SUBMITTED))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Invalid status transition");
+        // Stub the engine to throw IllegalStateException for this transition
+        doThrow(new IllegalStateException("Invalid transition: COMPLETED -> INQUIRY_SUBMITTED"))
+                .when(workflowEngine).validateTransition(
+                        EventStatus.COMPLETED,
+                        EventStatus.INQUIRY_SUBMITTED,
+                        Role.COORDINATOR
+                );
+
+        // Expect IllegalStateException with matching message
+        assertThatThrownBy(() -> inquiryService.updateInquiryStatus(1L, EventStatus.INQUIRY_SUBMITTED, Role.COORDINATOR))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Invalid transition");
     }
+
+    // ============================================================
+    // REMAINING TESTS (unchanged, but note that convertToEvent also uses engine)
+    // The convertToEvent test doesn't mock engine; we can add stubbing for it.
+    // ============================================================
 
     @Test
     @DisplayName("Should convert inquiry to event when status is PROPOSAL_ACCEPTED")
@@ -235,6 +270,13 @@ class InquiryServiceTest {
         when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
         when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(inquiryRepository.save(any(Inquiry.class))).thenReturn(inquiry);
+
+        // Stub the engine for the transition PROPOSAL_ACCEPTED -> EVENT_CREATED
+        doNothing().when(workflowEngine).validateTransition(
+                EventStatus.PROPOSAL_ACCEPTED,
+                EventStatus.EVENT_CREATED,
+                Role.COORDINATOR
+        );
 
         Event result = inquiryService.convertToEvent(1L, request);
 
@@ -367,7 +409,7 @@ class InquiryServiceTest {
     @Test
     @DisplayName("Should throw exception when deleting inquiry with event")
     void shouldThrowExceptionWhenDeletingInquiryWithEvent() {
-        com.aicc.eventmanagement.entities.Event existingEvent = com.aicc.eventmanagement.entities.Event.builder()
+        Event existingEvent = Event.builder()
                 .id(1L)
                 .name("Existing Event")
                 .status(EventStatus.EVENT_CREATED)

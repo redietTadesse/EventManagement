@@ -4,9 +4,11 @@ import com.aicc.eventmanagement.entities.Checklist;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.events.EventCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryStatusChangedEvent;
+import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
@@ -34,6 +36,7 @@ public class InquiryService {
     private final InquiryRepository inquiryRepository;
     private final EventRepository eventRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final WorkflowEngine workflowEngine; // NEW: Injected workflow engine
 
     private static final Map<String, List<String>> CHECKLIST_TEMPLATES = Map.of(
             "conference", List.of("Book main hall", "Arrange AV equipment", "Arrange catering service", "Arrange security", "Set up registration desk"),
@@ -128,7 +131,7 @@ public class InquiryService {
     public Inquiry updateInquiry(Long id, UpdateInquiryRequest request) {
         log.info("Updating inquiry {}", id);
         Inquiry inquiry = getInquiryById(id);
-        
+
         if (request.getClientName() != null) {
             inquiry.setClientName(request.getClientName());
         }
@@ -147,7 +150,7 @@ public class InquiryService {
         if (request.getRequirements() != null) {
             inquiry.setRequirements(request.getRequirements());
         }
-        
+
         return inquiryRepository.save(inquiry);
     }
 
@@ -155,36 +158,55 @@ public class InquiryService {
     public void deleteInquiry(Long id) {
         log.info("Deleting inquiry {}", id);
         Inquiry inquiry = getInquiryById(id);
-        
+
         // Prevent deletion if inquiry has an associated event
         if (inquiry.getEvent() != null) {
             throw new RuntimeException("Cannot delete inquiry with associated event. Delete the event first.");
         }
-        
+
         inquiryRepository.delete(inquiry);
     }
 
+    // ============================================================
+    // UPDATED STATUS TRANSITION METHOD WITH WORKFLOW ENGINE
+    // ============================================================
     @Transactional
-    public Inquiry updateInquiryStatus(Long id, EventStatus newStatus) {
+    public Inquiry updateInquiryStatus(Long id, EventStatus newStatus, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
         EventStatus oldStatus = inquiry.getStatus();
 
-        if (!isValidTransition(oldStatus, newStatus)) {
-            throw new RuntimeException(String.format("Invalid status transition from %s to %s", oldStatus, newStatus));
-        }
+        // Use the WorkflowEngine to validate transition and role
+        workflowEngine.validateTransition(oldStatus, newStatus, userRole);
 
+        // If validation passes, update the status
         inquiry.setStatus(newStatus);
         Inquiry saved = inquiryRepository.save(inquiry);
+
+        // Publish the existing status change event
         eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, oldStatus, newStatus));
 
-        log.info("Updated inquiry {} status from {} to {}", id, oldStatus, newStatus);
+        // Publish the new workflow transition event (for logging / Sep 9 deliverable)
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(
+                this,
+                oldStatus,
+                newStatus,
+                String.valueOf(id),
+                userRole
+        ));
+
+        log.info(" Inquiry {} status transitioned from {} to {} by {}",
+                id, oldStatus, newStatus, userRole);
         return saved;
     }
 
+    // ============================================================
+    // UPDATED CONVERT TO EVENT WITH WORKFLOW ENGINE
+    // ============================================================
     @Transactional
     public Event convertToEvent(Long inquiryId, ConvertToEventRequest request) {
         Inquiry inquiry = getInquiryById(inquiryId);
 
+        // Precondition: inquiry must be in PROPOSAL_ACCEPTED state
         if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
             throw new RuntimeException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()));
         }
@@ -193,6 +215,7 @@ public class InquiryService {
             throw new RuntimeException("This inquiry already has an event associated.");
         }
 
+        // Build the event
         Event event = Event.builder()
                 .inquiry(inquiry)
                 .name(request.getName() != null ? request.getName() : inquiry.getEventType() + " - " + inquiry.getClientName())
@@ -207,22 +230,41 @@ public class InquiryService {
 
         Event savedEvent = eventRepository.save(event);
 
+        // -----------------------------------------------------------------
+        // Now transition the inquiry from PROPOSAL_ACCEPTED to EVENT_CREATED
+        // Validate via WorkflowEngine before changing status
+        // -----------------------------------------------------------------
+        workflowEngine.validateTransition(
+                EventStatus.PROPOSAL_ACCEPTED,
+                EventStatus.EVENT_CREATED,
+                Role.COORDINATOR      // As per actionRoles, this should be COORDINATOR
+        );
+
+        // Update inquiry status and link to event
         inquiry.setStatus(EventStatus.EVENT_CREATED);
         inquiry.setEvent(savedEvent);
         inquiryRepository.save(inquiry);
 
+        // Publish event creation event
         eventPublisher.publishEvent(new EventCreatedEvent(this, savedEvent));
+
+        // Also publish a workflow transition event for logging
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(
+                this,
+                EventStatus.PROPOSAL_ACCEPTED,
+                EventStatus.EVENT_CREATED,
+                String.valueOf(inquiryId),
+                Role.COORDINATOR
+        ));
 
         log.info("Converted inquiry {} to event {} ({} checklist items)", inquiryId, savedEvent.getId(), checklistItems.size());
         return savedEvent;
     }
 
-    private boolean isValidTransition(EventStatus from, EventStatus to) {
-        if (from.isTerminal()) return false;
-        if (from == EventStatus.PROPOSAL_ACCEPTED && to != EventStatus.EVENT_CREATED) return false;
-        if (from == EventStatus.EVENT_CREATED && to.ordinal() < EventStatus.EVENT_CREATED.ordinal()) return false;
-        return true;
-    }
+    // ============================================================
+    // OLD VALIDATION METHOD REMOVED – replaced by WorkflowEngine
+    // ============================================================
+    // private boolean isValidTransition(EventStatus from, EventStatus to) { ... }  // DELETED
 
     private List<Checklist> generateChecklistForEventType(String eventType) {
         List<String> items = CHECKLIST_TEMPLATES.getOrDefault(eventType, List.of("Book venue", "Arrange services"));
