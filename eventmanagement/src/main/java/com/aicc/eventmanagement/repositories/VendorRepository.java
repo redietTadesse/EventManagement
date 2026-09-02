@@ -31,4 +31,10 @@ public interface VendorRepository extends JpaRepository<Vendor, Long> {
     long countActiveByCategory(@Param("category") String category);
 
     boolean existsByUserId(Long userId);
+
+    @Query("SELECT v FROM Vendor v WHERE v.isActive = true AND v.rating >= :minRating")
+    List<Vendor> findActiveWithMinRating(@Param("minRating") Double minRating);
+
+    @Query("SELECT v FROM Vendor v WHERE v.companyName LIKE %:name% AND v.isActive = true")
+    List<Vendor> findActiveByCompanyNameContaining(@Param("name") String name);
 }

@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -35,4 +36,34 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     long countTotalAssignmentsByVendor(@Param("vendorId") Long vendorId);
 
     boolean existsByEventIdAndVendorId(Long eventId, Long vendorId);
+
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "JOIN va.event e " +
+            "JOIN e.inquiry i " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status = 'ACCEPTED' " +
+            "AND i.eventDate = :date")
+    boolean hasActiveAssignmentOnDate(
+        @Param("vendorId") Long vendorId,
+        @Param("date") LocalDate date
+    );
+
+    @Query("SELECT va.vendor.id, COUNT(va) FROM VendorAssignment va " +
+            "WHERE va.vendor.id IN :vendorIds " +
+            "AND va.status = 'ACCEPTED' " +
+            "GROUP BY va.vendor.id")
+    List<Object[]> countActiveAssignmentsByVendors(@Param("vendorIds") List<Long> vendorIds);
+
+    @Query("SELECT COUNT(va) FROM VendorAssignment va " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status IN ('ACCEPTED', 'PENDING')")
+    long countActiveAndPendingByVendor(@Param("vendorId") Long vendorId);
+
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "WHERE va.event.id = :eventId " +
+            "AND va.serviceCategory = :category")
+    boolean existsByEventIdAndServiceCategory(
+        @Param("eventId") Long eventId,
+        @Param("category") String category
+    );
 }
