@@ -21,6 +21,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -137,5 +138,33 @@ public class EventController {
                 .map(EventResponse::from)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * Get required vendor categories for an event based on its event type.
+     * Used by the coordinator UI to know which vendor categories to display.
+     */
+    @GetMapping("/{id}/categories")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get required vendor categories for an event",
+               description = "Returns the list of vendor categories needed based on the event type")
+    public ResponseEntity<List<String>> getEventCategories(@PathVariable Long id) {
+        log.info("Fetching vendor categories for event {}", id);
+        Event event = eventService.getEventById(id);
+        String eventType = event.getInquiry().getEventType();
+
+        // Map event types to required vendor categories
+        Map<String, List<String>> categoryMap = Map.of(
+                "conference", List.of("av", "catering", "security"),
+                "wedding", List.of("catering", "photography", "music"),
+                "trade_show", List.of("av", "security", "cleaning"),
+                "exhibition", List.of("av", "security", "cleaning"),
+                "concert", List.of("av", "security", "music"),
+                "gala", List.of("catering", "photography", "music", "security"),
+                "seminar", List.of("av", "catering")
+        );
+
+        List<String> categories = categoryMap.getOrDefault(eventType.toLowerCase(), List.of());
+        return ResponseEntity.ok(categories);
     }
 }

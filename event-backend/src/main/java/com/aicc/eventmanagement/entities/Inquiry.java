@@ -5,7 +5,9 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,6 +56,10 @@ public class Inquiry {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private EventStatus status;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "proposal", columnDefinition = "JSON")
+    private String proposal;
 
     @OneToOne(mappedBy = "inquiry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Event event;

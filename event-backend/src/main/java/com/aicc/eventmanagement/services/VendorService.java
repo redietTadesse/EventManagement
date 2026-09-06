@@ -6,6 +6,7 @@ import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.VendorBookedDate;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
+import com.aicc.eventmanagement.events.VendorAssignmentEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.repositories.EventRepository;
@@ -14,6 +15,7 @@ import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +37,7 @@ public class VendorService {
     private final VendorBookedDateRepository bookedDateRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final EventRepository eventRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ============ EVENT TYPE → REQUIRED CATEGORIES ============
 
@@ -279,6 +282,9 @@ public class VendorService {
 
         VendorAssignment saved = assignmentRepository.save(assignment);
 
+        // Publish event for email notification
+        eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
+
         // Remove category from unfilled list
         if (event.getUnfilledCategories() != null) {
             List<String> unfilled = new ArrayList<>(List.of(event.getUnfilledCategories().split(",")));
@@ -343,10 +349,15 @@ public class VendorService {
 
         assignment.setRespondedAt(LocalDateTime.now());
 
+        VendorAssignment saved = assignmentRepository.save(assignment);
+
+        // Publish event for email notification (vendor responded)
+        eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
+
         // Check if all categories are now ACCEPTED
         checkAndUpdateEventStatus(assignment.getEvent());
 
-        return assignmentRepository.save(assignment);
+        return saved;
     }
 
     // ============ AUTO-REASSIGN ON DECLINE ============

@@ -7,6 +7,7 @@ import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
+import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
 import com.aicc.eventmanagement.services.InquiryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -227,5 +230,91 @@ public class InquiryController {
                 .map(InquiryResponse::from)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(responses);
+    }
+
+    // ============================================================
+    // PROPOSAL ENDPOINTS
+    // ============================================================
+
+    @PostMapping("/{id}/proposal")
+    @PreAuthorize("hasRole('COORDINATOR')")
+    @Operation(summary = "Send proposal for an inquiry", description = "Coordinator sends proposal to client")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Proposal sent successfully",
+                    content = @Content(schema = @Schema(implementation = InquiryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid transition"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Inquiry not found")
+    })
+    public ResponseEntity<InquiryResponse> sendProposal(
+            @PathVariable Long id,
+            @Valid @RequestBody SendProposalRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        log.info("Sending proposal for inquiry {} by {}", id, principal.getUsername());
+
+        Role userRole = extractRoleFromPrincipal(principal);
+
+        Inquiry updated = inquiryService.sendProposal(id, request, userRole);
+        return ResponseEntity.ok(InquiryResponse.from(updated));
+    }
+
+    @PatchMapping("/{id}/accept")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @Operation(summary = "Accept proposal", description = "Client accepts the proposal")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Proposal accepted successfully",
+                    content = @Content(schema = @Schema(implementation = InquiryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid transition"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Inquiry not found")
+    })
+    public ResponseEntity<InquiryResponse> acceptProposal(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        log.info("Accepting proposal for inquiry {} by {}", id, principal.getUsername());
+
+        Role userRole = extractRoleFromPrincipal(principal);
+
+        Inquiry updated = inquiryService.acceptProposal(id, userRole);
+        return ResponseEntity.ok(InquiryResponse.from(updated));
+    }
+
+    @PatchMapping("/{id}/reject")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @Operation(summary = "Reject proposal", description = "Client rejects the proposal")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Proposal rejected successfully",
+                    content = @Content(schema = @Schema(implementation = InquiryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid transition"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Inquiry not found")
+    })
+    public ResponseEntity<InquiryResponse> rejectProposal(
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        log.info("Rejecting proposal for inquiry {} by {}", id, principal.getUsername());
+
+        Role userRole = extractRoleFromPrincipal(principal);
+
+        Inquiry updated = inquiryService.rejectProposal(id, reason, userRole);
+        return ResponseEntity.ok(InquiryResponse.from(updated));
+    }
+
+    // Helper method to extract Role from Principal
+    private Role extractRoleFromPrincipal(UserDetails principal) {
+        if (principal == null || principal.getAuthorities().isEmpty()) {
+            return Role.CLIENT;
+        }
+
+        String roleName = principal.getAuthorities().iterator().next().getAuthority();
+        // Remove "ROLE_" prefix if present
+        if (roleName.startsWith("ROLE_")) {
+            roleName = roleName.substring(5);
+        }
+        return Role.valueOf(roleName);
     }
 }
