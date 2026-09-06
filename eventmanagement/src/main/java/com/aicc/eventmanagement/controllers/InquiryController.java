@@ -3,6 +3,7 @@ package com.aicc.eventmanagement.controllers;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
@@ -102,8 +103,13 @@ public class InquiryController {
     @Operation(summary = "Update inquiry status")
     public ResponseEntity<InquiryResponse> updateStatus(@PathVariable Long id, @RequestParam EventStatus status) {
         log.info("Updating inquiry {} status to {}", id, status);
-        Inquiry updated = inquiryService.updateInquiryStatus(id, status);
-        return ResponseEntity.ok(InquiryResponse.from(updated));
+        try {
+            Inquiry updated = inquiryService.updateInquiryStatus(id, status, Role.ADMIN);
+            return ResponseEntity.ok(InquiryResponse.from(updated));
+        } catch (Exception e) {
+            log.error("ERROR updating status: ", e);
+            throw e;
+        }
     }
 
     @PutMapping("/{id}")
@@ -132,7 +138,7 @@ public class InquiryController {
     }
 
     @PostMapping("/{id}/convert")
-    @PreAuthorize("hasRole('COORDINATOR')")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")   // <-- changed here
     @Operation(summary = "Convert inquiry to event", description = "Converts an accepted inquiry into a full event")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Event created successfully",

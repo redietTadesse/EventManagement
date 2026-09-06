@@ -5,4 +5,5 @@ public enum Role {
     VENDOR,
     COORDINATOR,
     ADMIN
+
 }
