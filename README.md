@@ -27,3 +27,5 @@ npm install
 npm run dev
 ```
 API docs: `http://localhost:8080/api-docs`
+=======
+# EventManagement
