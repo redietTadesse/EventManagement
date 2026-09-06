@@ -1,12 +1,15 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.*;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
@@ -77,38 +80,91 @@ public class EmailService {
     }
 
     /**
-     * 2. Proposal Sent → Client gets notified
+     * 2. Proposal Sent → Client gets notified (HTML with direct action links)
      */
     public void sendProposalNotification(Inquiry inquiry, String clientEmail) {
-        String subject = "📝 Your Event Proposal is Ready";
+        String subject = "📝 Your Event Proposal is Ready – AICC";
 
-        String body = String.format("""
-                Hello %s,
+        // Parse proposal details from JSON
+        String venue = "TBD";
+        Integer price = 0;
+        String terms = "";
+        try {
+            if (inquiry.getProposal() != null) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.Map<String, Object> proposalMap = mapper.readValue(inquiry.getProposal(),
+                        new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                venue = (String) proposalMap.getOrDefault("venue", "TBD");
+                price = proposalMap.get("price") != null ? ((Number) proposalMap.get("price")).intValue() : 0;
+                terms = (String) proposalMap.getOrDefault("terms", "");
+            }
+        } catch (Exception e) {
+            log.warn("Could not parse proposal JSON for email", e);
+        }
 
-                Your proposal for the %s event is ready for review.
-
-                ─────────────────────────────────────
-                Event Type: %s
-                Date: %s
-                Expected Attendees: %d
-                ─────────────────────────────────────
-
-                Please login to view and respond to the proposal:
-                %s/client/inquiries/%d
-
-                Best regards,
-                AICC Event Management Team
+        String htmlBody = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: #4f46e5; color: white; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;">
+                        <h1 style="margin: 0;">AICC Event Management</h1>
+                    </div>
+                    
+                    <div style="background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb;">
+                        <h2 style="color: #1f2937; margin-top: 0;">Your Event Proposal is Ready</h2>
+                        
+                        <p>Dear <strong>%s</strong>,</p>
+                        
+                        <p>We are pleased to present your proposal for the <strong>%s</strong> event at AICC.</p>
+                        
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 20px 0;">
+                            <h3 style="margin-top: 0; color: #4f46e5;">📋 Proposal Summary</h3>
+                            <p><strong>Event:</strong> %s</p>
+                            <p><strong>Date:</strong> %s</p>
+                            <p><strong>Venue:</strong> %s</p>
+                            <p><strong>Price:</strong> ETB %,d</p>
+                        </div>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="%s/client/proposals/%d/accept" 
+                               style="display: inline-block; padding: 14px 32px; margin: 5px; border-radius: 8px; font-weight: bold; text-decoration: none; background: #22c55e; color: white;">
+                                ✅ Accept Proposal
+                            </a>
+                            <a href="%s/client/proposals/%d/reject" 
+                               style="display: inline-block; padding: 14px 32px; margin: 5px; border-radius: 8px; font-weight: bold; text-decoration: none; background: #ef4444; color: white;">
+                                ❌ Decline
+                            </a>
+                        </div>
+                        
+                        <p style="text-align: center;">
+                            <a href="%s/client/inquiries/%d" style="color: #4f46e5;">View full details →</a>
+                        </p>
+                        
+                        <div style="background: #fef3c7; padding: 12px; border-radius: 6px; margin-top: 20px;">
+                            <p style="margin: 0; font-size: 14px;"><strong>Terms:</strong> %s</p>
+                        </div>
+                    </div>
+                    
+                    <div style="background: #1f2937; color: #9ca3af; padding: 15px; border-radius: 0 0 10px 10px; text-align: center; font-size: 12px;">
+                        <p style="margin: 0;">AICC Event Management Team</p>
+                        <p style="margin: 5px 0 0 0;">Addis International Convention Center</p>
+                    </div>
+                </body>
+                </html>
                 """,
                 inquiry.getClientName(),
                 inquiry.getEventType(),
                 inquiry.getEventType(),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
-                inquiry.getExpectedAttendees(),
-                baseUrl,
-                inquiry.getId()
+                venue,
+                price,
+                baseUrl, inquiry.getId(),
+                baseUrl, inquiry.getId(),
+                baseUrl, inquiry.getId(),
+                terms
         );
 
-        sendEmail(clientEmail, subject, body);
+        sendHtmlEmail(clientEmail, subject, htmlBody);
     }
 
     /**
@@ -381,6 +437,50 @@ public class EmailService {
 
         } catch (MailException e) {
             log.error("Failed to send email to {}: {}", actualRecipient, e.getMessage());
+        }
+    }
+
+    // ============ HTML EMAIL SUPPORT ============
+
+    /**
+     * Send an HTML email with rich formatting.
+     * Falls back to plain text if HTML sending fails.
+     */
+    private void sendHtmlEmail(String to, String subject, String htmlBody) {
+        if (to == null || to.isEmpty()) {
+            log.warn("No email address provided. Skipping HTML email: {}", subject);
+            return;
+        }
+
+        String actualRecipient = (recipientOverride != null && !recipientOverride.isEmpty())
+                ? recipientOverride : to;
+
+        String logEntry = String.format("TO: %s | SUBJECT: %s | TYPE: HTML", actualRecipient, subject);
+        emailLog.add(logEntry);
+        log.info("📧 {}", logEntry);
+
+        if (!emailEnabled) {
+            log.info("Email disabled. Would have sent HTML: {}", subject);
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(actualRecipient);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true); // true = isHtml
+
+            mailSender.send(message);
+            log.info("HTML email sent successfully to: {}", actualRecipient);
+
+        } catch (MessagingException e) {
+            log.error("Failed to create HTML email to {}: {}", actualRecipient, e.getMessage());
+            // Fallback to plain text
+            sendEmail(to, subject, "Please view this email in an HTML-capable client.");
+        } catch (MailException e) {
+            log.error("Failed to send HTML email to {}: {}", actualRecipient, e.getMessage());
         }
     }
 
