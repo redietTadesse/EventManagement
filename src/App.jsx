@@ -10,6 +10,7 @@ import CoordinatorDashboard from './coordinator/Dashboard';
 import AllInquiries from './coordinator/AllInquiries';
 import InquiryDetail from './coordinator/InquiryDetail';
 import Events from './coordinator/Events';
+import Calendar from './components/Calendar';
 import VendorDashboard from './vendor/VendorDashboard';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
@@ -71,6 +72,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['COORDINATOR']}>
             <Events />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/calendar"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Calendar />
           </ProtectedRoute>
         }
       />

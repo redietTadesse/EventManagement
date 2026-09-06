@@ -1,13 +1,13 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080/api/v1',
+  baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
 });
 
 // Auth endpoints live under /api/auth (not /api/v1/auth)
 export const authApi = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
