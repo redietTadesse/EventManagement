@@ -18,6 +18,7 @@ public class UserResponse {
     private String role;
     private String fullName;
     private String name;
+    private boolean active;
 
     public static UserResponse from(User user) {
         String displayName = user.getFullName() != null ? user.getFullName() : user.getUsername();
@@ -28,6 +29,7 @@ public class UserResponse {
                 .role(user.getRole() != null ? user.getRole().name() : null)
                 .fullName(user.getFullName())
                 .name(displayName)
+                .active(user.isActive())
                 .build();
     }
 }
