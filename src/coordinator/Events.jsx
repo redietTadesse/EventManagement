@@ -1,23 +1,25 @@
-// src/coordinator/Events.jsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import api from '../api/axios';
+import { useApp } from '../context/AppContext';
 
 export default function Events() {
+  const { state, fetchInquiries } = useApp();
+  const { inquiries, loading } = state;
   const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get('/inquiries')
-      .then((res) => {
-        const eventsData = res.data.filter((i) => i.event);
-        setEvents(eventsData);
-      })
-      .finally(() => setLoading(false));
+    const loadData = async () => {
+      await fetchInquiries();
+    };
+    loadData();
   }, []);
+
+  useEffect(() => {
+    const eventsData = inquiries.filter((i) => i.event || i.status === 'EVENT_CREATED' || i.status === 'CONFIRMED');
+    setEvents(eventsData);
+  }, [inquiries]);
 
   if (loading) {
     return (
@@ -44,11 +46,11 @@ export default function Events() {
             <tbody className="divide-y divide-gray-100">
               {events.map((inq) => (
                 <tr key={inq.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{inq.event?.name}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{inq.event?.name || inq.eventType}</td>
                   <td className="px-4 py-3 text-gray-600">{inq.clientName}</td>
                   <td className="px-4 py-3 text-gray-600">{inq.event?.venue || 'N/A'}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={inq.event?.status} />
+                    <StatusBadge status={inq.event?.status || inq.status} />
                   </td>
                   <td className="px-4 py-3">
                     <Link to={`/coordinator/inquiries/${inq.id}`} className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">

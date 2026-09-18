@@ -1,19 +1,18 @@
-// src/coordinator/InquiryDetail.jsx
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import api from '../api/axios';
+import { useApp } from '../context/AppContext';
 
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { state, fetchInquiryById, convertInquiryToEvent } = useApp();
+  const { loading } = state;
   const [inquiry, setInquiry] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Proposal form
   const [proposal, setProposal] = useState({
     name: '',
     venue: '',
@@ -22,11 +21,15 @@ export default function InquiryDetail() {
   });
 
   useEffect(() => {
-    api
-      .get(`/inquiries/${id}`)
-      .then((res) => setInquiry(res.data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    const loadInquiry = async () => {
+      const data = await fetchInquiryById(id);
+      if (data) {
+        setInquiry(data);
+      } else {
+        setError('Failed to load inquiry');
+      }
+    };
+    loadInquiry();
   }, [id]);
 
   const handleConvert = async (e) => {
@@ -40,7 +43,7 @@ export default function InquiryDetail() {
     setError('');
 
     try {
-      await api.post(`/inquiries/${id}/convert`, {
+      await convertInquiryToEvent(id, {
         name: proposal.name,
         venue: proposal.venue,
         venueId: proposal.venueId || null,
@@ -54,7 +57,7 @@ export default function InquiryDetail() {
     }
   };
 
-  if (loading) {
+  if (loading || !inquiry) {
     return (
       <Layout title="Inquiry Detail">
         <div className="text-center py-10">Loading...</div>
@@ -62,7 +65,7 @@ export default function InquiryDetail() {
     );
   }
 
-  if (error) {
+  if (error && !inquiry) {
     return (
       <Layout title="Inquiry Detail">
         <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>
@@ -81,7 +84,6 @@ export default function InquiryDetail() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Inquiry Details */}
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex justify-between items-start">
             <h3 className="text-xl font-bold text-gray-800">Inquiry #{inquiry.id}</h3>
@@ -113,7 +115,6 @@ export default function InquiryDetail() {
           </div>
         </div>
 
-        {/* Convert to Event */}
         {canConvert && (
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Create Event</h3>

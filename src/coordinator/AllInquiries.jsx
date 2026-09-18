@@ -1,26 +1,40 @@
-// src/coordinator/AllInquiries.jsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import api from '../api/axios';
+import { useApp } from '../context/AppContext';
 
 export default function AllInquiries() {
-  const [inquiries, setInquiries] = useState([]);
+  const { state, fetchInquiries } = useApp();
+  const { inquiries, loading } = state;
   const [filter, setFilter] = useState('All');
-  const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
-    api
-      .get('/inquiries')
-      .then((res) => setInquiries(res.data))
-      .finally(() => setLoading(false));
-  }, []);
+    // Only fetch once when component mounts
+    if (!dataLoaded && !loading) {
+      console.log('📋 AllInquiries: Fetching inquiries...');
+      fetchInquiries();
+      setDataLoaded(true);
+    }
+  }, []); // ← Empty dependency array = runs once
 
-  const statuses = ['All', ...new Set(inquiries.map((i) => i.status))];
+  // If inquiries is empty and not loading, use mock data directly
+  if (!loading && inquiries.length === 0) {
+    return (
+      <Layout title="All Inquiries">
+        <div className="text-center py-10 text-gray-500">
+          <p>No inquiries found.</p>
+          <p className="text-sm mt-2">Try creating a new inquiry.</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  const statuses = ['All', ...new Set(inquiries.map((i) => i.status).filter(Boolean))];
   const filtered = filter === 'All' ? inquiries : inquiries.filter((i) => i.status === filter);
 
-  if (loading) {
+  if (loading && inquiries.length === 0) {
     return (
       <Layout title="All Inquiries">
         <div className="text-center py-10">Loading...</div>
@@ -31,7 +45,6 @@ export default function AllInquiries() {
   return (
     <Layout title="All Inquiries">
       <div className="space-y-4">
-        {/* Filters */}
         <div className="flex flex-wrap gap-2">
           {statuses.map((s) => (
             <button
@@ -43,12 +56,11 @@ export default function AllInquiries() {
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
-              {s}
+              {s === 'All' ? 'All' : s.replace(/_/g, ' ')}
             </button>
           ))}
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

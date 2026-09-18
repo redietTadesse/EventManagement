@@ -1,5 +1,5 @@
 import { Link, Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 
 const ROLE_DASHBOARDS = {
   CLIENT: '/client/dashboard',
@@ -32,7 +32,8 @@ const portals = [
 ];
 
 export default function PortalSelect() {
-  const { user, loading } = useAuth();
+  const { state } = useApp();
+  const { currentUser, loading } = state;
 
   if (loading) {
     return (
@@ -42,9 +43,8 @@ export default function PortalSelect() {
     );
   }
 
-  // Already signed in → go straight to the matching dashboard.
-  if (user) {
-    const path = ROLE_DASHBOARDS[user.role];
+  if (currentUser) {
+    const path = ROLE_DASHBOARDS[currentUser.role];
     return <Navigate to={path || '/login'} replace />;
   }
 

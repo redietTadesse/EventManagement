@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AppProvider } from './context/AppContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
 import PortalSelect from './components/PortalSelect';
@@ -19,12 +19,10 @@ import VendorDetail from './admin/VendorDetail';
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public: portal selection comes before login */}
       <Route path="/" element={<PortalSelect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/login/:portal?" element={<Login />} />
 
-      {/* Client routes */}
       <Route
         path="/client/dashboard"
         element={
@@ -42,7 +40,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Coordinator routes */}
       <Route
         path="/coordinator/dashboard"
         element={
@@ -84,7 +81,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Vendor routes */}
       <Route
         path="/vendor/dashboard"
         element={
@@ -94,7 +90,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Admin routes */}
       <Route
         path="/admin/vendors"
         element={
@@ -128,7 +123,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Unknown paths → role-aware redirect (or login) */}
       <Route path="*" element={<RootRedirect />} />
     </Routes>
   );
@@ -136,11 +130,11 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
+    <AppProvider>
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
-    </AuthProvider>
+    </AppProvider>
   );
 }
 

@@ -1,9 +1,10 @@
 import Layout from '../components/Layout';
-import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 
 export default function VendorDashboard() {
-  const { user } = useAuth();
-  const displayName = user?.name || user?.username || 'Vendor';
+  const { state } = useApp();
+  const { currentUser } = state;
+  const displayName = currentUser?.name || currentUser?.username || 'Vendor';
 
   return (
     <Layout title="Vendor Dashboard">
