@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { authApi } from '../api/axios';
+import { useApp } from '../context/AppContext';
 
 const PORTAL_LABELS = {
   client: 'Client',
@@ -15,8 +14,6 @@ const ROLE_DASHBOARDS = {
   COORDINATOR: '/coordinator/dashboard',
 };
 
-// Only clients can self-register; vendor/coordinator accounts are
-// provisioned by AICC administration.
 const SIGNUP_ALLOWED = ['client', undefined];
 
 export default function Login() {
@@ -25,7 +22,8 @@ export default function Login() {
   const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, state } = useApp();
+  const { loading } = state;
   const navigate = useNavigate();
 
   const portalKey = portal?.toLowerCase();
@@ -44,8 +42,6 @@ export default function Login() {
     setError('');
     try {
       const data = await login(form.username, form.password);
-      // Land in the dashboard of the account's actual role, regardless of
-      // which portal card the user came in through.
       afterAuth(data);
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data || 'Login failed');
@@ -59,17 +55,12 @@ export default function Login() {
     setSubmitting(true);
     setError('');
     try {
-      await authApi.post('/auth/register', {
-        fullName: form.fullName,
-        username: form.username,
-        email: form.email,
-        password: form.password,
-        role: 'CLIENT',
-      });
-      const data = await login(form.username, form.password);
-      afterAuth(data);
+      // Registration would be handled by backend
+      // For now, just show a message
+      setError('Registration is not available yet. Please use demo accounts.');
+      setSubmitting(false);
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data || 'Registration failed');
+      setError(err.response?.data?.message || 'Registration failed');
     } finally {
       setSubmitting(false);
     }
@@ -77,6 +68,14 @@ export default function Login() {
 
   const inputClass =
     'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
@@ -133,6 +132,10 @@ export default function Login() {
             >
               {submitting ? 'Signing in...' : 'Sign In'}
             </button>
+
+            <p className="text-center text-sm text-gray-500 mt-4">
+              Demo accounts: client1, coordinator1, vendor1 / password: password123
+            </p>
 
             {signupAllowed && (
               <p className="text-center text-sm text-gray-500 mt-4">

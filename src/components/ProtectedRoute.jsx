@@ -1,14 +1,15 @@
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useAuth();
+  const { state } = useApp();
+  const { currentUser, loading } = state;
 
   if (loading) return <div className="text-center py-10">Loading...</div>;
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!currentUser) return <Navigate to="/login" replace />;
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
     return <Navigate to="/" replace />;
   }
 
