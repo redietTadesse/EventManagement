@@ -68,6 +68,19 @@ class WorkflowEngineTest {
     }
 
     @Test
+    @DisplayName("Should allow EVENT_CREATED to enter vendor assignment states")
+    void testEventCreatedToVendorAssignmentStatesValid() {
+        assertThat(workflowEngine.isValidTransition(
+                EventStatus.EVENT_CREATED,
+                EventStatus.AWAITING_VENDORS
+        )).isTrue();
+        assertThat(workflowEngine.isValidTransition(
+                EventStatus.EVENT_CREATED,
+                EventStatus.NEEDS_COORDINATOR
+        )).isTrue();
+    }
+
+    @Test
     @DisplayName("Should allow CONFIRMED → COMPLETED")
     void testConfirmedToCompletedValid() {
         assertThat(workflowEngine.isValidTransition(
@@ -168,6 +181,31 @@ class WorkflowEngineTest {
         workflowEngine.validateTransition(
                 EventStatus.AWAITING_VENDORS,
                 EventStatus.CONFIRMED,
+                Role.VENDOR
+        );
+    }
+
+    @Test
+    @DisplayName("Should allow COORDINATOR to move created event into vendor assignment states")
+    void testCoordinatorCanMoveCreatedEventIntoAssignmentStates() {
+        workflowEngine.validateTransition(
+                EventStatus.EVENT_CREATED,
+                EventStatus.AWAITING_VENDORS,
+                Role.COORDINATOR
+        );
+        workflowEngine.validateTransition(
+                EventStatus.EVENT_CREATED,
+                EventStatus.NEEDS_COORDINATOR,
+                Role.COORDINATOR
+        );
+    }
+
+    @Test
+    @DisplayName("Should allow VENDOR to request coordinator from awaiting vendors")
+    void testVendorCanMoveAwaitingVendorsToNeedsCoordinator() {
+        workflowEngine.validateTransition(
+                EventStatus.AWAITING_VENDORS,
+                EventStatus.NEEDS_COORDINATOR,
                 Role.VENDOR
         );
     }

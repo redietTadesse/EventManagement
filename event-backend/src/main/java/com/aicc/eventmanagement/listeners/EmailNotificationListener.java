@@ -78,7 +78,7 @@ public class EmailNotificationListener {
      * 5 & 6. Vendor Responded (Accepted/Declined) → Notify Coordinator
      */
     @Async
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleVendorAssignmentResponse(VendorAssignmentEvent event) {
         VendorAssignment assignment = event.getAssignment();
 
@@ -89,15 +89,5 @@ public class EmailNotificationListener {
 
             emailService.sendVendorResponseNotification(assignment);
         }
-    }
-
-    /**
-     * 8. Event Confirmed → Notify Client & Vendors
-     */
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleEventConfirmed(EventCreatedEvent event) {
-        // This fires on event creation; confirmation is handled separately
-        // when status changes to CONFIRMED
     }
 }

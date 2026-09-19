@@ -47,6 +47,7 @@ public class InquiryService {
     private final WorkflowEngine workflowEngine;
     private final EmailService emailService;
     private final UserRepository userRepository;
+    private final VenueService venueService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -241,6 +242,22 @@ public class InquiryService {
         checklistItems.forEach(event::addChecklistItem);
 
         Event savedEvent = eventRepository.save(event);
+
+        // Book the venue if venueId is provided
+        if (request.getVenueId() != null) {
+            try {
+                venueService.bookVenue(
+                    request.getVenueId(),
+                    savedEvent.getId(),
+                    inquiry.getEventDate()
+                );
+                log.info("Venue {} booked for event {} on {}",
+                    request.getVenueId(), savedEvent.getId(), inquiry.getEventDate());
+            } catch (BusinessException e) {
+                log.warn("Venue booking failed for event {}: {}", savedEvent.getId(), e.getMessage());
+                // Don't fail the whole conversion - venue booking is advisory
+            }
+        }
 
         // -----------------------------------------------------------------
         // Now transition the inquiry from PROPOSAL_ACCEPTED to EVENT_CREATED

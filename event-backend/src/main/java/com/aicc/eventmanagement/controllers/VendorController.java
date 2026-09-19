@@ -2,6 +2,7 @@ package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
 import com.aicc.eventmanagement.services.ConflictResolutionService.AlternativeVendor;
@@ -11,11 +12,14 @@ import com.aicc.eventmanagement.services.VendorRatingService.RatingStats;
 import com.aicc.eventmanagement.services.VendorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -80,7 +84,13 @@ public class VendorController {
     @GetMapping("/{id}/assignments")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Get all assignments for a vendor")
-    public ResponseEntity<List<VendorAssignmentResponse>> getVendorAssignments(@PathVariable Long id) {
+    public ResponseEntity<List<VendorAssignmentResponse>> getVendorAssignments(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        // IDOR fix: vendors can only access their own assignments
+        if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
+            throw new RuntimeException("Access denied: You can only view your own assignments");
+        }
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(id);
         return ResponseEntity.ok(assignments.stream()
             .map(VendorAssignmentResponse::from)
@@ -88,9 +98,15 @@ public class VendorController {
     }
 
     @GetMapping("/{id}/pending")
-    @PreAuthorize("hasRole('VENDOR')")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Get pending assignments for a vendor")
-    public ResponseEntity<List<VendorAssignmentResponse>> getPendingAssignments(@PathVariable Long id) {
+    public ResponseEntity<List<VendorAssignmentResponse>> getPendingAssignments(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        // IDOR fix: vendors can only access their own pending assignments
+        if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
+            throw new RuntimeException("Access denied: You can only view your own pending assignments");
+        }
         List<VendorAssignment> assignments = vendorService.getPendingAssignmentsForVendor(id);
         return ResponseEntity.ok(assignments.stream()
             .map(VendorAssignmentResponse::from)
@@ -184,5 +200,29 @@ public class VendorController {
     public ResponseEntity<Void> recalculateAllRatings() {
         ratingService.recalculateAllVendorRatings();
         return ResponseEntity.ok().build();
+    }
+
+    // ===== IDOR Prevention Helpers =====
+
+    private boolean hasRole(UserDetails principal, Role role) {
+        if (principal == null) return false;
+        return principal.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_" + role.name()));
+    }
+
+    private boolean isVendorIdMatch(Long vendorId, UserDetails principal) {
+        if (principal == null) return false;
+        // Extract vendor ID from username (format: "vendor123" -> 123)
+        // In production, this would use a proper User-Vendor relationship
+        String username = principal.getUsername();
+        try {
+            String numericPart = username.replaceAll("\\D", "");
+            if (!numericPart.isEmpty()) {
+                return Long.parseLong(numericPart) == vendorId;
+            }
+        } catch (NumberFormatException e) {
+            // Ignore
+        }
+        return false;
     }
 }

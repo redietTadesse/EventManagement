@@ -20,8 +20,8 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     Optional<Event> findByInquiryId(Long inquiryId);
 
-    @Query("SELECT e FROM Event e WHERE e.status NOT IN :statuses")
-    List<Event> findByStatusNotIn(@Param("statuses") List<EventStatus> statuses);
+    @Query("SELECT e FROM Event e WHERE e.status NOT IN :statuses AND e.inquiry.eventDate >= CURRENT_DATE")
+    List<Event> findAllActiveEvents(@Param("statuses") List<EventStatus> statuses);
 
     @Query("SELECT e FROM Event e WHERE e.status IN :statuses")
     List<Event> findByStatusIn(@Param("statuses") List<EventStatus> statuses);

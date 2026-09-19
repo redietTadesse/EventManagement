@@ -4,5 +4,7 @@ public enum VendorAssignmentStatus {
     PENDING,
     ACCEPTED,
     DECLINED,
-    COMPLETED
+    COMPLETED,
+    OPEN,
+    CANCELLED
 }

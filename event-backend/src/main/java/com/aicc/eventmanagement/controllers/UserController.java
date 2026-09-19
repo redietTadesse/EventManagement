@@ -32,7 +32,7 @@ public class UserController {
     @GetMapping("/me")
     @Operation(summary = "Get current user", description = "Returns the authenticated user's profile (id, role, name)")
     public ResponseEntity<UserResponse> me(@AuthenticationPrincipal UserDetails principal) {
-        User user = userRepository.findByUsername(principal.getUsername());
+        User user = userRepository.findByUsername(principal.getUsername()).orElse(null);
         if (user == null) {
             throw new RuntimeException("User not found");
         }

@@ -1,15 +1,18 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
+import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.VendorBookedDate;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.VendorAssignmentEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.repositories.EventRepository;
+import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
@@ -37,7 +40,9 @@ public class VendorService {
     private final VendorBookedDateRepository bookedDateRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final EventRepository eventRepository;
+    private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final WorkflowEngine workflowEngine;
 
     // ============ EVENT TYPE → REQUIRED CATEGORIES ============
 
@@ -197,20 +202,30 @@ public class VendorService {
         }
 
         // Update event status
+        EventStatus newStatus;
+        String newUnfilled = null;
+
         if (!unfilledCategories.isEmpty()) {
             // Some categories couldn't be filled → needs coordinator
-            event.setStatus(EventStatus.NEEDS_COORDINATOR);
-            event.setUnfilledCategories(String.join(",", unfilledCategories));
+            newStatus = EventStatus.NEEDS_COORDINATOR;
+            newUnfilled = String.join(",", unfilledCategories);
             log.warn("Event {} needs coordinator for categories: {}", event.getId(), unfilledCategories);
         } else if (!saved.isEmpty()) {
             // All categories filled → awaiting vendors
-            event.setStatus(EventStatus.AWAITING_VENDORS);
+            newStatus = EventStatus.AWAITING_VENDORS;
         } else {
             // No assignments created at all → needs coordinator
-            event.setStatus(EventStatus.NEEDS_COORDINATOR);
+            newStatus = EventStatus.NEEDS_COORDINATOR;
             log.warn("Event {} needs coordinator - no vendors found for any category", event.getId());
         }
 
+        if (event.getStatus() != newStatus) {
+            workflowEngine.validateTransition(event.getStatus(), newStatus, Role.COORDINATOR);
+            event.setStatus(newStatus);
+        }
+        if (newUnfilled != null) {
+            event.setUnfilledCategories(newUnfilled);
+        }
         eventRepository.save(event);
 
         return saved;
@@ -234,12 +249,12 @@ public class VendorService {
             .countActiveAssignmentsByVendors(vendorIds).stream()
             .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
 
-        // Sort by: fewest active assignments → highest rating → highest rating count
+        // Sort by: fewest active assignments (load balancing) → highest rating
+        // Fixed: Use reverseOrder() on rating comparator instead of reversing the whole chain
         return available.stream()
             .sorted(Comparator
                 .comparingLong((Vendor v) -> assignmentCounts.getOrDefault(v.getId(), 0L))
-                .thenComparingDouble(Vendor::getRating)
-                .reversed())
+                .thenComparing(Vendor::getRating, Comparator.reverseOrder()))
             .findFirst()
             .orElse(null);
     }
@@ -292,11 +307,14 @@ public class VendorService {
             event.setUnfilledCategories(unfilled.isEmpty() ? null : String.join(",", unfilled));
         }
 
-        // Update event status
-        if (event.getUnfilledCategories() == null || event.getUnfilledCategories().isEmpty()) {
-            event.setStatus(EventStatus.AWAITING_VENDORS);
-        } else {
-            event.setStatus(EventStatus.NEEDS_COORDINATOR);
+        EventStatus newStatus = (event.getUnfilledCategories() == null
+                || event.getUnfilledCategories().isEmpty())
+                ? EventStatus.AWAITING_VENDORS
+                : EventStatus.NEEDS_COORDINATOR;
+
+        if (event.getStatus() != newStatus) {
+            workflowEngine.validateTransition(event.getStatus(), newStatus, Role.COORDINATOR);
+            event.setStatus(newStatus);
         }
 
         eventRepository.save(event);
@@ -355,7 +373,7 @@ public class VendorService {
         eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
 
         // Check if all categories are now ACCEPTED
-        checkAndUpdateEventStatus(assignment.getEvent());
+        checkAndUpdateEventStatus(assignment.getEvent(), Role.VENDOR);
 
         return saved;
     }
@@ -377,7 +395,11 @@ public class VendorService {
 
         if (available.isEmpty()) {
             // No vendors available → mark NEEDS_COORDINATOR
-            event.setStatus(EventStatus.NEEDS_COORDINATOR);
+            if (event.getStatus() != EventStatus.NEEDS_COORDINATOR) {
+                workflowEngine.validateTransition(
+                    event.getStatus(), EventStatus.NEEDS_COORDINATOR, Role.VENDOR);
+                event.setStatus(EventStatus.NEEDS_COORDINATOR);
+            }
 
             // Add to unfilled if not already there
             String unfilled = event.getUnfilledCategories();
@@ -390,6 +412,13 @@ public class VendorService {
             eventRepository.save(event);
             log.warn("No alternative vendor for category {} in event {} - needs coordinator",
                 category, event.getId());
+
+            // Transition to OPEN for vendor self-claim instead of immediate escalation
+            if (declinedAssignment.getStatus() == VendorAssignmentStatus.PENDING) {
+                declinedAssignment.setStatus(VendorAssignmentStatus.OPEN);
+                assignmentRepository.save(declinedAssignment);
+                log.info("Assignment {} transitioned to OPEN - awaiting vendor claim", declinedAssignment.getId());
+            }
             return;
         }
 
@@ -405,16 +434,9 @@ public class VendorService {
         Vendor newVendor = available.stream()
             .sorted(Comparator
                 .comparingLong((Vendor v) -> assignmentCounts.getOrDefault(v.getId(), 0L))
-                .thenComparingDouble(Vendor::getRating)
-                .reversed())
+                .thenComparing(Vendor::getRating, Comparator.reverseOrder()))
             .findFirst()
             .orElse(null);
-
-        if (newVendor == null) {
-            event.setStatus(EventStatus.NEEDS_COORDINATOR);
-            eventRepository.save(event);
-            return;
-        }
 
         // Create new assignment
         VendorAssignment newAssignment = VendorAssignment.builder()
@@ -433,34 +455,57 @@ public class VendorService {
 
     // ============ EVENT STATUS CHECK ============
 
-    private void checkAndUpdateEventStatus(Event event) {
+    private void checkAndUpdateEventStatus(Event event, Role triggeringRole) {
         // Get all assignments for this event
         List<VendorAssignment> assignments = assignmentRepository.findByEventId(event.getId());
 
         // Check if all assignments are ACCEPTED
-        boolean allAccepted = assignments.stream()
+        boolean allAccepted = !assignments.isEmpty()
+            && assignments.stream()
             .allMatch(a -> a.getStatus() == VendorAssignmentStatus.ACCEPTED);
 
-        // Check if any are DECLINED
-        boolean anyDeclined = assignments.stream()
-            .anyMatch(a -> a.getStatus() == VendorAssignmentStatus.DECLINED);
-
-        // Check if any are PENDING
-        boolean anyPending = assignments.stream()
-            .anyMatch(a -> a.getStatus() == VendorAssignmentStatus.PENDING);
-
-        if (allAccepted && !assignments.isEmpty()) {
+        if (allAccepted && event.getStatus() != EventStatus.CONFIRMED) {
             // All vendors accepted
+            workflowEngine.validateTransition(
+                event.getStatus(), EventStatus.CONFIRMED, triggeringRole);
             event.setStatus(EventStatus.CONFIRMED);
+            eventRepository.save(event);
             log.info("Event {} confirmed - all vendors accepted", event.getId());
+        }
+    }
 
-        } else if (anyDeclined || (anyPending && event.getStatus() == EventStatus.AWAITING_VENDORS)) {
-            // Some declined or pending with no action
-            // Status stays as-is unless coordinator needed
+    // ============ OPEN ASSIGNMENT CLAIM ============
+
+    @Transactional
+    public VendorAssignment claimOpenAssignment(Long assignmentId, Long vendorId) {
+        VendorAssignment assignment = assignmentRepository.findById(assignmentId)
+            .orElseThrow(() -> new EntityNotFoundException("Assignment", assignmentId));
+
+        if (assignment.getStatus() != VendorAssignmentStatus.OPEN) {
+            throw new BusinessException(
+                String.format("Assignment is not open (current status: %s)", assignment.getStatus()),
+                "ASSIGNMENT_NOT_OPEN");
         }
 
-        eventRepository.save(event);
+        // Atomic claim: only proceed if the assignment is still OPEN
+        // This prevents race conditions when multiple vendors try to claim
+        int rowsUpdated = assignmentRepository.claimOpenAssignment(assignmentId, vendorId);
+        if (rowsUpdated == 0) {
+            throw new BusinessException(
+                "Assignment was claimed by another vendor",
+                "ASSIGNMENT_ALREADY_CLAIMED");
+        }
+
+        // Reload and update
+        assignment = assignmentRepository.findById(assignmentId).get();
+        assignment.setStatus(VendorAssignmentStatus.PENDING);
+        assignment.setRespondedAt(LocalDateTime.now());
+        assignmentRepository.save(assignment);
+
+        log.info("Vendor {} claimed open assignment {}", vendorId, assignmentId);
+        return assignment;
     }
+
 
     // ============ GET ASSIGNMENTS ============
 
@@ -512,5 +557,47 @@ public class VendorService {
 
     public long countActiveAssignmentsForVendor(Long vendorId) {
         return assignmentRepository.countActiveAndPendingByVendor(vendorId);
+    }
+
+    // ============ VENDOR LOOKUP BY USER ============
+
+    public Vendor getVendorByUser(String username) {
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(() -> new EntityNotFoundException("User", -1L));
+        return vendorRepository.findByUserId(user.getId())
+            .orElseThrow(() -> new EntityNotFoundException("Vendor", -1L));
+    }
+
+    // ============ OPEN ASSIGNMENT METHODS ============
+
+    public List<VendorAssignment> getOpenAssignmentsForCategory(String category) {
+        return assignmentRepository.findByStatusAndServiceCategory(VendorAssignmentStatus.OPEN, category);
+    }
+
+    // ============ COORDINATOR FORCE ASSIGN ============
+
+    @Transactional
+    public VendorAssignment forceAssignToOpenAssignment(Long assignmentId, Long vendorId) {
+        VendorAssignment assignment = assignmentRepository.findById(assignmentId)
+            .orElseThrow(() -> new EntityNotFoundException("Assignment", assignmentId));
+
+        if (assignment.getStatus() != VendorAssignmentStatus.OPEN) {
+            throw new BusinessException(
+                String.format("Assignment is not open (current status: %s)", assignment.getStatus()),
+                "ASSIGNMENT_NOT_OPEN");
+        }
+
+        Vendor vendor = vendorRepository.findById(vendorId)
+            .orElseThrow(() -> new EntityNotFoundException("Vendor", vendorId));
+
+        // Update assignment
+        assignment.setVendor(vendor);
+        assignment.setVendorName(vendor.getCompanyName());
+        assignment.setStatus(VendorAssignmentStatus.PENDING);
+        assignment.setAssignedAt(LocalDateTime.now());
+        VendorAssignment saved = assignmentRepository.save(assignment);
+
+        log.info("Coordinator force-assigned vendor {} to open assignment {}", vendorId, assignmentId);
+        return saved;
     }
 }

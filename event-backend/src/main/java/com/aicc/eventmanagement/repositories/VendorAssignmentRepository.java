@@ -3,6 +3,7 @@ package com.aicc.eventmanagement.repositories;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -28,6 +29,14 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
 
     @Query("SELECT va FROM VendorAssignment va WHERE va.status = 'PENDING' AND va.assignedAt < :cutoffDate")
     List<VendorAssignment> findPendingAssignmentsOlderThan(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    @Query("SELECT va FROM VendorAssignment va WHERE va.status = 'OPEN' AND va.serviceCategory = :category")
+    List<VendorAssignment> findByStatusAndServiceCategory(@Param("status") VendorAssignmentStatus status, @Param("category") String category);
+
+    @Modifying
+    @Query("UPDATE VendorAssignment va SET va.status = 'PENDING', va.vendor.id = :vendorId WHERE va.id = :assignmentId AND va.status = 'OPEN'")
+    int claimOpenAssignment(@Param("assignmentId") Long assignmentId, @Param("vendorId") Long vendorId);
+
 
     @Query("SELECT COUNT(va) FROM VendorAssignment va WHERE va.vendor.id = :vendorId AND va.status = 'ACCEPTED'")
     long countActiveAssignmentsByVendor(@Param("vendorId") Long vendorId);

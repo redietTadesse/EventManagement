@@ -1,10 +1,14 @@
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.entities.Vendor;
+import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.payload.ManualAssignRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.payload.VendorResponseRequest;
 import com.aicc.eventmanagement.services.VendorService;
+import com.aicc.eventmanagement.services.WorkflowEngine;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -12,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +31,7 @@ import java.util.stream.Collectors;
 public class AssignmentController {
 
     private final VendorService vendorService;
+    private final WorkflowEngine workflowEngine;
 
     @GetMapping("/event/{eventId}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
@@ -78,6 +85,46 @@ public class AssignmentController {
             id,
             request.getResponse(),
             request.getDeclineReason()
+        );
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    // ============ BROWSE-AND-VOLUNTEER ENDPOINTS ============
+
+    @GetMapping("/open")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get open assignments for the authenticated vendor's service category")
+    public ResponseEntity<List<VendorAssignmentResponse>> getOpenAssignments(
+            @AuthenticationPrincipal UserDetails principal) {
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        List<VendorAssignment> openAssignments = vendorService.getOpenAssignmentsForCategory(vendor.getServiceCategory());
+        return ResponseEntity.ok(openAssignments.stream()
+            .map(VendorAssignmentResponse::from)
+            .collect(Collectors.toList()));
+    }
+
+    @PostMapping("/{id}/claim")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Claim an open assignment (transitions OPEN → PENDING)")
+    public ResponseEntity<VendorAssignmentResponse> claimAssignment(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        VendorAssignment assignment = vendorService.claimOpenAssignment(id, vendor.getId());
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    // ============ COORDINATOR FALLBACK ============
+
+    @PostMapping("/{id}/force-assign")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Coordinator force-assigns a vendor to an open/unclaimed assignment")
+    public ResponseEntity<VendorAssignmentResponse> forceAssign(
+            @PathVariable Long id,
+            @Valid @RequestBody ManualAssignRequest request) {
+        VendorAssignment assignment = vendorService.forceAssignToOpenAssignment(
+            id,
+            request.getVendorId()
         );
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }

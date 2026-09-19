@@ -2,6 +2,7 @@ package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.EventResponse;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.services.EventService;
@@ -18,6 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -108,9 +111,11 @@ public class EventController {
     @Operation(summary = "Update event status")
     public ResponseEntity<EventResponse> updateEventStatus(
             @PathVariable Long id,
-            @RequestParam EventStatus status) {
+            @RequestParam EventStatus status,
+            @AuthenticationPrincipal UserDetails principal) {
         log.info("Updating event {} status to {}", id, status);
-        Event updated = eventService.updateEventStatus(id, status);
+        Role userRole = extractRoleFromPrincipal(principal);
+        Event updated = eventService.updateEventStatus(id, status, userRole);
         return ResponseEntity.ok(EventResponse.from(updated));
     }
 
@@ -166,5 +171,17 @@ public class EventController {
 
         List<String> categories = categoryMap.getOrDefault(eventType.toLowerCase(), List.of());
         return ResponseEntity.ok(categories);
+    }
+
+    private Role extractRoleFromPrincipal(UserDetails principal) {
+        if (principal == null || principal.getAuthorities().isEmpty()) {
+            return Role.CLIENT;
+        }
+
+        String roleName = principal.getAuthorities().iterator().next().getAuthority();
+        if (roleName.startsWith("ROLE_")) {
+            roleName = roleName.substring(5);
+        }
+        return Role.valueOf(roleName);
     }
 }
