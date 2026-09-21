@@ -87,9 +87,10 @@ public class WorkflowEngine {
                 Set.of(VendorAssignmentStatus.PENDING, VendorAssignmentStatus.CANCELLED));
         assignmentTransitionTable.put(VendorAssignmentStatus.DECLINED,
                 Set.of(VendorAssignmentStatus.OPEN));
-        assignmentTransitionTable.put(VendorAssignmentStatus.ACCEPTED,
-                Set.of(VendorAssignmentStatus.COMPLETED,
-                       VendorAssignmentStatus.CANCELLED));
+        // ACCEPTED is terminal (isTerminal()): an accepted assignment cannot be moved
+        // out again. Nothing in the services transitions out of ACCEPTED, and the
+        // startup invariant rejects any outgoing transitions for terminal states.
+        assignmentTransitionTable.put(VendorAssignmentStatus.ACCEPTED, Set.of());
         assignmentTransitionTable.put(VendorAssignmentStatus.COMPLETED, Set.of());
         assignmentTransitionTable.put(VendorAssignmentStatus.CANCELLED, Set.of());
 
@@ -110,11 +111,9 @@ public class WorkflowEngine {
         // CANCELLED from PENDING: admin/coordinator/client can cancel a pending assignment
         assignmentTransitionRoleMap.put("PENDING_CANCELLED", Set.of(Role.ADMIN, Role.COORDINATOR, Role.CLIENT));
 
-        // COMPLETED from ACCEPTED: admin/coordinator can mark an accepted assignment as completed
-        assignmentTransitionRoleMap.put("ACCEPTED_COMPLETED", Set.of(Role.ADMIN, Role.COORDINATOR));
-
-        // CANCELLED from ACCEPTED: admin/coordinator/client can cancel an accepted assignment
-        assignmentTransitionRoleMap.put("ACCEPTED_CANCELLED", Set.of(Role.ADMIN, Role.COORDINATOR, Role.CLIENT));
+        // COMPLETED and CANCELLED are terminal: they have no outgoing transitions,
+        // so no role map entries exist for transitions out of them. ACCEPTED is also
+        // terminal (the vendor is committed) — see VendorAssignmentStatus.isTerminal().
 
         // 5. INVARIANT CHECKS
         // Terminal states must not have outgoing transitions.

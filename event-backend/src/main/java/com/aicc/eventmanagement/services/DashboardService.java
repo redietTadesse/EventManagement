@@ -40,7 +40,7 @@ public class DashboardService {
     }
 
     public DashboardStatsResponse getCoordinatorStats() {
-        log.info("Building coordinator dashboard stats");
+        log.info("Building dashboard stats (coordinator)");
 
         long activeVendors = vendorRepository.findByIsActive(true).size();
         long totalEvents = eventRepository.count();
@@ -52,6 +52,6 @@ public class DashboardService {
         }
 
         return new DashboardStatsResponse(
-                0, 0, activeVendors, totalEvents, eventsByStatus);
+                0L, 0L, activeVendors, totalEvents, eventsByStatus);
     }
 }
