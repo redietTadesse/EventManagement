@@ -27,7 +27,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusiness(BusinessException ex) {
         log.warn("Business error: {} - {}", ex.getErrorCode(), ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        HttpStatus status = "ACCESS_DENIED".equals(ex.getErrorCode())
+                ? HttpStatus.FORBIDDEN
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
                 .body(new ErrorResponse(ex.getErrorCode(), ex.getMessage(), LocalDateTime.now()));
     }
 
@@ -46,6 +49,20 @@ public class GlobalExceptionHandler {
         log.warn("Access denied: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ErrorResponse("ACCESS_DENIED", "You do not have permission to perform this action", LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
+        log.warn("Illegal state: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("INVALID_TRANSITION", ex.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ErrorResponse> handleSecurity(SecurityException ex) {
+        log.warn("Workflow authorization failure: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("TRANSITION_FORBIDDEN", ex.getMessage(), LocalDateTime.now()));
     }
 
     @ExceptionHandler(Exception.class)

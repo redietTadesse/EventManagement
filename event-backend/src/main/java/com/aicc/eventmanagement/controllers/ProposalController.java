@@ -1,9 +1,11 @@
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.Inquiry;
+import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
+import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.InquiryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +24,7 @@ public class ProposalController {
 
     private final InquiryService inquiryService;
     private final InquiryRepository inquiryRepository;
+    private final UserRepository userRepository;
 
     /**
      * Direct "Accept" link from email – requires authentication.
@@ -99,22 +102,11 @@ public class ProposalController {
 
     /**
      * Look up user ID by username.
-     * In a real app, this would use UserRepository. For now, we parse from a simple convention.
+     * Uses UserRepository to properly resolve the user ID from username.
      */
     private Long getUserIdFromUsername(String username) {
-        // This is a placeholder - in production, inject UserRepository and use:
-        // userRepository.findByUsername(username).map(User::getId).orElse(null)
-        // For demo purposes, we'll try to parse numeric suffix or return null
-        // The actual implementation depends on how users are set up in your system
-        try {
-            // If username is like "client123", extract 123
-            String numericPart = username.replaceAll("\\D", "");
-            if (!numericPart.isEmpty()) {
-                return Long.parseLong(numericPart);
-            }
-        } catch (NumberFormatException e) {
-            // Ignore
-        }
-        return null;
+        return userRepository.findByUsername(username)
+            .map(User::getId)
+            .orElse(null);
     }
 }

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import RichProposalForm from '../components/RichProposalForm';
 import { useApp } from '../context/AppContext';
 
 export default function InquiryDetail() {
@@ -20,17 +21,19 @@ export default function InquiryDetail() {
     venueDetails: '',
   });
 
+  const loadInquiry = useCallback(async () => {
+    const data = await fetchInquiryById(id);
+    if (data) {
+      setInquiry(data);
+      setError('');
+    } else {
+      setError('Failed to load inquiry');
+    }
+  }, [id, fetchInquiryById]);
+
   useEffect(() => {
-    const loadInquiry = async () => {
-      const data = await fetchInquiryById(id);
-      if (data) {
-        setInquiry(data);
-      } else {
-        setError('Failed to load inquiry');
-      }
-    };
     loadInquiry();
-  }, [id]);
+  }, [loadInquiry]);
 
   const handleConvert = async (e) => {
     e.preventDefault();
@@ -74,6 +77,7 @@ export default function InquiryDetail() {
   }
 
   const canConvert = inquiry?.status === 'PROPOSAL_ACCEPTED';
+  const canSendProposal = inquiry?.status === 'INQUIRY_SUBMITTED';
 
   return (
     <Layout title="Inquiry Detail">
@@ -114,6 +118,17 @@ export default function InquiryDetail() {
             )}
           </div>
         </div>
+
+        {canSendProposal && (
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Compose Proposal</h3>
+            <RichProposalForm
+              inquiry={inquiry}
+              onSuccess={loadInquiry}
+              onCancel={() => navigate('/coordinator/inquiries')}
+            />
+          </div>
+        )}
 
         {canConvert && (
           <div className="bg-white rounded-xl shadow p-6">
@@ -161,7 +176,7 @@ export default function InquiryDetail() {
           </div>
         )}
 
-        {!canConvert && inquiry?.status !== 'PROPOSAL_ACCEPTED' && (
+        {!canConvert && !canSendProposal && (
           <div className="bg-white rounded-xl shadow p-6">
             <div className="text-center py-6 text-gray-500">
               <p className="text-lg font-medium">Cannot Create Event</p>

@@ -44,6 +44,34 @@ public class VendorService {
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
 
+    // ============ ESCALATION BUILDER ============
+
+    /**
+     * Builds the escalation view for every required category of an event.
+     * Categories with no assignments are included with an empty attempt list,
+     * so the rollup treats "nothing assigned yet" as EXHAUSTED.
+     */
+    private List<CategoryEscalation> buildEscalations(Event event) {
+        String eventType = event.getInquiry().getEventType();
+        List<String> requiredCategories = EVENT_CATEGORIES.getOrDefault(eventType, List.of());
+
+        if (requiredCategories.isEmpty()) {
+            return List.of();
+        }
+
+        List<VendorAssignment> all = assignmentRepository.findByEventId(event.getId());
+
+        return requiredCategories.stream()
+                .map(category -> new CategoryEscalation(
+                        event.getId(),
+                        category,
+                        all.stream()
+                                .filter(a -> category.equals(a.getServiceCategory()))
+                                .sorted(Comparator.comparing(VendorAssignment::getId))
+                                .toList()))
+                .toList();
+    }
+
     // ============ EVENT TYPE → REQUIRED CATEGORIES ============
 
     private static final Map<String, List<String>> EVENT_CATEGORIES = Map.of(
@@ -201,32 +229,12 @@ public class VendorService {
             saved = assignmentRepository.saveAll(assignments);
         }
 
-        // Update event status
-        EventStatus newStatus;
-        String newUnfilled = null;
-
         if (!unfilledCategories.isEmpty()) {
-            // Some categories couldn't be filled → needs coordinator
-            newStatus = EventStatus.NEEDS_COORDINATOR;
-            newUnfilled = String.join(",", unfilledCategories);
+            event.setUnfilledCategories(String.join(",", unfilledCategories));
             log.warn("Event {} needs coordinator for categories: {}", event.getId(), unfilledCategories);
-        } else if (!saved.isEmpty()) {
-            // All categories filled → awaiting vendors
-            newStatus = EventStatus.AWAITING_VENDORS;
-        } else {
-            // No assignments created at all → needs coordinator
-            newStatus = EventStatus.NEEDS_COORDINATOR;
-            log.warn("Event {} needs coordinator - no vendors found for any category", event.getId());
-        }
-
-        if (event.getStatus() != newStatus) {
-            workflowEngine.validateTransition(event.getStatus(), newStatus, Role.COORDINATOR);
-            event.setStatus(newStatus);
-        }
-        if (newUnfilled != null) {
-            event.setUnfilledCategories(newUnfilled);
         }
         eventRepository.save(event);
+        evaluateEventRollup(event, Role.COORDINATOR);
 
         return saved;
     }
@@ -307,17 +315,8 @@ public class VendorService {
             event.setUnfilledCategories(unfilled.isEmpty() ? null : String.join(",", unfilled));
         }
 
-        EventStatus newStatus = (event.getUnfilledCategories() == null
-                || event.getUnfilledCategories().isEmpty())
-                ? EventStatus.AWAITING_VENDORS
-                : EventStatus.NEEDS_COORDINATOR;
-
-        if (event.getStatus() != newStatus) {
-            workflowEngine.validateTransition(event.getStatus(), newStatus, Role.COORDINATOR);
-            event.setStatus(newStatus);
-        }
-
         eventRepository.save(event);
+        evaluateEventRollup(event, Role.COORDINATOR);
         log.info("Manual assignment: {} for event {} category {}",
             vendor.getCompanyName(), eventId, category);
 
@@ -338,44 +337,51 @@ public class VendorService {
             );
         }
 
-        if ("ACCEPTED".equalsIgnoreCase(response)) {
-            // Check for conflicts before accepting
-            LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
+        LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
+        boolean accepted = "ACCEPTED".equalsIgnoreCase(response);
+        boolean declined = "DECLINED".equalsIgnoreCase(response);
 
-            if (!isVendorAvailable(assignment.getVendor().getId(), eventDate)) {
-                throw new BusinessException(
-                    "Vendor has a conflict on this date. Cannot accept.",
-                    "VENDOR_CONFLICT"
-                );
-            }
-
-            assignment.setStatus(VendorAssignmentStatus.ACCEPTED);
-
-        } else if ("DECLINED".equalsIgnoreCase(response)) {
-            assignment.setStatus(VendorAssignmentStatus.DECLINED);
-            assignment.setDeclineReason(declineReason);
-
-            // Auto-reassign after decline
-            autoReassign(assignment);
-
-        } else {
+        if (!accepted && !declined) {
             throw new BusinessException(
                 "Invalid response. Must be 'ACCEPTED' or 'DECLINED'",
                 "INVALID_RESPONSE"
             );
         }
 
+        if (accepted) {
+            if (!isVendorAvailable(assignment.getVendor().getId(), eventDate)) {
+                throw new BusinessException(
+                    "Vendor has a conflict on this date. Cannot accept.",
+                    "VENDOR_CONFLICT"
+                );
+            }
+            workflowEngine.validateAssignmentTransition(
+                    VendorAssignmentStatus.PENDING,
+                    VendorAssignmentStatus.ACCEPTED,
+                    Role.VENDOR);
+            assignment.setStatus(VendorAssignmentStatus.ACCEPTED);
+            assignment.setRespondedAt(LocalDateTime.now());
+            VendorAssignment saved = assignmentRepository.save(assignment);
+            eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
+            evaluateEventRollup(assignment.getEvent(), Role.VENDOR);
+            return saved;
+        }
+
+        workflowEngine.validateAssignmentTransition(
+                VendorAssignmentStatus.PENDING,
+                VendorAssignmentStatus.DECLINED,
+                Role.VENDOR);
+        assignment.setStatus(VendorAssignmentStatus.DECLINED);
+        assignment.setDeclineReason(declineReason);
         assignment.setRespondedAt(LocalDateTime.now());
+        assignmentRepository.save(assignment);
 
-        VendorAssignment saved = assignmentRepository.save(assignment);
+        eventPublisher.publishEvent(new VendorAssignmentEvent(this, assignment));
 
-        // Publish event for email notification (vendor responded)
-        eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
+        autoReassign(assignment);
+        evaluateEventRollup(assignment.getEvent(), Role.VENDOR);
 
-        // Check if all categories are now ACCEPTED
-        checkAndUpdateEventStatus(assignment.getEvent(), Role.VENDOR);
-
-        return saved;
+        return assignment;
     }
 
     // ============ AUTO-REASSIGN ON DECLINE ============
@@ -394,31 +400,24 @@ public class VendorService {
         List<Vendor> available = findAvailableVendors(category, eventDate, declinedVendorId);
 
         if (available.isEmpty()) {
-            // No vendors available → mark NEEDS_COORDINATOR
-            if (event.getStatus() != EventStatus.NEEDS_COORDINATOR) {
-                workflowEngine.validateTransition(
-                    event.getStatus(), EventStatus.NEEDS_COORDINATOR, Role.VENDOR);
-                event.setStatus(EventStatus.NEEDS_COORDINATOR);
-            }
+            // Ranked list exhausted: open the declined assignment to the vendor pool so
+            // any vendor can claim it. The event-level consequence is NOT decided here —
+            // the rollup that runs after autoReassign owns the event status.
+            workflowEngine.validateAssignmentTransition(
+                    VendorAssignmentStatus.DECLINED,
+                    VendorAssignmentStatus.OPEN,
+                    Role.VENDOR);
+            declinedAssignment.setStatus(VendorAssignmentStatus.OPEN);
+            assignmentRepository.save(declinedAssignment);
 
-            // Add to unfilled if not already there
             String unfilled = event.getUnfilledCategories();
             if (unfilled == null || !unfilled.contains(category)) {
-                event.setUnfilledCategories(
-                    unfilled == null ? category : unfilled + "," + category
-                );
+                event.setUnfilledCategories(unfilled == null ? category : unfilled + "," + category);
             }
-
             eventRepository.save(event);
-            log.warn("No alternative vendor for category {} in event {} - needs coordinator",
-                category, event.getId());
 
-            // Transition to OPEN for vendor self-claim instead of immediate escalation
-            if (declinedAssignment.getStatus() == VendorAssignmentStatus.PENDING) {
-                declinedAssignment.setStatus(VendorAssignmentStatus.OPEN);
-                assignmentRepository.save(declinedAssignment);
-                log.info("Assignment {} transitioned to OPEN - awaiting vendor claim", declinedAssignment.getId());
-            }
+            log.warn("Category {} for event {} exhausted its ranked list - assignment {} is now OPEN",
+                category, event.getId(), declinedAssignment.getId());
             return;
         }
 
@@ -453,25 +452,58 @@ public class VendorService {
             category, newVendor.getCompanyName(), event.getId());
     }
 
-    // ============ EVENT STATUS CHECK ============
-
-    private void checkAndUpdateEventStatus(Event event, Role triggeringRole) {
-        // Get all assignments for this event
-        List<VendorAssignment> assignments = assignmentRepository.findByEventId(event.getId());
-
-        // Check if all assignments are ACCEPTED
-        boolean allAccepted = !assignments.isEmpty()
-            && assignments.stream()
-            .allMatch(a -> a.getStatus() == VendorAssignmentStatus.ACCEPTED);
-
-        if (allAccepted && event.getStatus() != EventStatus.CONFIRMED) {
-            // All vendors accepted
-            workflowEngine.validateTransition(
-                event.getStatus(), EventStatus.CONFIRMED, triggeringRole);
-            event.setStatus(EventStatus.CONFIRMED);
-            eventRepository.save(event);
-            log.info("Event {} confirmed - all vendors accepted", event.getId());
+    /**
+     * Evaluates the event-level rollup from the state of each required category.
+     *
+     * Policy: fail-fast, all-or-nothing, expressed over CategoryEscalation so that the
+     * rollup and the escalation concept cannot drift apart.
+     *   - If any required category is EXHAUSTED (no attempt at all, or the current attempt
+     *     is DECLINED/OPEN/CANCELLED), the event moves to NEEDS_COORDINATOR.
+     *   - Else if every required category is RESOLVED (some attempt ACCEPTED/COMPLETED),
+     *     the event moves to CONFIRMED.
+     *   - Else the event is AWAITING_VENDORS.
+     */
+    private void evaluateEventRollup(Event event, Role triggeringRole) {
+        EventStatus current = event.getStatus();
+        if (current == EventStatus.CONFIRMED
+                || current == EventStatus.COMPLETED
+                || current == EventStatus.CANCELLED
+                || current == EventStatus.CLOSED) {
+            return;
         }
+
+        List<CategoryEscalation> escalations = buildEscalations(event);
+
+        // buildEscalations returns an empty list for an unknown event type, which is
+        // different from "all categories resolved" — refuse to guess and leave the
+        // event where it is rather than silently confirming it.
+        if (escalations.isEmpty()) {
+            log.warn("Event {} has unknown event type '{}' - skipping rollup evaluation",
+                    event.getId(), event.getInquiry().getEventType());
+            return;
+        }
+
+        boolean anyExhausted = escalations.stream().anyMatch(CategoryEscalation::isExhausted);
+        boolean allResolved = escalations.stream().allMatch(CategoryEscalation::isResolved);
+
+        EventStatus target;
+        if (anyExhausted) {
+            target = EventStatus.NEEDS_COORDINATOR;
+        } else if (allResolved) {
+            target = EventStatus.CONFIRMED;
+        } else {
+            target = EventStatus.AWAITING_VENDORS;
+        }
+
+        if (current == target) {
+            return;
+        }
+
+        workflowEngine.validateTransition(current, target, triggeringRole);
+        event.setStatus(target);
+        eventRepository.save(event);
+        log.info("Event {} rollup: {} -> {} (anyExhausted={}, allResolved={}, triggeringRole={})",
+                event.getId(), current, target, anyExhausted, allResolved, triggeringRole);
     }
 
     // ============ OPEN ASSIGNMENT CLAIM ============
@@ -487,8 +519,14 @@ public class VendorService {
                 "ASSIGNMENT_NOT_OPEN");
         }
 
-        // Atomic claim: only proceed if the assignment is still OPEN
-        // This prevents race conditions when multiple vendors try to claim
+        workflowEngine.validateAssignmentTransition(
+                VendorAssignmentStatus.OPEN,
+                VendorAssignmentStatus.PENDING,
+                Role.VENDOR);
+
+        // Atomic claim: the native UPDATE sets status, vendor_id, vendor_name and
+        // responded_at in a single statement guarded by status = 'OPEN'. Concurrent
+        // claimants cannot both win — the loser updates 0 rows and gets an error.
         int rowsUpdated = assignmentRepository.claimOpenAssignment(assignmentId, vendorId);
         if (rowsUpdated == 0) {
             throw new BusinessException(
@@ -496,13 +534,12 @@ public class VendorService {
                 "ASSIGNMENT_ALREADY_CLAIMED");
         }
 
-        // Reload and update
-        assignment = assignmentRepository.findById(assignmentId).get();
-        assignment.setStatus(VendorAssignmentStatus.PENDING);
-        assignment.setRespondedAt(LocalDateTime.now());
-        assignmentRepository.save(assignment);
+        // Re-read the row the native query just wrote. The repository method clears the
+        // persistence context, so this returns the post-claim state, not a stale copy.
+        assignment = assignmentRepository.findById(assignmentId).orElseThrow();
 
         log.info("Vendor {} claimed open assignment {}", vendorId, assignmentId);
+        evaluateEventRollup(assignment.getEvent(), Role.VENDOR);
         return assignment;
     }
 
@@ -533,26 +570,10 @@ public class VendorService {
     }
 
     public boolean hasAllCategoriesFilled(Event event) {
-        String eventType = event.getInquiry().getEventType();
-        List<String> required = EVENT_CATEGORIES.getOrDefault(eventType, List.of());
-
-        if (required.isEmpty()) {
-            return true;
-        }
-
-        List<VendorAssignment> assignments = assignmentRepository.findByEventId(event.getId());
-
-        for (String category : required) {
-            boolean hasAssignment = assignments.stream()
-                .anyMatch(a -> a.getServiceCategory().equals(category)
-                    && a.getStatus() == VendorAssignmentStatus.ACCEPTED);
-
-            if (!hasAssignment) {
-                return false;
-            }
-        }
-
-        return true;
+        // Note: an unknown event type yields an empty escalation list and therefore a
+        // vacuous true here — matching the previous behaviour, which returned true when
+        // the event type declared no required categories.
+        return buildEscalations(event).stream().allMatch(CategoryEscalation::isResolved);
     }
 
     public long countActiveAssignmentsForVendor(Long vendorId) {
@@ -591,11 +612,19 @@ public class VendorService {
             .orElseThrow(() -> new EntityNotFoundException("Vendor", vendorId));
 
         // Update assignment
+        workflowEngine.validateAssignmentTransition(
+                VendorAssignmentStatus.OPEN,
+                VendorAssignmentStatus.PENDING,
+                Role.COORDINATOR);
         assignment.setVendor(vendor);
         assignment.setVendorName(vendor.getCompanyName());
         assignment.setStatus(VendorAssignmentStatus.PENDING);
         assignment.setAssignedAt(LocalDateTime.now());
         VendorAssignment saved = assignmentRepository.save(assignment);
+
+        // Force-assign resolves a stuck category (OPEN → PENDING), so the event-level
+        // state is re-derived by the rollup (e.g. NEEDS_COORDINATOR → AWAITING_VENDORS)
+        evaluateEventRollup(assignment.getEvent(), Role.COORDINATOR);
 
         log.info("Coordinator force-assigned vendor {} to open assignment {}", vendorId, assignmentId);
         return saved;

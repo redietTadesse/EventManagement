@@ -30,11 +30,27 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     @Query("SELECT va FROM VendorAssignment va WHERE va.status = 'PENDING' AND va.assignedAt < :cutoffDate")
     List<VendorAssignment> findPendingAssignmentsOlderThan(@Param("cutoffDate") LocalDateTime cutoffDate);
 
-    @Query("SELECT va FROM VendorAssignment va WHERE va.status = 'OPEN' AND va.serviceCategory = :category")
+    @Query("SELECT va FROM VendorAssignment va WHERE va.status = :status AND va.serviceCategory = :category")
     List<VendorAssignment> findByStatusAndServiceCategory(@Param("status") VendorAssignmentStatus status, @Param("category") String category);
 
-    @Modifying
-    @Query("UPDATE VendorAssignment va SET va.status = 'PENDING', va.vendor.id = :vendorId WHERE va.id = :assignmentId AND va.status = 'OPEN'")
+    /**
+     * Atomic claim of an OPEN assignment.
+     *
+     * Native SQL because JPQL does not allow an association path (va.vendor.id) in an
+     * UPDATE SET clause. The update also stamps vendor_name and responded_at so the row
+     * is fully consistent after a single statement; the WHERE status = 'OPEN' guard makes
+     * the claim atomic, so concurrent vendors cannot both win (the loser gets 0 rows).
+     *
+     * clearAutomatically/flushAutomatically force the persistence context to be flushed
+     * before and detached after the update, so the caller's re-read sees the new row
+     * instead of the stale pre-claim state cached in the first-level cache.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE vendor_assignments SET status = 'PENDING', vendor_id = :vendorId, " +
+            "vendor_name = (SELECT company_name FROM vendors WHERE id = :vendorId), " +
+            "responded_at = NOW() " +
+            "WHERE id = :assignmentId AND status = 'OPEN'",
+            nativeQuery = true)
     int claimOpenAssignment(@Param("assignmentId") Long assignmentId, @Param("vendorId") Long vendorId);
 
 
@@ -57,9 +73,14 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
         @Param("date") LocalDate date
     );
 
+    /**
+     * Workload per vendor, used by findBestVendor / autoReassign for load balancing.
+     * Counts PENDING as well as ACCEPTED: a vendor already holding a pending offer is
+     * load, and ignoring it would keep handing every new event to the same vendor.
+     */
     @Query("SELECT va.vendor.id, COUNT(va) FROM VendorAssignment va " +
             "WHERE va.vendor.id IN :vendorIds " +
-            "AND va.status = 'ACCEPTED' " +
+            "AND va.status IN ('ACCEPTED', 'PENDING') " +
             "GROUP BY va.vendor.id")
     List<Object[]> countActiveAssignmentsByVendors(@Param("vendorIds") List<Long> vendorIds);
 

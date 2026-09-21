@@ -1,9 +1,12 @@
 package com.aicc.eventmanagement.controllers;
 
+import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
+import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
 import com.aicc.eventmanagement.services.ConflictResolutionService.AlternativeVendor;
 import com.aicc.eventmanagement.services.ConflictResolutionService.ResolutionSuggestion;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -36,6 +40,7 @@ public class VendorController {
     private final VendorService vendorService;
     private final VendorRatingService ratingService;
     private final ConflictResolutionService conflictService;
+    private final UserRepository userRepository;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
@@ -49,6 +54,15 @@ public class VendorController {
     @Operation(summary = "Get all active vendors")
     public ResponseEntity<List<Vendor>> getActiveVendors() {
         return ResponseEntity.ok(vendorService.getActiveVendors());
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get the authenticated vendor's profile")
+    public ResponseEntity<Vendor> getMyProfile(
+            @AuthenticationPrincipal UserDetails principal) {
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        return ResponseEntity.ok(vendor);
     }
 
     @GetMapping("/{id}")
@@ -89,7 +103,9 @@ public class VendorController {
             @AuthenticationPrincipal UserDetails principal) {
         // IDOR fix: vendors can only access their own assignments
         if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
-            throw new RuntimeException("Access denied: You can only view your own assignments");
+            throw new BusinessException(
+                "You can only view your own assignments",
+                "ACCESS_DENIED");
         }
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(id);
         return ResponseEntity.ok(assignments.stream()
@@ -105,7 +121,9 @@ public class VendorController {
             @AuthenticationPrincipal UserDetails principal) {
         // IDOR fix: vendors can only access their own pending assignments
         if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
-            throw new RuntimeException("Access denied: You can only view your own pending assignments");
+            throw new BusinessException(
+                "You can only view your own pending assignments",
+                "ACCESS_DENIED");
         }
         List<VendorAssignment> assignments = vendorService.getPendingAssignmentsForVendor(id);
         return ResponseEntity.ok(assignments.stream()
@@ -212,16 +230,16 @@ public class VendorController {
 
     private boolean isVendorIdMatch(Long vendorId, UserDetails principal) {
         if (principal == null) return false;
-        // Extract vendor ID from username (format: "vendor123" -> 123)
-        // In production, this would use a proper User-Vendor relationship
-        String username = principal.getUsername();
+        // Use the proper User-Vendor relationship through VendorService
         try {
-            String numericPart = username.replaceAll("\\D", "");
-            if (!numericPart.isEmpty()) {
-                return Long.parseLong(numericPart) == vendorId;
+            User user = userRepository.findByUsername(principal.getUsername())
+                .orElse(null);
+            if (user != null) {
+                Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+                return vendor != null && vendor.getId().equals(vendorId);
             }
-        } catch (NumberFormatException e) {
-            // Ignore
+        } catch (Exception e) {
+            log.debug("Failed to resolve vendor for user: {}", principal.getUsername());
         }
         return false;
     }

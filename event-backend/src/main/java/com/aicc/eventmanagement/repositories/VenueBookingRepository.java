@@ -20,5 +20,7 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
     List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date);
 
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
+
+    List<VenueBooking> findByVenueId(Long venueId);
 }
 

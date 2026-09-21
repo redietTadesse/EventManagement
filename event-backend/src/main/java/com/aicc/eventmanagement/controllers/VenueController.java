@@ -3,6 +3,7 @@ package com.aicc.eventmanagement.controllers;
 import com.aicc.eventmanagement.payload.CreateVenueRequest;
 import com.aicc.eventmanagement.payload.UpdateVenueRequest;
 import com.aicc.eventmanagement.payload.VenueAvailabilityResponse;
+import com.aicc.eventmanagement.payload.VenueBookingResponse;
 import com.aicc.eventmanagement.payload.VenueResponse;
 import com.aicc.eventmanagement.services.VenueService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -51,6 +52,15 @@ public class VenueController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         boolean available = venueService.isVenueAvailable(id, date);
         return ResponseEntity.ok(new VenueAvailabilityResponse(id, date, available));
+    }
+
+    @GetMapping("/{id}/bookings")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get bookings for a venue",
+            description = "Returns all events booked at this venue")
+    public ResponseEntity<List<VenueBookingResponse>> getVenueBookings(@PathVariable Long id) {
+        List<VenueBookingResponse> bookings = venueService.getVenueBookings(id);
+        return ResponseEntity.ok(bookings);
     }
 
     @GetMapping("/available")

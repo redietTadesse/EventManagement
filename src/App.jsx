@@ -10,8 +10,14 @@ import CoordinatorDashboard from './coordinator/Dashboard';
 import AllInquiries from './coordinator/AllInquiries';
 import InquiryDetail from './coordinator/InquiryDetail';
 import Events from './coordinator/Events';
+import EventDetail from './coordinator/EventDetail';
+import Venues from './coordinator/Venues';
+import VenueDetail from './coordinator/VenueDetail';
 import Calendar from './components/Calendar';
 import VendorDashboard from './vendor/VendorDashboard';
+import MyAssignments from './vendor/MyAssignments';
+import AssignmentDetail from './vendor/AssignmentDetail';
+import OpenAssignments from './vendor/OpenAssignments';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
@@ -73,10 +79,50 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/coordinator/events/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <EventDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Venues />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <VenueDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/coordinator/calendar"
         element={
           <ProtectedRoute allowedRoles={['COORDINATOR']}>
             <Calendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Venues />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <VenueDetail />
           </ProtectedRoute>
         }
       />
@@ -86,6 +132,30 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['VENDOR']}>
             <VendorDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/assignments"
+        element={
+          <ProtectedRoute allowedRoles={['VENDOR']}>
+            <MyAssignments />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/assignments/:id"
+        element={
+          <ProtectedRoute allowedRoles={['VENDOR']}>
+            <AssignmentDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/open"
+        element={
+          <ProtectedRoute allowedRoles={['VENDOR']}>
+            <OpenAssignments />
           </ProtectedRoute>
         }
       />

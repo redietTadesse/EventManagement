@@ -21,6 +21,7 @@ const Navbar = () => {
     VENDOR: [
       { to: '/vendor/dashboard', label: 'Dashboard' },
       { to: '/vendor/assignments', label: 'My Assignments' },
+      { to: '/vendor/open', label: 'Open Requests' },
     ],
     COORDINATOR: [
       { to: '/coordinator/dashboard', label: 'Dashboard' },

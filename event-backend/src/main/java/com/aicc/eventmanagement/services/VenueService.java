@@ -155,4 +155,12 @@ public class VenueService {
         venueBookingRepository.save(booking);
         log.info("Cancelled venue booking {}", bookingId);
     }
+
+    public List<com.aicc.eventmanagement.payload.VenueBookingResponse> getVenueBookings(Long venueId) {
+        getById(venueId); // 404 if the venue doesn't exist
+        List<VenueBooking> bookings = venueBookingRepository.findByVenueId(venueId);
+        return bookings.stream()
+            .map(com.aicc.eventmanagement.payload.VenueBookingResponse::from)
+            .toList();
+    }
 }

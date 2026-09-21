@@ -38,4 +38,20 @@ public class DashboardService {
         return new DashboardStatsResponse(
                 totalUsers, activeUsers, activeVendors, totalEvents, eventsByStatus);
     }
+
+    public DashboardStatsResponse getCoordinatorStats() {
+        log.info("Building coordinator dashboard stats");
+
+        long activeVendors = vendorRepository.findByIsActive(true).size();
+        long totalEvents = eventRepository.count();
+
+        // Every status represented, even those with zero events, in enum order.
+        Map<String, Long> eventsByStatus = new LinkedHashMap<>();
+        for (EventStatus status : EventStatus.values()) {
+            eventsByStatus.put(status.name(), (long) eventRepository.findByStatus(status).size());
+        }
+
+        return new DashboardStatsResponse(
+                0, 0, activeVendors, totalEvents, eventsByStatus);
+    }
 }

@@ -2,8 +2,8 @@ package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.Vendor;
-import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
+import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.ManualAssignRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.payload.VendorResponseRequest;
@@ -80,13 +80,22 @@ public class AssignmentController {
     @Operation(summary = "Vendor responds to assignment (ACCEPTED or DECLINED)")
     public ResponseEntity<VendorAssignmentResponse> respondToAssignment(
             @PathVariable Long id,
-            @Valid @RequestBody VendorResponseRequest request) {
-        VendorAssignment assignment = vendorService.respondToAssignment(
-            id,
-            request.getResponse(),
-            request.getDeclineReason()
-        );
-        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+            @Valid @RequestBody VendorResponseRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        Vendor caller = vendorService.getVendorByUser(principal.getUsername());
+        VendorAssignment assignment = vendorService.getAssignmentById(id);
+
+        if (assignment.getVendor() == null
+                || !assignment.getVendor().getId().equals(caller.getId())) {
+            throw new BusinessException(
+                "You can only respond to your own assignments",
+                "ACCESS_DENIED");
+        }
+
+        VendorAssignment updated = vendorService.respondToAssignment(
+            id, request.getResponse(), request.getDeclineReason());
+        return ResponseEntity.ok(VendorAssignmentResponse.from(updated));
     }
 
     // ============ BROWSE-AND-VOLUNTEER ENDPOINTS ============
@@ -126,6 +135,40 @@ public class AssignmentController {
             id,
             request.getVendorId()
         );
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    // ============ MY ASSIGNMENTS (vendor-scoped) ============
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get the authenticated vendor's assignments")
+    public ResponseEntity<List<VendorAssignmentResponse>> getMyAssignments(
+            @AuthenticationPrincipal UserDetails principal) {
+
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(vendor.getId());
+        return ResponseEntity.ok(assignments.stream()
+            .map(VendorAssignmentResponse::from)
+            .collect(Collectors.toList()));
+    }
+
+    @GetMapping("/me/{id}")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get one of the authenticated vendor's assignments by ID")
+    public ResponseEntity<VendorAssignmentResponse> getMyAssignment(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        VendorAssignment assignment = vendorService.getAssignmentById(id);
+
+        if (assignment.getVendor() == null
+                || !assignment.getVendor().getId().equals(vendor.getId())) {
+            throw new BusinessException(
+                "You can only view your own assignments",
+                "ACCESS_DENIED");
+        }
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 }
