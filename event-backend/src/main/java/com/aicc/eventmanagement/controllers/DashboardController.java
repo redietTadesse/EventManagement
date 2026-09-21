@@ -29,21 +29,3 @@ public class DashboardController {
         return ResponseEntity.ok(dashboardService.getStats());
     }
 }
-
-@RestController
-@RequestMapping("/api/v1/coordinator")
-@RequiredArgsConstructor
-@Slf4j
-@Tag(name = "Coordinator Dashboard", description = "Coordinator-specific statistics")
-public class CoordinatorDashboardController {
-
-    private final DashboardService dashboardService;
-
-    @GetMapping("/stats")
-    @PreAuthorize("hasRole('COORDINATOR')")
-    @Operation(summary = "Get coordinator dashboard statistics",
-            description = "Active vendors, total events, and events grouped by status for coordinators")
-    public ResponseEntity<DashboardStatsResponse> getCoordinatorStats() {
-        return ResponseEntity.ok(dashboardService.getCoordinatorStats());
-    }
-}
