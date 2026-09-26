@@ -58,6 +58,9 @@ public class VendorAssignment {
     @Column(name = "vendor_rating")
     private Double vendorRating;
 
+    @Column(name = "vendor_rating_comment", columnDefinition = "TEXT")
+    private String vendorRatingComment;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

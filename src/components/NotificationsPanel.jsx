@@ -1,16 +1,16 @@
 import React from 'react';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 import InlineNotification from './InlineNotification';
 
 const NotificationsPanel = ({ limit = 5 }) => {
-  const { state, dispatch } = useApp();
+  const { state, markAllNotificationsRead } = useApp();
   const { currentUser, notifications } = state;
   const myNotifications = notifications.filter(n => n.userId === currentUser?.id);
   const unreadCount = myNotifications.filter(n => !n.isRead).length;
 
   const markAllRead = () => {
     if (currentUser) {
-      dispatch({ type: 'MARK_NOTIFICATIONS_READ', payload: { userId: currentUser.id } });
+      markAllNotificationsRead();
     }
   };
 

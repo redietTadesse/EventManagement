@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import Skeleton, { CardSkeleton } from '../components/Skeleton';
 import { useApp } from '../context/AppContext';
 
 export default function VendorDashboard() {
@@ -38,7 +39,16 @@ export default function VendorDashboard() {
   if (loading) {
     return (
       <Layout title="Vendor Dashboard">
-        <div className="text-center py-10 text-gray-500">Loading…</div>
+        <div className="space-y-6">
+          <Skeleton className="h-8 w-64" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
       </Layout>
     );
   }

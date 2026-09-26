@@ -5,10 +5,12 @@ import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.ManualAssignRequest;
+import com.aicc.eventmanagement.payload.RateAssignmentRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.payload.VendorResponseRequest;
 import com.aicc.eventmanagement.services.VendorService;
 import com.aicc.eventmanagement.services.WorkflowEngine;
+import com.aicc.eventmanagement.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,6 +34,7 @@ public class AssignmentController {
 
     private final VendorService vendorService;
     private final WorkflowEngine workflowEngine;
+    private final UserRepository userRepository;
 
     @GetMapping("/event/{eventId}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
@@ -120,6 +123,21 @@ public class AssignmentController {
             @AuthenticationPrincipal UserDetails principal) {
         Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
         VendorAssignment assignment = vendorService.claimOpenAssignment(id, vendor.getId());
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    @PostMapping("/{id}/rate")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "Rate a completed vendor assignment")
+    public ResponseEntity<VendorAssignmentResponse> rate(
+            @PathVariable Long id,
+            @Valid @RequestBody RateAssignmentRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        Long clientId = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BusinessException("User not found", "USER_NOT_FOUND"))
+                .getId();
+        VendorAssignment assignment = vendorService.rateAssignment(
+                id, request.getRating(), request.getComment(), clientId);
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 

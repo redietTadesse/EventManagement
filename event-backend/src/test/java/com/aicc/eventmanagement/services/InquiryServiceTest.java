@@ -8,6 +8,7 @@ import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
+import com.aicc.eventmanagement.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,18 @@ class InquiryServiceTest {
 
     @Mock
     private WorkflowEngine workflowEngine;   // NEW: mock the engine
+
+        @Mock
+        private EmailService emailService;
+
+        @Mock
+        private UserRepository userRepository;
+
+        @Mock
+        private VenueService venueService;
+
+        @Mock
+        private VendorService vendorService;
 
     @InjectMocks
     private InquiryService inquiryService;

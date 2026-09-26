@@ -48,6 +48,7 @@ public class InquiryService {
     private final EmailService emailService;
     private final UserRepository userRepository;
     private final VenueService venueService;
+    private final VendorService vendorService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -258,6 +259,12 @@ public class InquiryService {
                 // Don't fail the whole conversion - venue booking is advisory
             }
         }
+
+        // Trigger vendor assignment on the primary path. This method participates in
+        // the conversion transaction, so assignment failure must roll back conversion
+        // rather than being caught and surfaced later as UnexpectedRollbackException.
+        vendorService.autoAssignForEvent(savedEvent);
+        log.info("Auto-assignment completed for event {}", savedEvent.getId());
 
         // -----------------------------------------------------------------
         // Now transition the inquiry from PROPOSAL_ACCEPTED to EVENT_CREATED

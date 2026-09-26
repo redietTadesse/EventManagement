@@ -189,13 +189,15 @@ class WorkflowEngineTest {
     }
 
     @Test
-    @DisplayName("ACCEPTED and COMPLETED are terminal assignment states")
-    void acceptedAndCompletedAreTerminal() {
+    @DisplayName("ACCEPTED can complete while COMPLETED is terminal")
+    void acceptedCanCompleteAndCompletedIsTerminal() {
+        assertThat(workflowEngine.isValidAssignmentTransition(
+                VendorAssignmentStatus.ACCEPTED,
+                VendorAssignmentStatus.COMPLETED)).isTrue();
+        assertThat(workflowEngine.isValidAssignmentTransition(
+                VendorAssignmentStatus.ACCEPTED,
+                VendorAssignmentStatus.CANCELLED)).isTrue();
         for (VendorAssignmentStatus target : VendorAssignmentStatus.values()) {
-            assertThat(workflowEngine.isValidAssignmentTransition(
-                    VendorAssignmentStatus.ACCEPTED, target))
-                    .as("ACCEPTED → %s should be invalid", target)
-                    .isFalse();
             assertThat(workflowEngine.isValidAssignmentTransition(
                     VendorAssignmentStatus.COMPLETED, target))
                     .as("COMPLETED → %s should be invalid", target)

@@ -33,6 +33,13 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     @Query("SELECT va FROM VendorAssignment va WHERE va.status = :status AND va.serviceCategory = :category")
     List<VendorAssignment> findByStatusAndServiceCategory(@Param("status") VendorAssignmentStatus status, @Param("category") String category);
 
+    @Query("SELECT va FROM VendorAssignment va " +
+           "WHERE va.status = 'OPEN' AND va.serviceCategory = :category " +
+           "AND va.event.status NOT IN :deadStatuses")
+    List<VendorAssignment> findOpenAssignmentsForCategory(
+            @Param("category") String category,
+            @Param("deadStatuses") List<com.aicc.eventmanagement.enums.EventStatus> deadStatuses);
+
     /**
      * Atomic claim of an OPEN assignment.
      *
@@ -96,4 +103,9 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
         @Param("eventId") Long eventId,
         @Param("category") String category
     );
+
+    @Query("SELECT DISTINCT va.vendor.id FROM VendorAssignment va " +
+           "WHERE va.event.id = :eventId AND va.serviceCategory = :category")
+    List<Long> findTriedVendorIds(@Param("eventId") Long eventId,
+                                  @Param("category") String category);
 }

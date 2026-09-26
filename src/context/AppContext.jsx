@@ -86,6 +86,17 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const register = useCallback(async ({ username, email, password, fullName }) => {
+    await authApi.post('/auth/register', {
+      username,
+      email,
+      password,
+      fullName,
+      role: 'CLIENT',
+    });
+    return login(username, password);
+  }, [login]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     dispatch({ type: 'LOGOUT' });
@@ -263,6 +274,11 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
+  const rateAssignment = useCallback(async (assignmentId, rating, comment) => {
+    const res = await api.post(`/assignments/${assignmentId}/rate`, { rating, comment });
+    return res.data;
+  }, []);
+
   // ===== VENUES =====
 
   const fetchAvailableVenues = useCallback(async (date) => {
@@ -311,7 +327,7 @@ export const AppProvider = ({ children }) => {
     state,
     dispatch,
     // auth
-    login, logout,
+    login, logout, register,
     // users/vendors
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus,
     fetchMyVendorProfile,
@@ -321,7 +337,7 @@ export const AppProvider = ({ children }) => {
     // assignments
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment,
     forceAssign, fetchOpenAssignments,
-    fetchMyAssignments, fetchMyAssignment,
+    fetchMyAssignments, fetchMyAssignment, rateAssignment,
     // venues
     fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,
     // coordinator

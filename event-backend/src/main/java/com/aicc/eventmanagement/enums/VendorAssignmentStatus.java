@@ -11,10 +11,11 @@ public enum VendorAssignmentStatus {
     /**
      * A terminal assignment state has no outgoing transitions.
      *
-     * DECLINED is deliberately NOT terminal: a decline that exhausts the ranked vendor
-     * list opens the assignment to the pool (DECLINED -> OPEN) so any vendor can claim it.
+     * ACCEPTED is NOT terminal: when its event completes, it transitions to COMPLETED.
+     * DECLINED is NOT terminal: an exhausted decline transitions to OPEN.
+     * COMPLETED and CANCELLED are terminal.
      */
     public boolean isTerminal() {
-        return this == ACCEPTED || this == COMPLETED || this == CANCELLED;
+        return this == COMPLETED || this == CANCELLED;
     }
 }

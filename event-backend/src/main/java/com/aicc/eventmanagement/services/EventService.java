@@ -147,6 +147,13 @@ public class EventService {
         event.setStatus(status);
         Event saved = eventRepository.save(event);
 
+        // Cascade assignment status changes when event completes or cancels
+        if (status == EventStatus.COMPLETED) {
+            vendorService.completeAssignmentsForEvent(id, userRole);
+        } else if (status == EventStatus.CANCELLED) {
+            vendorService.cancelAssignmentsForEvent(id, userRole);
+        }
+
         eventPublisher.publishEvent(new WorkflowTransitionEvent(
                 this, oldStatus, status, "EVENT-" + id, userRole));
 

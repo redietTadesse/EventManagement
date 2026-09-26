@@ -1,5 +1,5 @@
 import React from 'react';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 
 const CoordinatorCharts = () => {
   const { state } = useApp();

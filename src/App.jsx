@@ -6,6 +6,9 @@ import PortalSelect from './components/PortalSelect';
 import Login from './components/Login';
 import ClientDashboard from './client/ClientDashboard';
 import NewInquiry from './client/NewInquiry';
+import ClientInquiries from './client/ClientInquiries';
+import ClientEventHistory from './client/ClientEventHistory';
+import ClientEventDetail from './client/ClientEventDetail';
 import CoordinatorDashboard from './coordinator/Dashboard';
 import AllInquiries from './coordinator/AllInquiries';
 import InquiryDetail from './coordinator/InquiryDetail';
@@ -42,6 +45,38 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['CLIENT']}>
             <NewInquiry />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/inquiries"
+        element={
+          <ProtectedRoute allowedRoles={['CLIENT']}>
+            <ClientInquiries />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/inquiries/:id"
+        element={
+          <ProtectedRoute allowedRoles={['CLIENT']}>
+            <InquiryDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/events"
+        element={
+          <ProtectedRoute allowedRoles={['CLIENT']}>
+            <ClientEventHistory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/events/:id"
+        element={
+          <ProtectedRoute allowedRoles={['CLIENT']}>
+            <ClientEventDetail />
           </ProtectedRoute>
         }
       />

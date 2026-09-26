@@ -22,7 +22,7 @@ export default function Login() {
   const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const { login, state } = useApp();
+  const { login, register, state } = useApp();
   const { loading } = state;
   const navigate = useNavigate();
 
@@ -55,12 +55,17 @@ export default function Login() {
     setSubmitting(true);
     setError('');
     try {
-      // Registration would be handled by backend
-      // For now, just show a message
-      setError('Registration is not available yet. Please use demo accounts.');
-      setSubmitting(false);
+      await register({
+        fullName: form.fullName,
+        username: form.username,
+        email: form.email,
+        password: form.password,
+      });
+      navigate('/client/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      const raw = err.response?.data;
+      const msg = typeof raw === 'string' ? raw : (raw?.message || 'Registration failed');
+      setError(msg);
     } finally {
       setSubmitting(false);
     }

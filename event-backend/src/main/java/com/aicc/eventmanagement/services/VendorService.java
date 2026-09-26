@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +44,8 @@ public class VendorService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
+    private final CategoryEscalation categoryEscalation;
+    private final VendorRankingService rankingService;
 
     // ============ ESCALATION BUILDER ============
 
@@ -201,9 +204,9 @@ public class VendorService {
         List<String> unfilledCategories = new ArrayList<>();
 
         for (String category : requiredCategories) {
-            Vendor bestVendor = findBestVendor(category, eventDate);
-
-            if (bestVendor != null) {
+            List<VendorRankingService.Ranked> ranked = rankingService.rank(category, eventDate, Set.of());
+            if (!ranked.isEmpty()) {
+                Vendor bestVendor = ranked.get(0).vendor();
                 VendorAssignment assignment = VendorAssignment.builder()
                     .event(event)
                     .vendor(bestVendor)
@@ -237,34 +240,6 @@ public class VendorService {
         evaluateEventRollup(event, Role.COORDINATOR);
 
         return saved;
-    }
-
-    // ============ BEST VENDOR SELECTION (WITH LOAD BALANCING) ============
-
-    private Vendor findBestVendor(String category, LocalDate date) {
-        List<Vendor> available = findAvailableVendors(category, date, null);
-
-        if (available.isEmpty()) {
-            return null;
-        }
-
-        // Get active assignment counts for load balancing
-        List<Long> vendorIds = available.stream()
-            .map(Vendor::getId)
-            .collect(Collectors.toList());
-
-        Map<Long, Long> assignmentCounts = assignmentRepository
-            .countActiveAssignmentsByVendors(vendorIds).stream()
-            .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
-
-        // Sort by: fewest active assignments (load balancing) → highest rating
-        // Fixed: Use reverseOrder() on rating comparator instead of reversing the whole chain
-        return available.stream()
-            .sorted(Comparator
-                .comparingLong((Vendor v) -> assignmentCounts.getOrDefault(v.getId(), 0L))
-                .thenComparing(Vendor::getRating, Comparator.reverseOrder()))
-            .findFirst()
-            .orElse(null);
     }
 
     // ============ MANUAL ASSIGNMENT (COORDINATOR OVERRIDE) ============
@@ -397,9 +372,10 @@ public class VendorService {
             category, event.getId(), declinedVendorId);
 
         // Find next best vendor (excluding the one that declined)
-        List<Vendor> available = findAvailableVendors(category, eventDate, declinedVendorId);
+        List<VendorRankingService.Ranked> ranked =
+                rankingService.rankForEvent(event.getId(), category, eventDate);
 
-        if (available.isEmpty()) {
+        if (ranked.isEmpty()) {
             // Ranked list exhausted: open the declined assignment to the vendor pool so
             // any vendor can claim it. The event-level consequence is NOT decided here —
             // the rollup that runs after autoReassign owns the event status.
@@ -411,8 +387,12 @@ public class VendorService {
             assignmentRepository.save(declinedAssignment);
 
             String unfilled = event.getUnfilledCategories();
-            if (unfilled == null || !unfilled.contains(category)) {
-                event.setUnfilledCategories(unfilled == null ? category : unfilled + "," + category);
+            List<String> unfilledCategories = unfilled == null || unfilled.isBlank()
+                    ? new ArrayList<>()
+                    : new ArrayList<>(List.of(unfilled.split(",")));
+            if (!unfilledCategories.contains(category)) {
+                unfilledCategories.add(category);
+                event.setUnfilledCategories(String.join(",", unfilledCategories));
             }
             eventRepository.save(event);
 
@@ -421,21 +401,7 @@ public class VendorService {
             return;
         }
 
-        // Find best alternative (load balancing)
-        List<Long> vendorIds = available.stream()
-            .map(Vendor::getId)
-            .collect(Collectors.toList());
-
-        Map<Long, Long> assignmentCounts = assignmentRepository
-            .countActiveAssignmentsByVendors(vendorIds).stream()
-            .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
-
-        Vendor newVendor = available.stream()
-            .sorted(Comparator
-                .comparingLong((Vendor v) -> assignmentCounts.getOrDefault(v.getId(), 0L))
-                .thenComparing(Vendor::getRating, Comparator.reverseOrder()))
-            .findFirst()
-            .orElse(null);
+        Vendor newVendor = ranked.get(0).vendor();
 
         // Create new assignment
         VendorAssignment newAssignment = VendorAssignment.builder()
@@ -450,6 +416,45 @@ public class VendorService {
         assignmentRepository.save(newAssignment);
         log.info("Auto-reassigned {} to vendor {} for event {}",
             category, newVendor.getCompanyName(), event.getId());
+    }
+
+    // ============ ASSIGNMENT CASCADE ON EVENT COMPLETION/CANCELLATION ============
+
+    @Transactional
+    public void completeAssignmentsForEvent(Long eventId, Role triggeringRole) {
+        List<VendorAssignment> assignments = assignmentRepository.findByEventId(eventId);
+        int closed = 0;
+        for (VendorAssignment a : assignments) {
+            if (a.getStatus() == VendorAssignmentStatus.ACCEPTED) {
+                workflowEngine.validateAssignmentTransition(
+                        VendorAssignmentStatus.ACCEPTED,
+                        VendorAssignmentStatus.COMPLETED,
+                        triggeringRole);
+                a.setStatus(VendorAssignmentStatus.COMPLETED);
+                assignmentRepository.save(a);
+                closed++;
+            }
+        }
+        log.info("Completed {} accepted assignment(s) for event {}", closed, eventId);
+    }
+
+    @Transactional
+    public void cancelAssignmentsForEvent(Long eventId, Role triggeringRole) {
+        List<VendorAssignment> assignments = assignmentRepository.findByEventId(eventId);
+        int cancelled = 0;
+        for (VendorAssignment a : assignments) {
+            VendorAssignmentStatus s = a.getStatus();
+                if (s == VendorAssignmentStatus.ACCEPTED
+                    || s == VendorAssignmentStatus.PENDING
+                    || s == VendorAssignmentStatus.OPEN) {
+                workflowEngine.validateAssignmentTransition(
+                        s, VendorAssignmentStatus.CANCELLED, triggeringRole);
+                a.setStatus(VendorAssignmentStatus.CANCELLED);
+                assignmentRepository.save(a);
+                cancelled++;
+            }
+        }
+        log.info("Cancelled {} assignment(s) for event {}", cancelled, eventId);
     }
 
     /**
@@ -519,6 +524,15 @@ public class VendorService {
                 "ASSIGNMENT_NOT_OPEN");
         }
 
+        EventStatus eventStatus = assignment.getEvent().getStatus();
+        if (eventStatus == EventStatus.COMPLETED
+            || eventStatus == EventStatus.CANCELLED
+            || eventStatus == EventStatus.CLOSED) {
+            throw new BusinessException(
+                "Cannot claim an assignment for a closed event",
+                "EVENT_NOT_OPEN");
+        }
+
         workflowEngine.validateAssignmentTransition(
                 VendorAssignmentStatus.OPEN,
                 VendorAssignmentStatus.PENDING,
@@ -559,6 +573,35 @@ public class VendorService {
             .orElseThrow(() -> new EntityNotFoundException("Assignment", id));
     }
 
+    @Transactional
+    public VendorAssignment rateAssignment(Long assignmentId, Integer rating, String comment, Long clientId) {
+        VendorAssignment assignment = getAssignmentById(assignmentId);
+        if (!assignment.getEvent().getInquiry().getClientId().equals(clientId)) {
+            throw new BusinessException("Not your event", "ACCESS_DENIED");
+        }
+        if (assignment.getStatus() != VendorAssignmentStatus.COMPLETED) {
+            throw new BusinessException(
+                    "Can only rate completed assignments", "INVALID_STATE");
+        }
+
+        assignment.setVendorRating(rating.doubleValue());
+        assignment.setVendorRatingComment(comment);
+        VendorAssignment saved = assignmentRepository.save(assignment);
+
+        Vendor vendor = assignment.getVendor();
+        List<VendorAssignment> ratedAssignments = assignmentRepository
+                .findByVendorIdAndStatus(vendor.getId(), VendorAssignmentStatus.COMPLETED).stream()
+                .filter(a -> a.getVendorRating() != null)
+                .toList();
+        double average = ratedAssignments.stream()
+                .mapToDouble(VendorAssignment::getVendorRating)
+                .average()
+                .orElse(vendor.getRating() == null ? 0.0 : vendor.getRating());
+        vendor.setRating((int) Math.round(average));
+        vendorRepository.save(vendor);
+        return saved;
+    }
+
     public List<VendorAssignment> getPendingAssignmentsForVendor(Long vendorId) {
         return assignmentRepository.findByVendorIdAndStatus(vendorId, VendorAssignmentStatus.PENDING);
     }
@@ -592,7 +635,8 @@ public class VendorService {
     // ============ OPEN ASSIGNMENT METHODS ============
 
     public List<VendorAssignment> getOpenAssignmentsForCategory(String category) {
-        return assignmentRepository.findByStatusAndServiceCategory(VendorAssignmentStatus.OPEN, category);
+        return assignmentRepository.findOpenAssignmentsForCategory(category,
+            List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED));
     }
 
     // ============ COORDINATOR FORCE ASSIGN ============

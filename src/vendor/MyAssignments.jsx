@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import Skeleton from '../components/Skeleton';
+import { TableSkeleton } from '../components/Skeleton';
 import { useApp } from '../context/AppContext';
 
 const FILTERS = ['ALL', 'PENDING', 'ACCEPTED', 'DECLINED', 'COMPLETED'];
@@ -12,6 +14,7 @@ export default function MyAssignments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [params, setParams] = useSearchParams();
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   const status = params.get('status') || 'ALL';
 
@@ -30,14 +33,27 @@ export default function MyAssignments() {
     return () => { cancelled = true; };
   }, [fetchMyAssignments]);
 
+  const categories = [...new Set(assignments.map(a => a.serviceCategory).filter(Boolean))];
+
   const filtered = status === 'ALL'
     ? assignments
     : assignments.filter(a => a.status === status);
 
+  const categoryFiltered = categoryFilter
+    ? filtered.filter(a => a.serviceCategory === categoryFilter)
+    : filtered;
+
   if (loading) {
     return (
       <Layout title="My Assignments">
-        <div className="text-center py-10 text-gray-500">Loading…</div>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-9 w-20" />
+          </div>
+          <TableSkeleton rows={5} columns={6} />
+        </div>
       </Layout>
     );
   }
@@ -61,9 +77,30 @@ export default function MyAssignments() {
           ))}
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-gray-200"
+          >
+            <option value="">All Categories</option>
+            {categories.map(cat => (
+              <option key={cat} value={cat}>{cat.toUpperCase()}</option>
+            ))}
+          </select>
+          {categoryFilter && (
+            <button
+              onClick={() => setCategoryFilter('')}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
         {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>}
 
-        {filtered.length === 0 ? (
+        {categoryFiltered.length === 0 ? (
           <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
             No assignments in this view.
           </div>
@@ -81,7 +118,7 @@ export default function MyAssignments() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map(a => (
+                {categoryFiltered.map(a => (
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-800">{a.eventName}</td>
                     <td className="px-4 py-3 text-gray-600">{a.eventDate}</td>

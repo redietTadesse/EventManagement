@@ -4,7 +4,6 @@ import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
-import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,45 +19,26 @@ import java.util.stream.Collectors;
 public class VendorSuggestionService {
 
     private final VendorRepository vendorRepository;
-    private final VendorBookedDateRepository bookedDateRepository;
     private final VendorAssignmentRepository assignmentRepository;
+    private final VendorRankingService rankingService;
 
     /**
      * Get ranked suggestions for a vendor category on a given date.
      * Returns vendors sorted by suitability score (highest first).
      */
     public List<VendorSuggestion> getSuggestions(String category, LocalDate date, Long excludeVendorId, Long clientId) {
-        // 1. Get all active vendors in this category
-        List<Vendor> vendors = vendorRepository.findActiveByCategory(category);
-
-        // 2. Filter out excluded vendor (e.g., one that already declined)
-        if (excludeVendorId != null) {
-            vendors = vendors.stream()
-                    .filter(v -> !v.getId().equals(excludeVendorId))
-                    .collect(Collectors.toList());
-        }
-
-        // 3. Filter to only available vendors (not booked and no active assignment on this date)
-        List<Vendor> available = vendors.stream()
-                .filter(v -> isVendorAvailable(v.getId(), date))
-                .collect(Collectors.toList());
-
-        if (available.isEmpty()) {
+        Set<Long> excluded = excludeVendorId == null ? Set.of() : Set.of(excludeVendorId);
+        List<VendorRankingService.Ranked> ranked = rankingService.rank(category, date, excluded);
+        if (ranked.isEmpty()) {
             log.info("No available vendors for category {} on date {}", category, date);
             return List.of();
         }
 
-        // 4. Get active assignment counts for load balancing
-        List<Long> vendorIds = available.stream()
-                .map(Vendor::getId)
-                .collect(Collectors.toList());
-        Map<Long, Long> assignmentCounts = getActiveAssignmentCounts(vendorIds);
-
-        // 5. Build suggestions with scores
-        return available.stream()
-                .map(v -> {
-                    long activeCount = assignmentCounts.getOrDefault(v.getId(), 0L);
-                    double score = calculateScore(v, activeCount, clientId);
+        return ranked.stream()
+            .map(result -> {
+                Vendor v = result.vendor();
+                long activeCount = assignmentRepository.countActiveAndPendingByVendor(v.getId());
+                double score = result.score() * 100.0;
                     boolean isRecommended = score >= 75.0;
                     return new VendorSuggestion(
                             v.getId(),
@@ -71,7 +51,7 @@ public class VendorSuggestionService {
                             v.getDescription(),
                             score,
                             isRecommended,
-                            getReasoning(v, activeCount, clientId)
+                            getReasoning(v, activeCount)
                     );
                 })
                 .sorted(Comparator.comparingDouble(VendorSuggestion::score).reversed())
@@ -82,60 +62,12 @@ public class VendorSuggestionService {
      * Check if a vendor is available on a given date.
      * A vendor is unavailable if they have a booked date or an active assignment on that date.
      */
-    private boolean isVendorAvailable(Long vendorId, LocalDate date) {
-        // Check 1: Booked date exists
-        boolean hasBookedDate = bookedDateRepository.existsByVendorIdAndBookedDate(vendorId, date);
-        if (hasBookedDate) {
-            return false;
-        }
-
-        // Check 2: Has active assignment on this date
-        boolean hasActiveAssignment = assignmentRepository.hasActiveAssignmentOnDate(vendorId, date);
-        return !hasActiveAssignment;
-    }
-
-    /**
-     * Get active assignment counts for a list of vendor IDs.
-     */
-    private Map<Long, Long> getActiveAssignmentCounts(List<Long> vendorIds) {
-        if (vendorIds.isEmpty()) {
-            return new HashMap<>();
-        }
-        List<Object[]> results = assignmentRepository.countActiveAssignmentsByVendors(vendorIds);
-        return results.stream()
-                .collect(Collectors.toMap(
-                        row -> (Long) row[0],
-                        row -> (Long) row[1]
-                ));
-    }
-
-    /**
-     * Calculate a score (0-100) for a vendor based on rating, load, and preferences.
-     */
-    private double calculateScore(Vendor vendor, long activeCount, Long clientId) {
-        double ratingScore = 0;
-        double loadScore = 0;
-        double preferenceScore = 10.0; // base preference score
-
-        // Rating: 0-5 scale mapped to 0-50 points
-        if (vendor.getRating() != null) {
-            ratingScore = (vendor.getRating().doubleValue() / 5.0) * 50.0;
-        }
-
-        // Load: fewer assignments → higher score (0-30 points)
-        // 0 assignments = 30 points, 1 = 27, 2 = 24, ... 10+ = 0
-        loadScore = Math.max(0, 30.0 - (activeCount * 3.0));
-
-        // Total: rating (50) + load (30) + preference (10) = 90 max base
-        // Scale to 0-100
-        double rawScore = ratingScore + loadScore + preferenceScore;
-        return Math.min(100, rawScore);
-    }
+    
 
     /**
      * Generate human-readable reasoning for why this vendor is suggested.
      */
-    private String getReasoning(Vendor vendor, long activeCount, Long clientId) {
+    private String getReasoning(Vendor vendor, long activeCount) {
         List<String> reasons = new ArrayList<>();
 
         if (vendor.getRating() != null && vendor.getRating() >= 4.5) {
@@ -187,7 +119,8 @@ public class VendorSuggestionService {
                 .filter(a -> a.getStatus() == VendorAssignmentStatus.ACCEPTED)
                 .count();
 
-        boolean isAvailable = isVendorAvailable(vendorId, eventDate);
+        boolean isAvailable = rankingService.rank(vendor.getServiceCategory(), eventDate, Set.of()).stream()
+            .anyMatch(result -> result.vendor().getId().equals(vendorId));
 
         // Get current active assignments for context
         List<VendorAssignmentSummary> currentAssignments = assignments.stream()
