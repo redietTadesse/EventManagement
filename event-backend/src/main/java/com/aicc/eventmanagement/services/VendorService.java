@@ -44,7 +44,6 @@ public class VendorService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
-    private final CategoryEscalation categoryEscalation;
     private final VendorRankingService rankingService;
 
     // ============ ESCALATION BUILDER ============
