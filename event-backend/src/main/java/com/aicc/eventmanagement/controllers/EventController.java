@@ -4,6 +4,7 @@ import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.EventResponse;
+import com.aicc.eventmanagement.services.VendorService;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.services.EventService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,6 +36,7 @@ import java.util.stream.Collectors;
 public class EventController {
 
     private final EventService eventService;
+    private final VendorService vendorService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
@@ -156,21 +158,7 @@ public class EventController {
     public ResponseEntity<List<String>> getEventCategories(@PathVariable Long id) {
         log.info("Fetching vendor categories for event {}", id);
         Event event = eventService.getEventById(id);
-        String eventType = event.getInquiry().getEventType();
-
-        // Map event types to required vendor categories
-        Map<String, List<String>> categoryMap = Map.of(
-                "conference", List.of("av", "catering", "security"),
-                "wedding", List.of("catering", "photography", "music"),
-                "trade_show", List.of("av", "security", "cleaning"),
-                "exhibition", List.of("av", "security", "cleaning"),
-                "concert", List.of("av", "security", "music"),
-                "gala", List.of("catering", "photography", "music", "security"),
-                "seminar", List.of("av", "catering")
-        );
-
-        List<String> categories = categoryMap.getOrDefault(eventType.toLowerCase(), List.of());
-        return ResponseEntity.ok(categories);
+        return ResponseEntity.ok(vendorService.getRequiredCategoriesFor(event));
     }
 
     private Role extractRoleFromPrincipal(UserDetails principal) {

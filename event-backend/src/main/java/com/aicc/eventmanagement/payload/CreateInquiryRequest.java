@@ -35,4 +35,6 @@ public class CreateInquiryRequest {
 
     @Size(max = 1000, message = "Requirements must not exceed 1000 characters")
     private String requirements;
+
+    private java.util.List<String> requestedCategories;
 }

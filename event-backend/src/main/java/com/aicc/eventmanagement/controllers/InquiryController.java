@@ -4,6 +4,7 @@ import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.payload.ConfirmCategoriesRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
@@ -271,13 +272,15 @@ public class InquiryController {
     })
     public ResponseEntity<InquiryResponse> acceptProposal(
             @PathVariable Long id,
+            @RequestBody(required = false) @Valid ConfirmCategoriesRequest body,
             @AuthenticationPrincipal UserDetails principal) {
 
         log.info("Accepting proposal for inquiry {} by {}", id, principal.getUsername());
 
         Role userRole = extractRoleFromPrincipal(principal);
+        List<String> finalCategories = body != null ? body.getCategories() : null;
 
-        Inquiry updated = inquiryService.acceptProposal(id, userRole);
+        Inquiry updated = inquiryService.acceptProposal(id, finalCategories, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 

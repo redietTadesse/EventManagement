@@ -36,7 +36,21 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
     suggestedVendors: {}, // category -> vendorId
   });
 
-  const categories = inquiry ? eventCategoryMap[inquiry.eventType] || [] : [];
+  const [selectedCategories, setSelectedCategories] = useState(() => {
+    if (!inquiry) return [];
+    return inquiry.requestedCategories?.length ? inquiry.requestedCategories : (eventCategoryMap[inquiry.eventType] || []);
+  });
+
+  const categories = inquiry ? selectedCategories : [];
+
+  useEffect(() => {
+    if (!inquiry) return;
+    setSelectedCategories(
+      inquiry.requestedCategories?.length
+        ? inquiry.requestedCategories
+        : (eventCategoryMap[inquiry.eventType] || [])
+    );
+  }, [inquiry]);
 
   // Load venues available on the event date, plus the vendor list for shortlisting.
   useEffect(() => {
@@ -102,6 +116,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
         terms: formData.terms,
         vendorShortlist: shortlist,
         pricingTier: formData.pricingTier,
+        categories: selectedCategories,
       });
 
       if (onSuccess) onSuccess(saved);
@@ -248,6 +263,30 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
           <p className="text-sm text-slate-500 mb-4">
             Suggest preferred vendors for each category (client will see these recommendations).
           </p>
+          {inquiry?.requestedCategories?.length > 0 && (
+            <p className="text-xs text-slate-500 mb-3">
+              Client requested: {inquiry.requestedCategories.join(', ')}
+            </p>
+          )}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Included service categories</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(eventCategoryMap[inquiry?.eventType] || []).map((cat) => (
+                <label key={cat} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={selectedCategories.includes(cat)}
+                    onChange={() => {
+                      setSelectedCategories((prev) =>
+                        prev.includes(cat) ? prev.filter((item) => item !== cat) : [...prev, cat]
+                      );
+                    }}
+                  />
+                  <span className="capitalize">{cat}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           <div className="space-y-4">
             {categories.length === 0 && (
               <p className="text-sm text-amber-700">

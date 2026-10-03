@@ -23,6 +23,8 @@ public class InquiryResponse {
     private LocalDate eventDate;
     private Integer expectedAttendees;
     private String requirements;
+    private List<String> requestedCategories;
+    private List<String> categories;
     private EventStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -40,6 +42,8 @@ public class InquiryResponse {
         response.setEventDate(inquiry.getEventDate());
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
+        response.setRequestedCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getRequestedCategories()));
+        response.setCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getCategories()));
         response.setStatus(inquiry.getStatus());
         response.setCreatedAt(inquiry.getCreatedAt());
         response.setUpdatedAt(inquiry.getUpdatedAt());
@@ -73,6 +77,13 @@ public class InquiryResponse {
         proposal.setPrice(proposalMap.get("price") != null ? ((Number) proposalMap.get("price")).intValue() : null);
         proposal.setTerms((String) proposalMap.get("terms"));
         proposal.setPricingTier((String) proposalMap.get("pricingTier"));
+
+        if (proposalMap.containsKey("categories") && proposalMap.get("categories") != null) {
+            Object rawCategories = proposalMap.get("categories");
+            if (rawCategories instanceof List<?> list) {
+                proposal.setCategories(list.stream().map(String::valueOf).toList());
+            }
+        }
 
         if (proposalMap.containsKey("vendorShortlist") && proposalMap.get("vendorShortlist") != null) {
             @SuppressWarnings("unchecked")

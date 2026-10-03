@@ -16,6 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -109,5 +110,67 @@ class InquiryFlowIntegrationTest {
         assertThat(proposalJson).contains("Ballroom B");
         assertThat(proposalJson).contains("200000");
         assertThat(proposalJson).contains("premium");
+    }
+
+    @Test
+    @DisplayName("Event uses client-chosen categories, not event-type default")
+    void eventUsesClientChosenCategories() {
+        CreateInquiryRequest inquiry = CreateInquiryRequest.builder()
+                .clientId(1L)
+                .clientName("Category Test Client")
+                .eventType("conference")
+                .eventDate(LocalDate.now().plusDays(60))
+                .expectedAttendees(100)
+                .requestedCategories(List.of("av", "catering"))
+                .build();
+
+        Inquiry created = inquiryService.createInquiry(inquiry);
+
+        SendProposalRequest proposal = SendProposalRequest.builder()
+                .venue("Main Hall A")
+                .price(100000)
+                .terms("Standard")
+                .categories(List.of("av", "catering"))
+                .build();
+        inquiryService.sendProposal(created.getId(), proposal, Role.COORDINATOR);
+
+        inquiryService.acceptProposal(created.getId(), null, Role.CLIENT);
+
+        var convert = new com.aicc.eventmanagement.payload.ConvertToEventRequest();
+        convert.setName("Category Test Event");
+        var event = inquiryService.convertToEvent(created.getId(), convert);
+
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getRequiredCategories()))
+                .containsExactlyInAnyOrder("av", "catering");
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getRequiredCategories()))
+                .doesNotContain("security");
+    }
+
+    @Test
+    @DisplayName("Client can edit categories at accept time")
+    void clientEditsAtAccept() {
+        CreateInquiryRequest inquiry = CreateInquiryRequest.builder()
+                .clientId(1L)
+                .clientName("Category Edit Client")
+                .eventType("conference")
+                .eventDate(LocalDate.now().plusDays(50))
+                .expectedAttendees(80)
+                .requestedCategories(List.of("av", "catering", "security"))
+                .build();
+
+        Inquiry created = inquiryService.createInquiry(inquiry);
+        SendProposalRequest proposal = SendProposalRequest.builder()
+                .venue("Main Hall B")
+                .price(90000)
+                .terms("Standard")
+                .categories(List.of("av", "catering", "security"))
+                .build();
+        inquiryService.sendProposal(created.getId(), proposal, Role.COORDINATOR);
+
+        inquiryService.acceptProposal(created.getId(), List.of("av", "catering"), Role.CLIENT);
+
+        Inquiry after = inquiryService.getInquiryById(created.getId());
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(after.getCategories()))
+                .containsExactlyInAnyOrder("av", "catering");
     }
 }

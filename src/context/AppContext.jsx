@@ -179,7 +179,7 @@ export const AppProvider = ({ children }) => {
    * Extra fields (e.g. sentDate) are ignored by Jackson.
    */
   const sendProposal = useCallback(async (inquiryId, proposal) => {
-    const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier } = proposal;
+    const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
     const body = {
       venue,
@@ -190,6 +190,7 @@ export const AppProvider = ({ children }) => {
         : (typeof venueDetails === 'string' ? venueDetails : JSON.stringify(venueDetails)),
       price: Number.isFinite(price) ? price : 0,
       terms,
+      categories: Array.isArray(categories) ? categories : [],
       // Normalise {cat: '3'} | {cat: 3} | {cat: ['3']} into {cat: ['3']}
       vendorShortlist: vendorShortlist
         ? Object.fromEntries(
@@ -206,8 +207,8 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  const acceptProposal = useCallback(async (inquiryId) => {
-    const res = await api.patch(`/inquiries/${inquiryId}/accept`);
+  const acceptProposal = useCallback(async (inquiryId, body = {}) => {
+    const res = await api.patch(`/inquiries/${inquiryId}/accept`, body);
     dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
     return res.data;
   }, []);

@@ -33,5 +33,7 @@ public class SendProposalRequest {
 
     private Map<String, List<String>> vendorShortlist;
 
+    private List<String> categories;
+
     private String pricingTier;
 }

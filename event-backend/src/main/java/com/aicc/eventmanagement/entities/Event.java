@@ -53,6 +53,9 @@ public class Event {
     @Column(name = "unfilled_categories")
     private String unfilledCategories;
 
+    @Column(name = "required_categories")
+    private String requiredCategories;
+
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<Checklist> checklist = new ArrayList<>();

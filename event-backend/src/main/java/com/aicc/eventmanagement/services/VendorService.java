@@ -16,6 +16,7 @@ import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
+import com.aicc.eventmanagement.util.CategoryUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -54,8 +55,7 @@ public class VendorService {
      * so the rollup treats "nothing assigned yet" as EXHAUSTED.
      */
     private List<CategoryEscalation> buildEscalations(Event event) {
-        String eventType = event.getInquiry().getEventType();
-        List<String> requiredCategories = EVENT_CATEGORIES.getOrDefault(eventType, List.of());
+        List<String> requiredCategories = requiredCategoriesFor(event);
 
         if (requiredCategories.isEmpty()) {
             return List.of();
@@ -74,17 +74,14 @@ public class VendorService {
                 .toList();
     }
 
-    // ============ EVENT TYPE → REQUIRED CATEGORIES ============
-
-    private static final Map<String, List<String>> EVENT_CATEGORIES = Map.of(
-        "conference", List.of("av", "catering", "security"),
-        "wedding", List.of("catering", "photography", "music"),
-        "trade_show", List.of("av", "security", "cleaning"),
-        "exhibition", List.of("av", "security", "cleaning"),
-        "concert", List.of("av", "security", "music"),
-        "gala", List.of("catering", "photography", "music", "security"),
-        "seminar", List.of("av", "catering")
-    );
+    private List<String> requiredCategoriesFor(Event event) {
+        String stored = event.getRequiredCategories();
+        if (stored != null && !stored.isBlank()) {
+            return CategoryUtils.split(stored);
+        }
+        return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(
+                event.getInquiry().getEventType(), List.of());
+    }
 
     // ============ VENDOR CRUD ============
 
@@ -189,7 +186,7 @@ public class VendorService {
         String eventType = event.getInquiry().getEventType();
         LocalDate eventDate = event.getInquiry().getEventDate();
 
-        List<String> requiredCategories = EVENT_CATEGORIES.getOrDefault(eventType, List.of());
+        List<String> requiredCategories = requiredCategoriesFor(event);
 
         if (requiredCategories.isEmpty()) {
             log.warn("No category mapping found for event type: {}", eventType);
@@ -608,7 +605,11 @@ public class VendorService {
     // ============ HELPER METHODS ============
 
     public List<String> getCategoriesForEventType(String eventType) {
-        return EVENT_CATEGORIES.getOrDefault(eventType, List.of());
+        return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(eventType, List.of());
+    }
+
+    public List<String> getRequiredCategoriesFor(Event event) {
+        return requiredCategoriesFor(event);
     }
 
     public boolean hasAllCategoriesFilled(Event event) {

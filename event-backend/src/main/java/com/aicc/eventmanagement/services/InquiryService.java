@@ -16,6 +16,7 @@ import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
+import com.aicc.eventmanagement.util.CategoryUtils;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
@@ -67,6 +68,10 @@ public class InquiryService {
             throw new RuntimeException("Event date cannot be in the past");
         }
 
+        List<String> requestedCategories = request.getRequestedCategories() != null && !request.getRequestedCategories().isEmpty()
+                ? request.getRequestedCategories()
+                : CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(request.getEventType(), List.of());
+
         Inquiry inquiry = Inquiry.builder()
                 .clientId(request.getClientId())
                 .clientName(request.getClientName())
@@ -74,6 +79,8 @@ public class InquiryService {
                 .eventDate(request.getEventDate())
                 .expectedAttendees(request.getExpectedAttendees())
                 .requirements(request.getRequirements())
+                .requestedCategories(CategoryUtils.join(requestedCategories))
+                .categories(CategoryUtils.join(requestedCategories))
                 .status(EventStatus.INQUIRY_SUBMITTED)
                 .build();
 
@@ -230,6 +237,14 @@ public class InquiryService {
         }
 
         // Build the event
+        String resolvedCategories = request.getCategories() != null && !request.getCategories().isEmpty()
+                ? CategoryUtils.join(request.getCategories())
+                : inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
+                        ? inquiry.getCategories()
+                        : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
+                                ? inquiry.getRequestedCategories()
+                                : CategoryUtils.join(CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of()));
+
         Event event = Event.builder()
                 .inquiry(inquiry)
                 .name(request.getName() != null ? request.getName() : inquiry.getEventType() + " - " + inquiry.getClientName())
@@ -237,6 +252,7 @@ public class InquiryService {
                 .venue(request.getVenue())
                 .venueId(request.getVenueId())
                 .venueDetails(request.getVenueDetails())
+                .requiredCategories(resolvedCategories)
                 .build();
 
         List<Checklist> checklistItems = generateChecklistForEventType(inquiry.getEventType());
@@ -343,7 +359,14 @@ public class InquiryService {
         // 3. Build the proposal JSON with all details
         String proposalJson = buildProposalJson(request, inquiry);
 
-        // 4. Store proposal and update status
+        // 4. Store proposal, keep a live agreed category set, and update status
+        inquiry.setCategories(
+                request.getCategories() != null && !request.getCategories().isEmpty()
+                        ? CategoryUtils.join(request.getCategories())
+                        : inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
+                                ? inquiry.getCategories()
+                                : inquiry.getRequestedCategories()
+        );
         inquiry.setProposal(proposalJson);
         inquiry.setStatus(EventStatus.PROPOSAL_SENT);
 
@@ -381,20 +404,27 @@ public class InquiryService {
 
     @Transactional
     public Inquiry acceptProposal(Long id, Role userRole) {
+        return acceptProposal(id, null, userRole);
+    }
+
+    @Transactional
+    public Inquiry acceptProposal(Long id, List<String> finalCategories, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
 
-        // Validate that client can accept
         workflowEngine.validateTransition(
                 inquiry.getStatus(),
                 EventStatus.PROPOSAL_ACCEPTED,
                 userRole
         );
 
+        if (finalCategories != null && !finalCategories.isEmpty()) {
+            inquiry.setCategories(CategoryUtils.join(finalCategories));
+        }
+
         inquiry.setStatus(EventStatus.PROPOSAL_ACCEPTED);
 
         Inquiry saved = inquiryRepository.save(inquiry);
 
-        // Publish workflow transition event
         eventPublisher.publishEvent(new WorkflowTransitionEvent(
                 this,
                 EventStatus.PROPOSAL_SENT,
@@ -403,7 +433,6 @@ public class InquiryService {
                 userRole
         ));
 
-        // Publish status changed event for email notification
         eventPublisher.publishEvent(new InquiryStatusChangedEvent(
                 this,
                 saved,
@@ -411,7 +440,7 @@ public class InquiryService {
                 EventStatus.PROPOSAL_ACCEPTED
         ));
 
-        log.info("Proposal accepted for inquiry {} by {}", id, userRole);
+        log.info("Proposal accepted for inquiry {} by {} (categories={})", id, userRole, saved.getCategories());
         return saved;
     }
 
@@ -472,6 +501,7 @@ public class InquiryService {
             proposal.put("venueDetails", request.getVenueDetails());
             proposal.put("price", request.getPrice());
             proposal.put("terms", request.getTerms());
+            proposal.put("categories", request.getCategories());
             proposal.put("pricingTier", request.getPricingTier() != null ?
                     request.getPricingTier() : "standard");
             proposal.put("vendorShortlist", request.getVendorShortlist());

@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.aicc.eventmanagement.util.CategoryUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,6 +24,7 @@ public class EventResponse {
     private String venue;
     private Long venueId;
     private String venueDetails;
+    private List<String> requiredCategories;
     private String unfilledCategories;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -43,6 +45,7 @@ public class EventResponse {
                 .venue(event.getVenue())
                 .venueId(event.getVenueId())
                 .venueDetails(event.getVenueDetails())
+                .requiredCategories(CategoryUtils.split(event.getRequiredCategories()))
                 .unfilledCategories(event.getUnfilledCategories())
                 .createdAt(event.getCreatedAt())
                 .updatedAt(event.getUpdatedAt())

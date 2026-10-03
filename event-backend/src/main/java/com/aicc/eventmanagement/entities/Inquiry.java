@@ -52,6 +52,12 @@ public class Inquiry {
     @Column(columnDefinition = "TEXT")
     private String requirements;
 
+    @Column(name = "requested_categories")
+    private String requestedCategories;
+
+    @Column(name = "categories")
+    private String categories;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

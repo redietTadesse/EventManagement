@@ -3,6 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
 
+const ALL_CATEGORIES = ['av', 'catering', 'security', 'cleaning', 'photography', 'music'];
+
+const EVENT_TYPE_DEFAULTS = {
+  conference: ['av', 'catering', 'security'],
+  wedding: ['catering', 'photography', 'music'],
+  trade_show: ['av', 'security', 'cleaning'],
+  exhibition: ['av', 'security', 'cleaning'],
+  concert: ['av', 'security', 'music'],
+  gala: ['catering', 'photography', 'music', 'security'],
+  seminar: ['av', 'catering'],
+};
+
+const defaultCategories = (eventType) => EVENT_TYPE_DEFAULTS[eventType] || [];
+
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
   const { currentUser, loading } = state;
@@ -12,12 +26,36 @@ export default function NewInquiry() {
     eventDate: '',
     expectedAttendees: '',
     requirements: '',
+    requestedCategories: defaultCategories('conference'),
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [touchedCategories, setTouchedCategories] = useState(false);
 
-  const handleChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === 'eventType') {
+      setForm((prev) => ({
+        ...prev,
+        eventType: value,
+        requestedCategories: touchedCategories ? prev.requestedCategories : defaultCategories(value),
+      }));
+      return;
+    }
+
+    setForm({ ...form, [name]: value });
+  };
+
+  const toggleCategory = (category) => {
+    setTouchedCategories(true);
+    setForm((prev) => {
+      const existing = prev.requestedCategories || [];
+      const next = existing.includes(category)
+        ? existing.filter((item) => item !== category)
+        : [...existing, category];
+      return { ...prev, requestedCategories: next };
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,6 +66,7 @@ export default function NewInquiry() {
         clientId: currentUser?.id,
         clientName: currentUser?.name || currentUser?.fullName,
         ...form,
+        requestedCategories: form.requestedCategories || defaultCategories(form.eventType),
         expectedAttendees: Number(form.expectedAttendees),
       });
       navigate('/client/dashboard');
@@ -103,6 +142,27 @@ export default function NewInquiry() {
               required
               min="1"
             />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Services needed
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_CATEGORIES.map((cat) => (
+                <label key={cat} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={(form.requestedCategories || []).includes(cat)}
+                    onChange={() => toggleCategory(cat)}
+                  />
+                  <span className="capitalize">{cat}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Pre-selected based on the event type. Uncheck anything you do not need.
+            </p>
           </div>
 
           <div className="mb-6">
