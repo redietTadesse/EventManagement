@@ -21,6 +21,7 @@ public class ProposalResponse {
     private Integer price;
     private String terms;
     private String pricingTier;
+    private List<String> categories;
     private Map<String, List<String>> vendorShortlist;
     private LocalDateTime sentDate;
 }

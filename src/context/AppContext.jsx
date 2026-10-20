@@ -3,13 +3,6 @@ import api, { authApi } from '../api/axios';
 
 /**
  * Single source of truth for application state.
- *
- * Replaces the three parallel providers that used to exist
- * (context/AppContext, store/AppContext and context/AuthContext). Every value
- * here is backed by a real backend endpoint; there are no mock-data fallbacks.
- *
- * Notifications are client-side only — the backend has no notifications
- * endpoint yet, so they are accumulated in the browser.
  */
 const initialState = {
   currentUser: null,
@@ -66,7 +59,6 @@ export const AppProvider = ({ children }) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'CLEAR_ERROR' });
     try {
-      // AuthController returns { accessToken, role, tokenType }
       const res = await authApi.post('/auth/login', { username, password });
       const { accessToken, role } = res.data;
       localStorage.setItem('token', accessToken);
@@ -76,7 +68,6 @@ export const AppProvider = ({ children }) => {
       dispatch({ type: 'LOGIN', payload: user });
       return user;
     } catch (err) {
-      // The backend returns a bare string on bad credentials, not a JSON object.
       const raw = err.response?.data;
       const msg = (raw && typeof raw === 'object') ? (raw.message || 'Login failed') : raw;
       dispatch({ type: 'SET_ERROR', payload: typeof msg === 'string' ? msg : 'Login failed' });
@@ -86,16 +77,17 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const register = useCallback(async ({ username, email, password, fullName }) => {
-    await authApi.post('/auth/register', {
+  // Resolved: Keep registerClient, which doesn't auto-login but simply creates the account.
+  const registerClient = async ({ fullName, username, email, password }) => {
+    const res = await authApi.post('/auth/register', {
+      fullName,
       username,
       email,
       password,
-      fullName,
       role: 'CLIENT',
     });
-    return login(username, password);
-  }, [login]);
+    return res.data;
+  };
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
@@ -121,11 +113,6 @@ export const AppProvider = ({ children }) => {
     await fetchUsers();
   }, [fetchUsers]);
 
-  /**
-   * Vendors are users with role=VENDOR. There is no POST /vendors endpoint —
-   * VendorController exposes only read + booked-dates + ratings — so creation
-   * goes through the user-management endpoint.
-   */
   const createVendor = useCallback(async (vendorData) => {
     const res = await api.post('/users', { ...vendorData, role: 'VENDOR' });
     await fetchUsers();
@@ -167,30 +154,17 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  /**
-   * SendProposalRequest contract (backend/payload/SendProposalRequest.java):
-   *   venue          String  @NotBlank
-   *   venueId        Long
-   *   venueDetails   String               <- JSON string, NOT an object
-   *   price          Integer @NotNull @Min(0)
-   *   terms          String  @NotBlank
-   *   vendorShortlist Map<String, List<String>>  <- values must be ARRAYS
-   *   pricingTier    String
-   * Extra fields (e.g. sentDate) are ignored by Jackson.
-   */
   const sendProposal = useCallback(async (inquiryId, proposal) => {
     const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier } = proposal;
 
     const body = {
       venue,
       venueId: venueId ?? null,
-      // The backend stores venueDetails as a string; serialise objects.
       venueDetails: venueDetails == null
         ? null
         : (typeof venueDetails === 'string' ? venueDetails : JSON.stringify(venueDetails)),
       price: Number.isFinite(price) ? price : 0,
       terms,
-      // Normalise {cat: '3'} | {cat: 3} | {cat: ['3']} into {cat: ['3']}
       vendorShortlist: vendorShortlist
         ? Object.fromEntries(
             Object.entries(vendorShortlist)
@@ -241,11 +215,6 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  /**
-   * ManualAssignRequest.category is @NotBlank and is shared with manual-assign,
-   * but the force-assign endpoint ignores it and only reads vendorId. It therefore
-   * MUST still be sent non-blank or the request fails validation with a 400.
-   */
   const forceAssign = useCallback(async (assignmentId, vendorId, category) => {
     const res = await api.post(
       `/assignments/${assignmentId}/force-assign`,
@@ -327,7 +296,7 @@ export const AppProvider = ({ children }) => {
     state,
     dispatch,
     // auth
-    login, logout, register,
+    login, registerClient, logout,
     // users/vendors
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus,
     fetchMyVendorProfile,

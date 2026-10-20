@@ -57,9 +57,19 @@ public class Inquiry {
     @Column(nullable = false)
     private EventStatus status;
 
+    @Column(name = "requested_categories", columnDefinition = "TEXT")
+    private String requestedCategories;
+
+    @Column(name = "categories", columnDefinition = "TEXT")
+    private String categories;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "proposal", columnDefinition = "JSON")
     private String proposal;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "preferred_vendor_ids", columnDefinition = "JSON")
+    private String preferredVendorIds;
 
     @OneToOne(mappedBy = "inquiry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Event event;
