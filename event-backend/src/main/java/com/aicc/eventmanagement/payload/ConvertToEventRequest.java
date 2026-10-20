@@ -15,7 +15,9 @@ public class ConvertToEventRequest {
 
     private Long venueId;
 
-    private String venueDetails; // JSON string
+    private String venueDetails;
+
+    private List<String> categories;
 
     private List<String> categories;
 

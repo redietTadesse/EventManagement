@@ -11,6 +11,8 @@ import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
+import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
+import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.services.InquiryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -104,17 +106,18 @@ public class InquiryController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update inquiry status")
-    public ResponseEntity<InquiryResponse> updateStatus(@PathVariable Long id, @RequestParam EventStatus status) {
-        log.info("Updating inquiry {} status to {}", id, status);
-        try {
-            Inquiry updated = inquiryService.updateInquiryStatus(id, status, Role.ADMIN);
-            return ResponseEntity.ok(InquiryResponse.from(updated));
-        } catch (Exception e) {
-            log.error("ERROR updating status: ", e);
-            throw e;
-        }
+    public ResponseEntity<InquiryResponse> updateStatus(
+            @PathVariable Long id,
+            @RequestParam EventStatus status,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        log.info("Updating inquiry {} status to {} by {}", id, status, principal.getUsername());
+
+        Role userRole = extractRoleFromPrincipal(principal);
+        Inquiry updated = inquiryService.updateInquiryStatus(id, status, userRole);
+        return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
     @PutMapping("/{id}")
@@ -143,7 +146,7 @@ public class InquiryController {
     }
 
     @PostMapping("/{id}/convert")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")   // <-- changed here
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Convert inquiry to event", description = "Converts an accepted inquiry into a full event")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Event created successfully",
@@ -319,14 +322,39 @@ public class InquiryController {
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
-    // Helper method to extract Role from Principal
+    // ============================================================
+    // VENDOR RECOMMENDATION ENDPOINTS
+    // ============================================================
+
+    @GetMapping("/{id}/recommended-vendors")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get recommended vendors for an inquiry")
+    public ResponseEntity<VendorRecommendationResponse> getRecommendedVendors(@PathVariable Long id) {
+        log.info("Fetching vendor recommendations for inquiry {}", id);
+        return ResponseEntity.ok(inquiryService.getRecommendedVendors(id));
+    }
+
+    @PostMapping("/{id}/vendor-preference")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @Operation(summary = "Client records their preferred vendors")
+    public ResponseEntity<InquiryResponse> recordVendorPreference(
+            @PathVariable Long id,
+            @Valid @RequestBody VendorPreferenceRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        log.info("Recording vendor preference for inquiry {} by {}", id, principal.getUsername());
+
+        Role userRole = extractRoleFromPrincipal(principal);
+        Inquiry updated = inquiryService.recordVendorPreference(id, request, userRole);
+        return ResponseEntity.ok(InquiryResponse.from(updated));
+    }
+
     private Role extractRoleFromPrincipal(UserDetails principal) {
         if (principal == null || principal.getAuthorities().isEmpty()) {
             return Role.CLIENT;
         }
 
         String roleName = principal.getAuthorities().iterator().next().getAuthority();
-        // Remove "ROLE_" prefix if present
         if (roleName.startsWith("ROLE_")) {
             roleName = roleName.substring(5);
         }

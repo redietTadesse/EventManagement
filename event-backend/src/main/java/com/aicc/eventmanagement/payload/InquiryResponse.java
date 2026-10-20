@@ -30,6 +30,7 @@ public class InquiryResponse {
     private LocalDateTime updatedAt;
     private EventSummary event;
     private ProposalResponse proposal;
+    private List<Long> preferredVendorIds;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -48,7 +49,16 @@ public class InquiryResponse {
         response.setCreatedAt(inquiry.getCreatedAt());
         response.setUpdatedAt(inquiry.getUpdatedAt());
 
-        // Parse proposal JSON if present
+        if (inquiry.getPreferredVendorIds() != null && !inquiry.getPreferredVendorIds().isBlank()) {
+            try {
+                response.setPreferredVendorIds(
+                        objectMapper.readValue(inquiry.getPreferredVendorIds(), new TypeReference<List<Long>>() {})
+                );
+            } catch (Exception e) {
+                log.warn("Failed to parse preferredVendorIds for inquiry {}: {}", inquiry.getId(), e.getMessage());
+            }
+        }
+
         if (inquiry.getProposal() != null && !inquiry.getProposal().isBlank()) {
             try {
                 response.setProposal(parseProposal(inquiry.getProposal()));

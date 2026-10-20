@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -36,5 +37,5 @@ public class CreateInquiryRequest {
     @Size(max = 1000, message = "Requirements must not exceed 1000 characters")
     private String requirements;
 
-    private java.util.List<String> requestedCategories;
+    private List<String> requestedCategories;
 }

@@ -21,8 +21,11 @@ export default function Login() {
   const [mode, setMode] = useState('signin');
   const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const { login, register, state } = useApp();
+
+  // Resolved: Using registerClient from the context
+  const { login, registerClient, state } = useApp();
   const { loading } = state;
   const navigate = useNavigate();
 
@@ -40,6 +43,7 @@ export default function Login() {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+    setNotice('');
     try {
       const data = await login(form.username, form.password);
       afterAuth(data);
@@ -54,18 +58,17 @@ export default function Login() {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+    setNotice('');
     try {
-      await register({
-        fullName: form.fullName,
-        username: form.username,
-        email: form.email,
-        password: form.password,
-      });
-      navigate('/client/dashboard', { replace: true });
+      await registerClient(form);
+      setMode('signin');
+      setNotice('Account created. Sign in with your new username and password.');
     } catch (err) {
-      const raw = err.response?.data;
-      const msg = typeof raw === 'string' ? raw : (raw?.message || 'Registration failed');
-      setError(msg);
+      const response = err.response?.data;
+      setError(
+        (response && typeof response === 'object' ? response.message : response) ||
+          'Registration failed'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -100,6 +103,12 @@ export default function Login() {
               ? `Create your ${portalLabel} Portal account`
               : 'Create a client account'}
         </p>
+
+        {notice && (
+          <div role="status" className="bg-green-100 text-green-700 p-3 rounded-lg mb-4">
+            {notice}
+          </div>
+        )}
 
         {mode === 'signin' ? (
           <form onSubmit={handleSignIn}>
@@ -139,7 +148,7 @@ export default function Login() {
             </button>
 
             <p className="text-center text-sm text-gray-500 mt-4">
-              Demo accounts: client1, coordinator1, vendor1 / password: password123
+              Seeded client account: client / password: Admin@123
             </p>
 
             {signupAllowed && (

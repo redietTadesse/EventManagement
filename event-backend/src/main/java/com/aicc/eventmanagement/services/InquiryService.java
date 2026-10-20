@@ -17,6 +17,8 @@ import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
+import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
+import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.util.CategoryUtils;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
@@ -37,7 +39,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -159,24 +160,16 @@ public class InquiryService {
         log.info("Updating inquiry {}", id);
         Inquiry inquiry = getInquiryById(id);
 
-        if (request.getClientName() != null) {
-            inquiry.setClientName(request.getClientName());
-        }
-        if (request.getEventType() != null) {
-            inquiry.setEventType(request.getEventType());
-        }
+        if (request.getClientName() != null) inquiry.setClientName(request.getClientName());
+        if (request.getEventType() != null) inquiry.setEventType(request.getEventType());
         if (request.getEventDate() != null) {
             if (request.getEventDate().isBefore(LocalDate.now())) {
                 throw new RuntimeException("Event date cannot be in the past");
             }
             inquiry.setEventDate(request.getEventDate());
         }
-        if (request.getExpectedAttendees() != null) {
-            inquiry.setExpectedAttendees(request.getExpectedAttendees());
-        }
-        if (request.getRequirements() != null) {
-            inquiry.setRequirements(request.getRequirements());
-        }
+        if (request.getExpectedAttendees() != null) inquiry.setExpectedAttendees(request.getExpectedAttendees());
+        if (request.getRequirements() != null) inquiry.setRequirements(request.getRequirements());
 
         return inquiryRepository.save(inquiry);
     }
@@ -185,55 +178,33 @@ public class InquiryService {
     public void deleteInquiry(Long id) {
         log.info("Deleting inquiry {}", id);
         Inquiry inquiry = getInquiryById(id);
-
-        // Prevent deletion if inquiry has an associated event
         if (inquiry.getEvent() != null) {
             throw new RuntimeException("Cannot delete inquiry with associated event. Delete the event first.");
         }
-
         inquiryRepository.delete(inquiry);
     }
 
-    // ============================================================
-    // UPDATED STATUS TRANSITION METHOD WITH WORKFLOW ENGINE
-    // ============================================================
     @Transactional
     public Inquiry updateInquiryStatus(Long id, EventStatus newStatus, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
         EventStatus oldStatus = inquiry.getStatus();
 
-        // Use the WorkflowEngine to validate transition and role
         workflowEngine.validateTransition(oldStatus, newStatus, userRole);
 
-        // If validation passes, update the status
         inquiry.setStatus(newStatus);
         Inquiry saved = inquiryRepository.save(inquiry);
 
-        // Publish the existing status change event
         eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, oldStatus, newStatus));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, oldStatus, newStatus, String.valueOf(id), userRole));
 
-        // Publish the new workflow transition event (for logging / Sep 9 deliverable)
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this,
-                oldStatus,
-                newStatus,
-                String.valueOf(id),
-                userRole
-        ));
-
-        log.info(" Inquiry {} status transitioned from {} to {} by {}",
-                id, oldStatus, newStatus, userRole);
+        log.info(" Inquiry {} status transitioned from {} to {} by {}", id, oldStatus, newStatus, userRole);
         return saved;
     }
 
-    // ============================================================
-    // UPDATED CONVERT TO EVENT WITH WORKFLOW ENGINE
-    // ============================================================
     @Transactional
     public Event convertToEvent(Long inquiryId, ConvertToEventRequest request) {
         Inquiry inquiry = getInquiryById(inquiryId);
 
-        // Precondition: inquiry must be in PROPOSAL_ACCEPTED state
         if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
             throw new RuntimeException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()));
         }
@@ -242,14 +213,13 @@ public class InquiryService {
             throw new RuntimeException("This inquiry already has an event associated.");
         }
 
-        // Build the event
         String resolvedCategories = request.getCategories() != null && !request.getCategories().isEmpty()
                 ? CategoryUtils.join(request.getCategories())
                 : inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
-                        ? inquiry.getCategories()
-                        : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
-                                ? inquiry.getRequestedCategories()
-                                : CategoryUtils.join(CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of()));
+                ? inquiry.getCategories()
+                : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
+                ? inquiry.getRequestedCategories()
+                : CategoryUtils.join(CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of()));
 
         Event event = Event.builder()
                 .inquiry(inquiry)
@@ -266,65 +236,26 @@ public class InquiryService {
 
         Event savedEvent = eventRepository.save(event);
 
-        // Book the venue on a best-effort basis. The proposal's venueId may have
-        // been taken by another event between proposal and convert (stale read).
-        // A VENUE_CONFLICT must not abort the whole conversion — the event,
-        // vendors and checklist are the critical path; the coordinator can
-        // re-assign a free venue afterwards via PUT /events/{id}.
+        // Book venue without catching the exception so that conflicts roll back the whole transaction.
         if (request.getVenueId() != null) {
-            try {
-                if (!venueService.isVenueAvailable(request.getVenueId(), inquiry.getEventDate())) {
-                    throw new BusinessException(
-                            String.format("Venue is already booked on %s — converting without a venue booking",
-                                    inquiry.getEventDate()),
-                            "VENUE_CONFLICT");
-                }
-                venueService.bookVenue(
-                        request.getVenueId(),
-                        savedEvent.getId(),
-                        inquiry.getEventDate()
-                );
-                log.info("Venue {} booked for event {} on {}",
-                        request.getVenueId(), savedEvent.getId(), inquiry.getEventDate());
-            } catch (BusinessException e) {
-                if (!"VENUE_CONFLICT".equals(e.getErrorCode())) {
-                    throw e;
-                }
-                log.warn("Convert {} proceeding without venue booking (venueId={}): {}",
-                        inquiryId, request.getVenueId(), e.getMessage());
-                // Keep the venue display name for context, but drop the hard
-                // booking reference so the event does not point at a venue
-                // booked by someone else.
-                savedEvent.setVenueId(null);
-                eventRepository.save(savedEvent);
-            }
+            venueService.bookVenue(
+                    request.getVenueId(),
+                    savedEvent.getId(),
+                    inquiry.getEventDate()
+            );
+            log.info("Venue {} booked for event {} on {}", request.getVenueId(), savedEvent.getId(), inquiry.getEventDate());
         }
 
-        // Trigger vendor assignment on the primary path. This method participates in
-        // the conversion transaction, so assignment failure must roll back conversion
-        // rather than being caught and surfaced later as UnexpectedRollbackException.
         vendorService.autoAssignForEvent(savedEvent);
         log.info("Auto-assignment completed for event {}", savedEvent.getId());
 
-        // -----------------------------------------------------------------
-        // Now transition the inquiry from PROPOSAL_ACCEPTED to EVENT_CREATED
-        // Validate via WorkflowEngine before changing status
-        // -----------------------------------------------------------------
-        workflowEngine.validateTransition(
-                EventStatus.PROPOSAL_ACCEPTED,
-                EventStatus.EVENT_CREATED,
-                Role.COORDINATOR      // As per actionRoles, this should be COORDINATOR
-        );
+        workflowEngine.validateTransition(EventStatus.PROPOSAL_ACCEPTED, EventStatus.EVENT_CREATED, Role.COORDINATOR);
 
-        // Update inquiry status and link to event
         inquiry.setStatus(EventStatus.EVENT_CREATED);
         inquiry.setEvent(savedEvent);
         inquiryRepository.save(inquiry);
 
-        // Publish event creation event
         eventPublisher.publishEvent(new EventCreatedEvent(this, savedEvent));
-
-        // Also publish a workflow transition event for logging
         eventPublisher.publishEvent(new WorkflowTransitionEvent(
                 this,
                 EventStatus.PROPOSAL_ACCEPTED,
@@ -337,35 +268,24 @@ public class InquiryService {
         return savedEvent;
     }
 
-    // ============================================================
-    // CONVERSION PREVIEW (dry run of automatic assignment)
-    // ============================================================
     @Transactional(readOnly = true)
     public ConversionPreviewResponse previewConversion(Long inquiryId) {
         Inquiry inquiry = getInquiryById(inquiryId);
 
         if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
-            throw new BusinessException(
-                "Only accepted proposals can be previewed for conversion. Current status: " + inquiry.getStatus(),
-                "INVALID_STATE");
+            throw new BusinessException("Only accepted proposals can be previewed for conversion. Current status: " + inquiry.getStatus(), "INVALID_STATE");
         }
-
         if (inquiry.getEvent() != null) {
-            throw new BusinessException(
-                "This inquiry already has an event associated.",
-                "ALREADY_CONVERTED");
+            throw new BusinessException("This inquiry already has an event associated.", "ALREADY_CONVERTED");
         }
 
         List<String> requiredCategories = resolvePreviewCategories(inquiry);
         LocalDate eventDate = inquiry.getEventDate();
-
         ConversionPreviewResponse.VenuePreview venuePreview = buildVenuePreview(inquiry, eventDate);
 
         List<ConversionPreviewResponse.CategoryPreview> categoryPreviews = new ArrayList<>();
         for (String category : requiredCategories) {
-            List<VendorRankingService.Ranked> ranked =
-                rankingService.rank(category, eventDate, Set.of());
-
+            List<VendorRankingService.Ranked> ranked = rankingService.rank(category, eventDate, Set.of());
             List<ConversionPreviewResponse.VendorCandidate> candidates = new ArrayList<>();
             for (int i = 0; i < Math.min(3, ranked.size()); i++) {
                 VendorRankingService.Ranked r = ranked.get(i);
@@ -374,14 +294,14 @@ public class InquiryService {
                 long load = assignmentRepository.countActiveAndPendingByVendor(v.getId());
 
                 candidates.add(ConversionPreviewResponse.VendorCandidate.builder()
-                    .vendorId(v.getId())
-                    .companyName(v.getCompanyName())
-                    .rating(v.getRating())
-                    .currentLoad(load)
-                    .score(r.score())
-                    .rank(i + 1)
-                    .hasRecentDecline(hasDeclined)
-                    .build());
+                        .vendorId(v.getId())
+                        .companyName(v.getCompanyName())
+                        .rating(v.getRating())
+                        .currentLoad(load)
+                        .score(r.score())
+                        .rank(i + 1)
+                        .hasRecentDecline(hasDeclined)
+                        .build());
             }
 
             String warning = null;
@@ -392,175 +312,97 @@ public class InquiryService {
             }
 
             categoryPreviews.add(ConversionPreviewResponse.CategoryPreview.builder()
-                .category(category)
-                .candidates(candidates)
-                .warning(warning)
-                .build());
+                    .category(category)
+                    .candidates(candidates)
+                    .warning(warning)
+                    .build());
         }
 
-        String timeline = "Vendors typically respond within 2 days. "
-            + "Event should reach Confirmed within 5 days if all vendors accept.";
-
         return ConversionPreviewResponse.builder()
-            .inquiryId(inquiryId)
-            .eventType(inquiry.getEventType())
-            .eventDate(eventDate)
-            .expectedAttendees(inquiry.getExpectedAttendees())
-            .requiredCategories(requiredCategories)
-            .venue(venuePreview)
-            .categories(categoryPreviews)
-            .timelineEstimate(timeline)
-            .build();
+                .inquiryId(inquiryId)
+                .eventType(inquiry.getEventType())
+                .eventDate(eventDate)
+                .expectedAttendees(inquiry.getExpectedAttendees())
+                .requiredCategories(requiredCategories)
+                .venue(venuePreview)
+                .categories(categoryPreviews)
+                .timelineEstimate("Vendors typically respond within 2 days. Event should reach Confirmed within 5 days if all vendors accept.")
+                .build();
     }
 
     private List<String> resolvePreviewCategories(Inquiry inquiry) {
-        if (inquiry.getCategories() != null && !inquiry.getCategories().isBlank()) {
-            return CategoryUtils.split(inquiry.getCategories());
-        }
-        if (inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()) {
-            return CategoryUtils.split(inquiry.getRequestedCategories());
-        }
+        if (inquiry.getCategories() != null && !inquiry.getCategories().isBlank()) return CategoryUtils.split(inquiry.getCategories());
+        if (inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()) return CategoryUtils.split(inquiry.getRequestedCategories());
         return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of());
     }
 
     private ConversionPreviewResponse.VenuePreview buildVenuePreview(Inquiry inquiry, LocalDate eventDate) {
         if (inquiry.getProposal() == null || inquiry.getProposal().isBlank()) {
-            return ConversionPreviewResponse.VenuePreview.builder()
-                .available(false)
-                .message("No proposal attached to this inquiry")
-                .build();
+            return ConversionPreviewResponse.VenuePreview.builder().available(false).message("No proposal attached to this inquiry").build();
         }
-
         try {
-            Map<String, Object> proposal = objectMapper.readValue(
-                inquiry.getProposal(), new TypeReference<>() {});
-
-            Long venueId = proposal.get("venueId") != null
-                ? ((Number) proposal.get("venueId")).longValue() : null;
+            Map<String, Object> proposal = objectMapper.readValue(inquiry.getProposal(), new TypeReference<>() {});
+            Long venueId = proposal.get("venueId") != null ? ((Number) proposal.get("venueId")).longValue() : null;
             String venueName = (String) proposal.get("venue");
 
             if (venueId == null) {
-                return ConversionPreviewResponse.VenuePreview.builder()
-                    .venueName(venueName)
-                    .available(false)
-                    .message("No specific venue selected in proposal")
-                    .build();
+                return ConversionPreviewResponse.VenuePreview.builder().venueName(venueName).available(false).message("No specific venue selected in proposal").build();
             }
 
             boolean available = venueService.isVenueAvailable(venueId, eventDate);
-            String message = available
-                ? "Available on " + eventDate
-                : "Already booked on " + eventDate;
+            String message = available ? "Available on " + eventDate : "Already booked on " + eventDate;
 
-            return ConversionPreviewResponse.VenuePreview.builder()
-                .venueId(venueId)
-                .venueName(venueName)
-                .available(available)
-                .message(message)
-                .build();
-
+            return ConversionPreviewResponse.VenuePreview.builder().venueId(venueId).venueName(venueName).available(available).message(message).build();
         } catch (Exception e) {
-            log.warn("Failed to build venue preview for inquiry {}: {}",
-                inquiry.getId(), e.getMessage());
-            return ConversionPreviewResponse.VenuePreview.builder()
-                .available(false)
-                .message("Could not parse proposal venue details")
-                .build();
+            log.warn("Failed to build venue preview for inquiry {}: {}", inquiry.getId(), e.getMessage());
+            return ConversionPreviewResponse.VenuePreview.builder().available(false).message("Could not parse proposal venue details").build();
         }
     }
 
     private boolean hasRecentDecline(Long vendorId, String category) {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(30);
-        return assignmentRepository.existsRecentDeclineByVendorAndCategory(
-            vendorId, category, cutoff);
+        return assignmentRepository.existsRecentDeclineByVendorAndCategory(vendorId, category, LocalDateTime.now().minusDays(30));
     }
-
-    // ============================================================
-    // OLD VALIDATION METHOD REMOVED – replaced by WorkflowEngine
-    // ============================================================
-    // private boolean isValidTransition(EventStatus from, EventStatus to) { ... }  // DELETED
 
     private List<Checklist> generateChecklistForEventType(String eventType) {
         List<String> items = CHECKLIST_TEMPLATES.getOrDefault(eventType, List.of("Book venue", "Arrange services"));
         List<Checklist> checklist = new ArrayList<>();
         for (String itemName : items) {
-            Checklist item = Checklist.builder()
+            checklist.add(Checklist.builder()
                     .itemName(itemName)
                     .isComplete(false)
                     .dueDate(LocalDate.now().plusDays(7))
-                    .build();
-            checklist.add(item);
+                    .build());
         }
         return checklist;
     }
 
-    // ============================================================
-    // PROPOSAL MANAGEMENT METHODS
-    // ============================================================
-
     @Transactional
     public Inquiry sendProposal(Long id, SendProposalRequest request, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
-
-        // 1. Validate state – must be INQUIRY_SUBMITTED
         if (inquiry.getStatus() != EventStatus.INQUIRY_SUBMITTED) {
-            throw new BusinessException(
-                    String.format("Cannot send proposal. Inquiry status is: %s (expected: INQUIRY_SUBMITTED)",
-                            inquiry.getStatus()),
-                    "INVALID_STATE"
-            );
+            throw new BusinessException(String.format("Cannot send proposal. Inquiry status is: %s (expected: INQUIRY_SUBMITTED)", inquiry.getStatus()), "INVALID_STATE");
         }
 
-        // 2. Validate via WorkflowEngine
-        workflowEngine.validateTransition(
-                inquiry.getStatus(),
-                EventStatus.PROPOSAL_SENT,
-                userRole
-        );
-
-        // 3. Build the proposal JSON with all details
+        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_SENT, userRole);
         String proposalJson = buildProposalJson(request, inquiry);
 
-        // 4. Store proposal, keep a live agreed category set, and update status
-        inquiry.setCategories(
-                request.getCategories() != null && !request.getCategories().isEmpty()
-                        ? CategoryUtils.join(request.getCategories())
-                        : inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
-                                ? inquiry.getCategories()
-                                : inquiry.getRequestedCategories()
-        );
+        inquiry.setCategories(request.getCategories() != null && !request.getCategories().isEmpty()
+                ? CategoryUtils.join(request.getCategories())
+                : inquiry.getCategories() != null && !inquiry.getCategories().isBlank() ? inquiry.getCategories() : inquiry.getRequestedCategories());
         inquiry.setProposal(proposalJson);
         inquiry.setStatus(EventStatus.PROPOSAL_SENT);
 
         Inquiry saved = inquiryRepository.save(inquiry);
 
-        // 5. Publish events
-        eventPublisher.publishEvent(new InquiryStatusChangedEvent(
-                this,
-                saved,
-                EventStatus.INQUIRY_SUBMITTED,
-                EventStatus.PROPOSAL_SENT
-        ));
+        eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.INQUIRY_SUBMITTED, EventStatus.PROPOSAL_SENT));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.INQUIRY_SUBMITTED, EventStatus.PROPOSAL_SENT, String.valueOf(id), userRole));
 
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this,
-                EventStatus.INQUIRY_SUBMITTED,
-                EventStatus.PROPOSAL_SENT,
-                String.valueOf(id),
-                userRole
-        ));
-
-        // 6. Send email notification to client
         try {
-            String clientEmail = getUserEmail(inquiry.getClientId());
-            emailService.sendProposalNotification(inquiry, clientEmail);
-            log.info("📧 Proposal notification sent to client: {}", clientEmail);
+            emailService.sendProposalNotification(inquiry, getUserEmail(inquiry.getClientId()));
         } catch (Exception e) {
             log.warn("Failed to send proposal email: {}", e.getMessage());
-            // Don't fail the whole operation – proposal was still saved
         }
 
-        log.info("✅ Proposal sent for inquiry {} by {}", id, userRole);
         return saved;
     }
 
@@ -573,36 +415,15 @@ public class InquiryService {
     public Inquiry acceptProposal(Long id, List<String> finalCategories, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
 
-        workflowEngine.validateTransition(
-                inquiry.getStatus(),
-                EventStatus.PROPOSAL_ACCEPTED,
-                userRole
-        );
-
-        if (finalCategories != null && !finalCategories.isEmpty()) {
-            inquiry.setCategories(CategoryUtils.join(finalCategories));
-        }
+        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_ACCEPTED, userRole);
+        if (finalCategories != null && !finalCategories.isEmpty()) inquiry.setCategories(CategoryUtils.join(finalCategories));
 
         inquiry.setStatus(EventStatus.PROPOSAL_ACCEPTED);
-
         Inquiry saved = inquiryRepository.save(inquiry);
 
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this,
-                EventStatus.PROPOSAL_SENT,
-                EventStatus.PROPOSAL_ACCEPTED,
-                String.valueOf(id),
-                userRole
-        ));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_ACCEPTED, String.valueOf(id), userRole));
+        eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_ACCEPTED));
 
-        eventPublisher.publishEvent(new InquiryStatusChangedEvent(
-                this,
-                saved,
-                EventStatus.PROPOSAL_SENT,
-                EventStatus.PROPOSAL_ACCEPTED
-        ));
-
-        log.info("Proposal accepted for inquiry {} by {} (categories={})", id, userRole, saved.getCategories());
         return saved;
     }
 
@@ -610,95 +431,102 @@ public class InquiryService {
     public Inquiry rejectProposal(Long id, String reason, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
 
-        // Validate that client can reject
-        workflowEngine.validateTransition(
-                inquiry.getStatus(),
-                EventStatus.PROPOSAL_REJECTED,
-                userRole
-        );
-
+        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_REJECTED, userRole);
         inquiry.setStatus(EventStatus.PROPOSAL_REJECTED);
 
-        // Store rejection reason in requirements
         if (reason != null) {
-            String currentReqs = inquiry.getRequirements();
-            inquiry.setRequirements(
-                    (currentReqs != null ? currentReqs + "\n" : "") +
-                            "Proposal rejected on " + LocalDateTime.now() + ": " + reason
-            );
+            inquiry.setRequirements((inquiry.getRequirements() != null ? inquiry.getRequirements() + "\n" : "") + "Proposal rejected on " + LocalDateTime.now() + ": " + reason);
         }
 
         Inquiry saved = inquiryRepository.save(inquiry);
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
 
-        // Publish workflow transition event
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this,
-                EventStatus.PROPOSAL_SENT,
-                EventStatus.PROPOSAL_REJECTED,
-                String.valueOf(id),
-                userRole
-        ));
-
-        log.info("Proposal rejected for inquiry {} by {}", id, userRole);
         return saved;
     }
 
-    // ============ PROPOSAL BUILDER ============
+    public VendorRecommendationResponse getRecommendedVendors(Long inquiryId) {
+        Inquiry inquiry = getInquiryById(inquiryId);
+        List<String> categories = CategoryUtils.split(inquiry.getCategories());
+        if (categories.isEmpty()) categories = CategoryUtils.split(inquiry.getRequestedCategories());
+        if (categories.isEmpty()) categories = CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of());
+        if (categories.isEmpty()) throw new BusinessException("No categories defined for this inquiry", "NO_CATEGORIES");
 
-    /**
-     * Build a complete proposal JSON with all details including auto-generated fields.
-     */
+        List<VendorRecommendationResponse.CategoryRecommendation> categoryResults = new ArrayList<>();
+        for (String category : categories) {
+            List<VendorRankingService.Ranked> ranked = rankingService.rank(category, inquiry.getEventDate(), Set.of());
+            List<VendorRecommendationResponse.VendorOption> options = ranked.stream()
+                    .limit(5)
+                    .map(r -> VendorRecommendationResponse.VendorOption.builder()
+                            .vendorId(r.vendor().getId())
+                            .companyName(r.vendor().getCompanyName())
+                            .serviceCategory(r.vendor().getServiceCategory())
+                            .description(r.vendor().getDescription())
+                            .rating(r.vendor().getRating())
+                            .availableOnEventDate(true)
+                            .score(r.score())
+                            .reason(buildReason(r))
+                            .build())
+                    .toList();
+
+            categoryResults.add(VendorRecommendationResponse.CategoryRecommendation.builder().category(category).options(options).build());
+        }
+
+        return VendorRecommendationResponse.builder().categories(categoryResults).build();
+    }
+
+    private String buildReason(VendorRankingService.Ranked ranked) {
+        if (ranked.vendor().getRating() != null && ranked.vendor().getRating() >= 4) return "Highly rated";
+        if (ranked.score() > 100) return "Currently available and top-ranked";
+        return "Available on your event date";
+    }
+
+    @Transactional
+    public Inquiry recordVendorPreference(Long inquiryId, VendorPreferenceRequest request, Role userRole) {
+        Inquiry inquiry = getInquiryById(inquiryId);
+        if (userRole != Role.CLIENT && userRole != Role.ADMIN) {
+            throw new BusinessException("Only the client can express a vendor preference", "ACCESS_DENIED");
+        }
+        if (inquiry.getStatus() != EventStatus.PROPOSAL_SENT && inquiry.getStatus() != EventStatus.INQUIRY_SUBMITTED) {
+            throw new BusinessException(String.format("Cannot record preference in status: %s", inquiry.getStatus()), "INVALID_STATE");
+        }
+
+        try {
+            inquiry.setPreferredVendorIds(objectMapper.writeValueAsString(request.getVendorIds()));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize vendor preferences", e);
+        }
+
+        Inquiry saved = inquiryRepository.save(inquiry);
+        log.info("Client recorded preference for inquiry {}: vendors={}", inquiryId, request.getVendorIds());
+        return saved;
+    }
+
     private String buildProposalJson(SendProposalRequest request, Inquiry inquiry) {
         try {
             Map<String, Object> proposal = new LinkedHashMap<>();
-
-            // Auto-generated fields
-            proposal.put("proposalNumber", generateProposalNumber(inquiry));
+            proposal.put("proposalNumber", String.format("AICC-P-%d-%03d", LocalDate.now().getYear(), inquiry.getId()));
             proposal.put("sentDate", LocalDateTime.now().toString());
             proposal.put("expiryDate", LocalDateTime.now().plusDays(7).toString());
-
-            // From request
             proposal.put("venue", request.getVenue());
             proposal.put("venueId", request.getVenueId());
             proposal.put("venueDetails", request.getVenueDetails());
             proposal.put("price", request.getPrice());
             proposal.put("terms", request.getTerms());
             proposal.put("categories", request.getCategories());
-            proposal.put("pricingTier", request.getPricingTier() != null ?
-                    request.getPricingTier() : "standard");
+            proposal.put("pricingTier", request.getPricingTier() != null ? request.getPricingTier() : "standard");
             proposal.put("vendorShortlist", request.getVendorShortlist());
-
-            // Client info (for context)
             proposal.put("clientName", inquiry.getClientName());
             proposal.put("eventType", inquiry.getEventType());
             proposal.put("eventDate", inquiry.getEventDate().toString());
             proposal.put("expectedAttendees", inquiry.getExpectedAttendees());
-
             return objectMapper.writeValueAsString(proposal);
-
         } catch (Exception e) {
             log.error("Failed to build proposal JSON", e);
             throw new RuntimeException("Failed to create proposal", e);
         }
     }
 
-    /**
-     * Generate a unique proposal number.
-     * Format: AICC-P-2026-001
-     */
-    private String generateProposalNumber(Inquiry inquiry) {
-        return String.format("AICC-P-%d-%03d",
-                LocalDate.now().getYear(),
-                inquiry.getId()
-        );
-    }
-
-    /**
-     * Get the email address for a user by their ID.
-     */
     private String getUserEmail(Long userId) {
-        return userRepository.findById(userId)
-                .map(User::getEmail)
-                .orElse("client@example.com"); // Fallback for demo
+        return userRepository.findById(userId).map(User::getEmail).orElse("client@example.com");
     }
 }
