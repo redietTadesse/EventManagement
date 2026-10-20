@@ -4,7 +4,6 @@ import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
-import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
@@ -48,14 +47,12 @@ public class EventService {
         Event saved = eventRepository.save(event);
 
         // AUTO-ASSIGN VENDORS AFTER EVENT CREATION
-        try {
-            vendorService.autoAssignForEvent(saved);
-            log.info("Auto-assignment triggered for event {}", saved.getId());
-        } catch (Exception e) {
-            log.error("Auto-assignment failed for event {}: {}", saved.getId(), e.getMessage());
-            // Event still created, vendors need manual assignment
-            // Status remains EVENT_CREATED or becomes NEEDS_COORDINATOR
-        }
+        // Do NOT catch and swallow failures here: autoAssignForEvent joins this
+        // transaction, so catching a RuntimeException and continuing would leave the
+        // tx marked rollback-only and surface later as UnexpectedRollbackException.
+        // Let it propagate so creation fails cleanly instead of committing half-state.
+        vendorService.autoAssignForEvent(saved);
+        log.info("Auto-assignment triggered for event {}", saved.getId());
 
         return saved;
     }
@@ -106,26 +103,24 @@ public class EventService {
         
         Event saved = eventRepository.save(event);
         
-        // Book or rebook venue if venueId changed
+        // Book or rebook venue if venueId changed.
+        // Do NOT swallow BusinessException here: bookVenue joins this transaction,
+        // so catching it and returning normally would leave the tx marked
+        // rollback-only and surface later as UnexpectedRollbackException.
+        // Let it propagate so the update fails cleanly with a 400 (VENUE_CONFLICT).
         if (request.getVenueId() != null && !request.getVenueId().equals(oldVenueId)) {
-            try {
-                // Get the inquiry to find the event date
-                inquiryRepository.findById(event.getInquiry().getId())
+            Long inquiryId = event.getInquiry() != null ? event.getInquiry().getId() : null;
+            if (inquiryId != null) {
+                inquiryRepository.findById(inquiryId)
                     .ifPresent(inquiry -> {
-                        try {
-                            venueService.bookVenue(
-                                request.getVenueId(),
-                                saved.getId(),
-                                inquiry.getEventDate()
-                            );
-                            log.info("Venue {} rebooked for event {} on {}",
-                                request.getVenueId(), saved.getId(), inquiry.getEventDate());
-                        } catch (BusinessException e) {
-                            log.warn("Venue rebooking failed for event {}: {}", saved.getId(), e.getMessage());
-                        }
+                        venueService.bookVenue(
+                            request.getVenueId(),
+                            saved.getId(),
+                            inquiry.getEventDate()
+                        );
+                        log.info("Venue {} rebooked for event {} on {}",
+                            request.getVenueId(), saved.getId(), inquiry.getEventDate());
                     });
-            } catch (Exception e) {
-                log.warn("Failed to process venue booking for event {}: {}", saved.getId(), e.getMessage());
             }
         }
         

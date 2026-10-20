@@ -5,6 +5,7 @@ import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.ConfirmCategoriesRequest;
+import com.aicc.eventmanagement.payload.ConversionPreviewResponse;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
@@ -154,6 +155,17 @@ public class InquiryController {
         log.info("Converting inquiry {} to event", id);
         Event event = inquiryService.convertToEvent(id, request);
         return ResponseEntity.ok(event);
+    }
+
+    @GetMapping("/{id}/conversion-preview")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Preview automatic assignment before converting to event",
+               description = "Returns the ranked vendor for each service category, "
+                           + "venue availability, and conflict warnings for the "
+                           + "upcoming conversion")
+    public ResponseEntity<ConversionPreviewResponse> previewConversion(@PathVariable Long id) {
+        log.info("Previewing conversion for inquiry {}", id);
+        return ResponseEntity.ok(inquiryService.previewConversion(id));
     }
 
     @GetMapping("/search/event-type")

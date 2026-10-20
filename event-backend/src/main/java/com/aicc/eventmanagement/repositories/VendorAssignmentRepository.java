@@ -96,6 +96,22 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "AND va.status IN ('ACCEPTED', 'PENDING')")
     long countActiveAndPendingByVendor(@Param("vendorId") Long vendorId);
 
+    /**
+     * Whether a vendor declined an assignment in the given category recently
+     * (last 30 days from the caller-supplied cutoff). Used by the conversion
+     * preview to warn coordinators that the top-ranked vendor may decline again.
+     */
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+           "WHERE va.vendor.id = :vendorId " +
+           "AND va.serviceCategory = :category " +
+           "AND va.status = 'DECLINED' " +
+           "AND va.respondedAt >= :cutoff")
+    boolean existsRecentDeclineByVendorAndCategory(
+        @Param("vendorId") Long vendorId,
+        @Param("category") String category,
+        @Param("cutoff") LocalDateTime cutoff
+    );
+
     @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
             "WHERE va.event.id = :eventId " +
             "AND va.serviceCategory = :category")

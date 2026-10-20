@@ -3,23 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import RichProposalForm from '../components/RichProposalForm';
+import ConversionPreviewModal from '../components/ConversionPreviewModal';
 import { useApp } from '../context/AppContext';
 
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, fetchInquiryById, convertInquiryToEvent } = useApp();
+  const { state, fetchInquiryById, convertInquiryToEvent, previewConversion } = useApp();
   const { loading } = state;
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const [proposal, setProposal] = useState({
-    name: '',
-    venue: '',
-    venueId: '',
-    venueDetails: '',
-  });
+  const [preview, setPreview] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [venueWarning, setVenueWarning] = useState('');
 
   const loadInquiry = useCallback(async () => {
     const data = await fetchInquiryById(id);
@@ -35,23 +33,46 @@ export default function InquiryDetail() {
     loadInquiry();
   }, [loadInquiry]);
 
-  const handleConvert = async (e) => {
-    e.preventDefault();
-    if (!proposal.name || !proposal.venue) {
-      setError('Event name and venue are required');
-      return;
+  const handleOpenPreview = async () => {
+    setPreviewLoading(true);
+    setError('');
+    try {
+      const data = await previewConversion(id);
+      setPreview(data);
+      setShowPreview(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load preview');
+    } finally {
+      setPreviewLoading(false);
     }
+  };
 
+  const handleConfirmConvert = async () => {
     setSubmitting(true);
     setError('');
-
+    setVenueWarning('');
     try {
+      // Auto-generate a sensible event name since we removed the manual input
+      const defaultName = `${inquiry.eventType.charAt(0).toUpperCase() + inquiry.eventType.slice(1)} - ${inquiry.clientName}`;
+
+      // The proposal's venue may have been booked by another event between
+      // proposal and convert. The preview tells us via venue.available — never
+      // send a known-booked venueId, or the backend 400s with VENUE_CONFLICT.
+      // Backend also degrades best-effort, but skipping upfront is cleaner.
+      const venueTaken = preview?.venue && preview.venue.available === false;
+      if (venueTaken) {
+        setVenueWarning(
+          preview.venue.message ||
+          'That venue is no longer available — converting without a venue booking. You can assign a free venue afterwards.'
+        );
+      }
+
       await convertInquiryToEvent(id, {
-        name: proposal.name,
-        venue: proposal.venue,
-        venueId: proposal.venueId || null,
-        venueDetails: proposal.venueDetails || null,
+        name: defaultName,
+        venue: venueTaken ? null : (preview?.venue?.venueName || null),
+        venueId: venueTaken ? null : (preview?.venue?.venueId || null),
       });
+      setShowPreview(false);
       navigate('/coordinator/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to convert');
@@ -131,61 +152,51 @@ export default function InquiryDetail() {
         )}
 
         {canConvert && (
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Create Event</h3>
-            <form onSubmit={handleConvert} className="space-y-4">
-              {error && <div className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                  value={proposal.name}
-                  onChange={(e) => setProposal({ ...proposal, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                  value={proposal.venue}
-                  onChange={(e) => setProposal({ ...proposal, venue: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Venue Details (JSON)</label>
-                <textarea
-                  rows="3"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                  value={proposal.venueDetails}
-                  onChange={(e) => setProposal({ ...proposal, venueDetails: e.target.value })}
-                  placeholder='{"capacity": 500, "features": ["Projector", "Sound System"]}'
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50"
-              >
-                {submitting ? 'Creating...' : 'Create Event'}
-              </button>
-            </form>
+          <div className="bg-white rounded-xl shadow p-6 flex flex-col justify-center items-center text-center">
+            <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Proposal Accepted</h3>
+            <p className="text-sm text-gray-500 mb-6 max-w-sm">
+              The client has accepted the proposal. You are ready to create the event and assign vendors.
+            </p>
+            <button
+              onClick={handleOpenPreview}
+              disabled={previewLoading}
+              className="w-full max-w-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {previewLoading ? 'Analyzing...' : 'Review & Convert to Event'}
+            </button>
+            {venueWarning && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 max-w-sm">
+                {venueWarning}
+              </p>
+            )}
           </div>
         )}
 
         {!canConvert && !canSendProposal && (
           <div className="bg-white rounded-xl shadow p-6">
             <div className="text-center py-6 text-gray-500">
-              <p className="text-lg font-medium">Cannot Create Event</p>
-              <p className="text-sm">This inquiry must be in <strong>PROPOSAL_ACCEPTED</strong> status.</p>
-              <p className="text-sm mt-2">Current status: <StatusBadge status={inquiry?.status} /></p>
+              <p className="text-lg font-medium">No Action Required</p>
+              <p className="text-sm mt-1">
+                This inquiry is currently <strong>{inquiry.status.replace(/_/g, ' ')}</strong>.
+              </p>
             </div>
           </div>
         )}
       </div>
+
+      {showPreview && preview && (
+        <ConversionPreviewModal
+          preview={preview}
+          onConfirm={handleConfirmConvert}
+          onCancel={() => setShowPreview(false)}
+          submitting={submitting}
+        />
+      )}
     </Layout>
   );
 }

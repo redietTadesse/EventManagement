@@ -3,6 +3,8 @@ package com.aicc.eventmanagement.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -15,6 +17,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -24,6 +27,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+
+    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    private String allowedOriginsProp;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -39,6 +45,9 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        // Pre-flight requests must never require auth, otherwise
+                        // browsers report "CORS header missing" with status 403
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated()
@@ -50,13 +59,31 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // TODO: Replace with your frontend origin(s) before deployment
-        // For local development:
-        config.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173"));
-        // For production, add your deployed frontend URL:
-        // config.setAllowedOrigins(List.of("https://your-frontend-domain.com"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        // Origins come from application.properties: cors.allowed-origins (comma-separated).
+        // Explicit origins (no "*") so allowCredentials(true) is legal.
+        List<String> origins = Arrays.stream(allowedOriginsProp.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        config.setAllowedOrigins(origins);
+        // PATCH is required for /api/v1/inquiries/{id}/accept and /reject.
+        // Missing PATCH here is what caused:
+        //   OPTIONS .../accept -> 403 + "CORS header 'Access-Control-Allow-Origin' missing"
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With",
+                "Access-Control-Request-Method",
+                "Access-Control-Request-Headers"
+        ));
+        config.setExposedHeaders(List.of("Authorization"));
+        // Set true if the frontend uses fetch({ credentials: "include" }) / axios withCredentials.
+        // With explicit allowedOrigins this is safe. If you don't use cookies, it is harmless.
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;

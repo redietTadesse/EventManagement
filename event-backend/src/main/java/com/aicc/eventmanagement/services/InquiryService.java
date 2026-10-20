@@ -12,6 +12,7 @@ import com.aicc.eventmanagement.events.InquiryStatusChangedEvent;
 import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
+import com.aicc.eventmanagement.payload.ConversionPreviewResponse;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
@@ -20,7 +21,9 @@ import com.aicc.eventmanagement.util.CategoryUtils;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
+import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -50,6 +54,8 @@ public class InquiryService {
     private final UserRepository userRepository;
     private final VenueService venueService;
     private final VendorService vendorService;
+    private final VendorRankingService rankingService;
+    private final VendorAssignmentRepository assignmentRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -260,19 +266,37 @@ public class InquiryService {
 
         Event savedEvent = eventRepository.save(event);
 
-        // Book the venue if venueId is provided
+        // Book the venue on a best-effort basis. The proposal's venueId may have
+        // been taken by another event between proposal and convert (stale read).
+        // A VENUE_CONFLICT must not abort the whole conversion — the event,
+        // vendors and checklist are the critical path; the coordinator can
+        // re-assign a free venue afterwards via PUT /events/{id}.
         if (request.getVenueId() != null) {
             try {
+                if (!venueService.isVenueAvailable(request.getVenueId(), inquiry.getEventDate())) {
+                    throw new BusinessException(
+                            String.format("Venue is already booked on %s — converting without a venue booking",
+                                    inquiry.getEventDate()),
+                            "VENUE_CONFLICT");
+                }
                 venueService.bookVenue(
-                    request.getVenueId(),
-                    savedEvent.getId(),
-                    inquiry.getEventDate()
+                        request.getVenueId(),
+                        savedEvent.getId(),
+                        inquiry.getEventDate()
                 );
                 log.info("Venue {} booked for event {} on {}",
-                    request.getVenueId(), savedEvent.getId(), inquiry.getEventDate());
+                        request.getVenueId(), savedEvent.getId(), inquiry.getEventDate());
             } catch (BusinessException e) {
-                log.warn("Venue booking failed for event {}: {}", savedEvent.getId(), e.getMessage());
-                // Don't fail the whole conversion - venue booking is advisory
+                if (!"VENUE_CONFLICT".equals(e.getErrorCode())) {
+                    throw e;
+                }
+                log.warn("Convert {} proceeding without venue booking (venueId={}): {}",
+                        inquiryId, request.getVenueId(), e.getMessage());
+                // Keep the venue display name for context, but drop the hard
+                // booking reference so the event does not point at a venue
+                // booked by someone else.
+                savedEvent.setVenueId(null);
+                eventRepository.save(savedEvent);
             }
         }
 
@@ -311,6 +335,144 @@ public class InquiryService {
 
         log.info("Converted inquiry {} to event {} ({} checklist items)", inquiryId, savedEvent.getId(), checklistItems.size());
         return savedEvent;
+    }
+
+    // ============================================================
+    // CONVERSION PREVIEW (dry run of automatic assignment)
+    // ============================================================
+    @Transactional(readOnly = true)
+    public ConversionPreviewResponse previewConversion(Long inquiryId) {
+        Inquiry inquiry = getInquiryById(inquiryId);
+
+        if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
+            throw new BusinessException(
+                "Only accepted proposals can be previewed for conversion. Current status: " + inquiry.getStatus(),
+                "INVALID_STATE");
+        }
+
+        if (inquiry.getEvent() != null) {
+            throw new BusinessException(
+                "This inquiry already has an event associated.",
+                "ALREADY_CONVERTED");
+        }
+
+        List<String> requiredCategories = resolvePreviewCategories(inquiry);
+        LocalDate eventDate = inquiry.getEventDate();
+
+        ConversionPreviewResponse.VenuePreview venuePreview = buildVenuePreview(inquiry, eventDate);
+
+        List<ConversionPreviewResponse.CategoryPreview> categoryPreviews = new ArrayList<>();
+        for (String category : requiredCategories) {
+            List<VendorRankingService.Ranked> ranked =
+                rankingService.rank(category, eventDate, Set.of());
+
+            List<ConversionPreviewResponse.VendorCandidate> candidates = new ArrayList<>();
+            for (int i = 0; i < Math.min(3, ranked.size()); i++) {
+                VendorRankingService.Ranked r = ranked.get(i);
+                var v = r.vendor();
+                boolean hasDeclined = hasRecentDecline(v.getId(), category);
+                long load = assignmentRepository.countActiveAndPendingByVendor(v.getId());
+
+                candidates.add(ConversionPreviewResponse.VendorCandidate.builder()
+                    .vendorId(v.getId())
+                    .companyName(v.getCompanyName())
+                    .rating(v.getRating())
+                    .currentLoad(load)
+                    .score(r.score())
+                    .rank(i + 1)
+                    .hasRecentDecline(hasDeclined)
+                    .build());
+            }
+
+            String warning = null;
+            if (candidates.isEmpty()) {
+                warning = "No eligible vendors available for this category on " + eventDate;
+            } else if (candidates.get(0).isHasRecentDecline()) {
+                warning = "Top-ranked vendor has declined a similar offer in the last 30 days";
+            }
+
+            categoryPreviews.add(ConversionPreviewResponse.CategoryPreview.builder()
+                .category(category)
+                .candidates(candidates)
+                .warning(warning)
+                .build());
+        }
+
+        String timeline = "Vendors typically respond within 2 days. "
+            + "Event should reach Confirmed within 5 days if all vendors accept.";
+
+        return ConversionPreviewResponse.builder()
+            .inquiryId(inquiryId)
+            .eventType(inquiry.getEventType())
+            .eventDate(eventDate)
+            .expectedAttendees(inquiry.getExpectedAttendees())
+            .requiredCategories(requiredCategories)
+            .venue(venuePreview)
+            .categories(categoryPreviews)
+            .timelineEstimate(timeline)
+            .build();
+    }
+
+    private List<String> resolvePreviewCategories(Inquiry inquiry) {
+        if (inquiry.getCategories() != null && !inquiry.getCategories().isBlank()) {
+            return CategoryUtils.split(inquiry.getCategories());
+        }
+        if (inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()) {
+            return CategoryUtils.split(inquiry.getRequestedCategories());
+        }
+        return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of());
+    }
+
+    private ConversionPreviewResponse.VenuePreview buildVenuePreview(Inquiry inquiry, LocalDate eventDate) {
+        if (inquiry.getProposal() == null || inquiry.getProposal().isBlank()) {
+            return ConversionPreviewResponse.VenuePreview.builder()
+                .available(false)
+                .message("No proposal attached to this inquiry")
+                .build();
+        }
+
+        try {
+            Map<String, Object> proposal = objectMapper.readValue(
+                inquiry.getProposal(), new TypeReference<>() {});
+
+            Long venueId = proposal.get("venueId") != null
+                ? ((Number) proposal.get("venueId")).longValue() : null;
+            String venueName = (String) proposal.get("venue");
+
+            if (venueId == null) {
+                return ConversionPreviewResponse.VenuePreview.builder()
+                    .venueName(venueName)
+                    .available(false)
+                    .message("No specific venue selected in proposal")
+                    .build();
+            }
+
+            boolean available = venueService.isVenueAvailable(venueId, eventDate);
+            String message = available
+                ? "Available on " + eventDate
+                : "Already booked on " + eventDate;
+
+            return ConversionPreviewResponse.VenuePreview.builder()
+                .venueId(venueId)
+                .venueName(venueName)
+                .available(available)
+                .message(message)
+                .build();
+
+        } catch (Exception e) {
+            log.warn("Failed to build venue preview for inquiry {}: {}",
+                inquiry.getId(), e.getMessage());
+            return ConversionPreviewResponse.VenuePreview.builder()
+                .available(false)
+                .message("Could not parse proposal venue details")
+                .build();
+        }
+    }
+
+    private boolean hasRecentDecline(Long vendorId, String category) {
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(30);
+        return assignmentRepository.existsRecentDeclineByVendorAndCategory(
+            vendorId, category, cutoff);
     }
 
     // ============================================================

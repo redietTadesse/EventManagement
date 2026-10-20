@@ -5,13 +5,13 @@ import StatusBadge from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
 
 export default function ClientDashboard() {
-  const { state, fetchInquiries } = useApp();
+  const { state, fetchMyInquiries } = useApp();
   const { currentUser, inquiries, loading } = state;
   const [events, setEvents] = useState([]);
 
   useEffect(() => {
-    fetchInquiries();
-  }, [fetchInquiries]);
+    if (currentUser?.id != null) fetchMyInquiries(currentUser.id).catch(() => {});
+  }, [fetchMyInquiries, currentUser?.id]);
 
   useEffect(() => {
     // Filter inquiries that have been converted to events

@@ -5,12 +5,12 @@ import StatusBadge from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
 
 export default function ClientInquiries() {
-  const { state, fetchInquiries } = useApp();
+  const { state, fetchMyInquiries } = useApp();
   const { currentUser, inquiries, loading } = state;
 
   useEffect(() => {
-    fetchInquiries();
-  }, [fetchInquiries]);
+    if (currentUser?.id != null) fetchMyInquiries(currentUser.id).catch(() => {});
+  }, [fetchMyInquiries, currentUser?.id]);
 
   const myInquiries = inquiries.filter(i => i.clientId === currentUser?.id);
 

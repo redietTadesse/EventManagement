@@ -7,15 +7,15 @@ import { useApp } from '../context/AppContext';
 const FILTERS = ['ALL', 'EVENT_CREATED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
 
 export default function ClientEventHistory() {
-  const { state, fetchInquiries } = useApp();
+  const { state, fetchMyInquiries } = useApp();
   const { currentUser, inquiries, loading } = state;
   const [params, setParams] = useSearchParams();
 
   const status = params.get('status') || 'ALL';
 
   useEffect(() => {
-    fetchInquiries();
-  }, [fetchInquiries]);
+    if (currentUser?.id != null) fetchMyInquiries(currentUser.id).catch(() => {});
+  }, [fetchMyInquiries, currentUser?.id]);
 
   // Filter inquiries that have been converted to events
   const myEvents = inquiries.filter(i => 

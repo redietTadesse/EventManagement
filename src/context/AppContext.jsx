@@ -150,6 +150,23 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
+  /**
+   * Client-scoped list. GET /inquiries is COORDINATOR/ADMIN-only, so CLIENT-role
+   * callers get 403 there. The backend exposes GET /inquiries/client/{clientId}
+   * for CLIENT/COORDINATOR/ADMIN — use that for all client-facing pages.
+   */
+  const fetchMyInquiries = useCallback(async (clientId) => {
+    if (clientId == null) return [];
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const res = await api.get(`/inquiries/client/${clientId}`);
+      dispatch({ type: 'SET_INQUIRIES', payload: res.data });
+      return res.data;
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, []);
+
   const createInquiry = useCallback(async (payload) => {
     const res = await api.post('/inquiries', payload);
     dispatch({ type: 'ADD_INQUIRY', payload: res.data });
@@ -211,6 +228,11 @@ export const AppProvider = ({ children }) => {
   const rejectProposal = useCallback(async (inquiryId, reason) => {
     const res = await api.patch(`/inquiries/${inquiryId}/reject`, null, { params: { reason } });
     dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
+    return res.data;
+  }, []);
+
+  const previewConversion = useCallback(async (inquiryId) => {
+    const res = await api.get(`/inquiries/${inquiryId}/conversion-preview`);
     return res.data;
   }, []);
 
@@ -328,8 +350,10 @@ export const AppProvider = ({ children }) => {
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus,
     fetchMyVendorProfile,
     // inquiries
-    fetchInquiries, fetchInquiryById, createInquiry, updateInquiry,
-    sendProposal, acceptProposal, rejectProposal, convertInquiryToEvent,
+    fetchInquiries, fetchMyInquiries, fetchInquiryById, createInquiry, updateInquiry,
+    sendProposal, acceptProposal, rejectProposal,
+    previewConversion,          // <-- add
+    convertInquiryToEvent,
     // assignments
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment,
     forceAssign, fetchOpenAssignments,
