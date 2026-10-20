@@ -11,6 +11,8 @@ import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.VendorAssignmentEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
+import com.aicc.eventmanagement.payload.CreateVendorRequest;
+import com.aicc.eventmanagement.payload.UpdateVendorRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
@@ -20,6 +22,7 @@ import com.aicc.eventmanagement.util.CategoryUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +49,71 @@ public class VendorService {
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
     private final VendorRankingService rankingService;
+    private final PasswordEncoder passwordEncoder;
+
+    @Transactional
+    public Vendor createVendor(CreateVendorRequest req) {
+        if (userRepository.existsByUsername(req.getUsername()))
+            throw new BusinessException("Username taken", "USERNAME_TAKEN");
+        if (userRepository.existsByEmail(req.getEmail()))
+            throw new BusinessException("Email taken", "EMAIL_TAKEN");
+
+        User user = User.builder()
+                .username(req.getUsername())
+                .email(req.getEmail())
+                .passwordHash(passwordEncoder.encode(req.getPassword()))
+                .fullName(req.getFullName() != null ? req.getFullName() : req.getCompanyName())
+                .phone(req.getPhone())
+                .role(Role.VENDOR)
+                .isActive(true)
+                .build();
+        userRepository.save(user);
+
+        Vendor vendor = Vendor.builder()
+                .userId(user.getId())
+                .companyName(req.getCompanyName())
+                .serviceCategory(req.getServiceCategory())
+                .description(req.getDescription())
+                .phone(req.getPhone())
+                .email(req.getEmail())
+                .rating(3)          // sensible default for new vendors
+                .isActive(true)
+                .build();
+        return vendorRepository.save(vendor);
+    }
+
+    @Transactional
+    public Vendor updateVendor(Long id, UpdateVendorRequest req) {
+        Vendor vendor = getVendorById(id);
+
+        if (req.getCompanyName() != null)      vendor.setCompanyName(req.getCompanyName());
+        if (req.getServiceCategory() != null)  vendor.setServiceCategory(req.getServiceCategory());
+        if (req.getDescription() != null)      vendor.setDescription(req.getDescription());
+        if (req.getPhone() != null)            vendor.setPhone(req.getPhone());
+        if (req.getEmail() != null)            vendor.setEmail(req.getEmail());
+        if (req.getActive() != null)           vendor.setActive(req.getActive());
+
+        log.info("Updated vendor {}", id);
+        return vendorRepository.save(vendor);
+    }
+
+    @Transactional
+    public Vendor toggleActive(Long id) {
+        Vendor vendor = getVendorById(id);
+        vendor.setActive(!vendor.isActive());
+
+        // Keep the linked user account in sync — a deactivated vendor should not
+        // be able to log in and accept new assignments.
+        if (vendor.getUserId() != null) {
+            userRepository.findById(vendor.getUserId()).ifPresent(u -> {
+                u.setActive(vendor.isActive());
+                userRepository.save(u);
+            });
+        }
+
+        log.info("Toggled vendor {} active -> {}", id, vendor.isActive());
+        return vendorRepository.save(vendor);
+    }
 
     // ============ ESCALATION BUILDER ============
 
@@ -138,6 +206,8 @@ public class VendorService {
 
         return true;
     }
+
+
 
     @Transactional
     public void addBookedDate(Long vendorId, LocalDate date) {

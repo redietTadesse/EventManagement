@@ -121,21 +121,16 @@ export const AppProvider = ({ children }) => {
     await fetchUsers();
   }, [fetchUsers]);
 
-  /**
-   * Vendors are users with role=VENDOR. There is no POST /vendors endpoint —
-   * VendorController exposes only read + booked-dates + ratings — so creation
-   * goes through the user-management endpoint.
-   */
   const createVendor = useCallback(async (vendorData) => {
-    const res = await api.post('/users', { ...vendorData, role: 'VENDOR' });
-    await fetchUsers();
+    const res = await api.post('/vendors', vendorData);
+    await fetchVendors();
     return res.data;
-  }, [fetchUsers]);
+  }, [fetchVendors]);
 
   const toggleVendorStatus = useCallback(async (id) => {
-    await api.patch(`/users/${id}/toggle-active`);
-    await fetchUsers();
-  }, [fetchUsers]);
+    await api.patch(`/vendors/${id}/toggle-active`);
+    await fetchVendors();
+  }, [fetchVendors]);
 
   // ===== INQUIRIES =====
 

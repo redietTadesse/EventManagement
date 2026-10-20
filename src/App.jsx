@@ -7,6 +7,7 @@ import Login from './components/Login';
 import ClientDashboard from './client/ClientDashboard';
 import NewInquiry from './client/NewInquiry';
 import ClientInquiries from './client/ClientInquiries';
+import ClientInquiryDetail from './client/ClientInquiryDetail';
 import ClientEventHistory from './client/ClientEventHistory';
 import ClientEventDetail from './client/ClientEventDetail';
 import CoordinatorDashboard from './coordinator/Dashboard';
@@ -60,7 +61,7 @@ function AppRoutes() {
         path="/client/inquiries/:id"
         element={
           <ProtectedRoute allowedRoles={['CLIENT']}>
-            <InquiryDetail />
+            <ClientInquiryDetail />
           </ProtectedRoute>
         }
       />

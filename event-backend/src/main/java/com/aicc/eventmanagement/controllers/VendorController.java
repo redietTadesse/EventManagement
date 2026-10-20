@@ -5,6 +5,8 @@ import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.exceptions.BusinessException;
+import com.aicc.eventmanagement.payload.CreateVendorRequest;
+import com.aicc.eventmanagement.payload.UpdateVendorRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
@@ -19,6 +21,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -70,6 +73,32 @@ public class VendorController {
     @Operation(summary = "Get vendor by ID")
     public ResponseEntity<Vendor> getVendorById(@PathVariable Long id) {
         return ResponseEntity.ok(vendorService.getVendorById(id));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Create a vendor (admin only)",
+            description = "Creates a User account with role=VENDOR and a linked Vendor profile atomically")
+    public ResponseEntity<Vendor> createVendor(@Valid @RequestBody CreateVendorRequest request) {
+        Vendor created = vendorService.createVendor(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Update a vendor (admin only)")
+    public ResponseEntity<Vendor> updateVendor(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateVendorRequest request) {
+        Vendor updated = vendorService.updateVendor(id, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/{id}/toggle-active")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Activate or deactivate a vendor (admin only)")
+    public ResponseEntity<Vendor> toggleVendorActive(@PathVariable Long id) {
+        return ResponseEntity.ok(vendorService.toggleActive(id));
     }
 
     @GetMapping("/category/{category}")
