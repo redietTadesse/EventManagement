@@ -44,6 +44,14 @@ public interface EventRepository extends JpaRepository<Event, Long> {
                             @Param("deadStatuses") List<EventStatus> deadStatuses);
 
     @Query("""
+       SELECT e FROM Event e
+       WHERE e.status = :status
+         AND e.inquiry.eventDate < :today
+       """)
+    List<Event> findPastEventsByStatus(@Param("status") EventStatus status,
+                                       @Param("today") LocalDate today);
+
+    @Query("""
            SELECT DISTINCT e.venueId
            FROM Event e
            WHERE e.inquiry.eventDate = :date

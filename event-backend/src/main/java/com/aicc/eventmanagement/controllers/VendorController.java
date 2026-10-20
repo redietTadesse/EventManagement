@@ -5,8 +5,10 @@ import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.exceptions.BusinessException;
+import com.aicc.eventmanagement.payload.AvailabilityGridResponse;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
+import com.aicc.eventmanagement.services.AvailabilityService;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
 import com.aicc.eventmanagement.services.ConflictResolutionService.AlternativeVendor;
 import com.aicc.eventmanagement.services.ConflictResolutionService.ResolutionSuggestion;
@@ -15,7 +17,6 @@ import com.aicc.eventmanagement.services.VendorRatingService.RatingStats;
 import com.aicc.eventmanagement.services.VendorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -27,7 +28,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -37,10 +37,31 @@ import java.util.stream.Collectors;
 @Tag(name = "Vendor Management", description = "Endpoints for managing vendors")
 public class VendorController {
 
+    private final AvailabilityService availabilityService;
     private final VendorService vendorService;
     private final VendorRatingService ratingService;
     private final ConflictResolutionService conflictService;
     private final UserRepository userRepository;
+
+    // ============================================================
+    // AVAILABILITY GRID (NEW)
+    // ============================================================
+
+    @GetMapping("/availability-grid")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get availability grid for vendors",
+            description = "Returns a 30-day availability grid for all active vendors in a category")
+    public ResponseEntity<AvailabilityGridResponse> getAvailabilityGrid(
+            @RequestParam String category,
+            @RequestParam(defaultValue = "30") int daysAhead) {
+
+        log.info("Fetching availability grid for category: {}, daysAhead: {}", category, daysAhead);
+        return ResponseEntity.ok(availabilityService.getAvailabilityGrid(category, daysAhead));
+    }
+
+    // ============================================================
+    // EXISTING ENDPOINTS
+    // ============================================================
 
     @GetMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
@@ -104,13 +125,13 @@ public class VendorController {
         // IDOR fix: vendors can only access their own assignments
         if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
             throw new BusinessException(
-                "You can only view your own assignments",
-                "ACCESS_DENIED");
+                    "You can only view your own assignments",
+                    "ACCESS_DENIED");
         }
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(id);
         return ResponseEntity.ok(assignments.stream()
-            .map(VendorAssignmentResponse::from)
-            .collect(Collectors.toList()));
+                .map(VendorAssignmentResponse::from)
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/pending")
@@ -122,13 +143,13 @@ public class VendorController {
         // IDOR fix: vendors can only access their own pending assignments
         if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
             throw new BusinessException(
-                "You can only view your own pending assignments",
-                "ACCESS_DENIED");
+                    "You can only view your own pending assignments",
+                    "ACCESS_DENIED");
         }
         List<VendorAssignment> assignments = vendorService.getPendingAssignmentsForVendor(id);
         return ResponseEntity.ok(assignments.stream()
-            .map(VendorAssignmentResponse::from)
-            .collect(Collectors.toList()));
+                .map(VendorAssignmentResponse::from)
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/load")
@@ -225,7 +246,7 @@ public class VendorController {
     private boolean hasRole(UserDetails principal, Role role) {
         if (principal == null) return false;
         return principal.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_" + role.name()));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role.name()));
     }
 
     private boolean isVendorIdMatch(Long vendorId, UserDetails principal) {
@@ -233,7 +254,7 @@ public class VendorController {
         // Use the proper User-Vendor relationship through VendorService
         try {
             User user = userRepository.findByUsername(principal.getUsername())
-                .orElse(null);
+                    .orElse(null);
             if (user != null) {
                 Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
                 return vendor != null && vendor.getId().equals(vendorId);
