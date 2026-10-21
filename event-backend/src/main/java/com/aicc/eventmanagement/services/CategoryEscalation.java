@@ -57,4 +57,13 @@ public record CategoryEscalation(
     public int attemptsCount() {
         return attempts.size();
     }
+    public boolean isExhausted() {
+        return currentAttempt()
+                .map(a -> a.getStatus() == VendorAssignmentStatus.DECLINED
+                        || a.getStatus() == VendorAssignmentStatus.EXPIRED
+                        || a.getStatus() == VendorAssignmentStatus.OPEN
+                        || a.getStatus() == VendorAssignmentStatus.CANCELLED)
+                .orElse(true);
+    }
+    
 }
