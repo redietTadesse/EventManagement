@@ -307,7 +307,14 @@ public class VendorService {
             return List.of();
         }
         try {
-            return objectMapper.readValue(inquiry.getPreferredVendorIds(), new TypeReference<List<Long>>() {});
+            // preferred_vendor_ids is a JSON column, so a null written through it is
+            // stored as the JSON literal "null" rather than SQL NULL. That string is
+            // neither null nor blank, so it reaches Jackson, which parses JSON null
+            // into a Java null. Without this guard the method breaks its own contract
+            // and the caller NPEs on isEmpty().
+            List<Long> parsed = objectMapper.readValue(
+                    inquiry.getPreferredVendorIds(), new TypeReference<List<Long>>() {});
+            return parsed == null ? List.of() : parsed;
         } catch (Exception e) {
             log.warn("Failed to parse preferred vendors for inquiry {}: {}", inquiry.getId(), e.getMessage());
             return List.of();
