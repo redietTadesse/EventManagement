@@ -80,7 +80,7 @@ class VendorSuggestionServiceTest {
                         Set<Long> excluded = argumentExcluded == null ? Set.of() : argumentExcluded;
             return mockVendors.stream()
                     .filter(v -> !excluded.contains(v.getId()))
-                    .map(v -> new VendorRankingService.Ranked(v, v.getRating() / 5.0))
+                    .map(v -> { double ratingTerm = v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0); })
                     .toList();
         });
         when(assignmentRepository.countActiveAndPendingByVendor(anyLong())).thenReturn(0L);
@@ -153,7 +153,7 @@ class VendorSuggestionServiceTest {
     @DisplayName("Should filter out unavailable vendors (booked dates)")
     void testFilterUnavailableVendors() {
         when(rankingService.rank(any(), any(), any())).thenReturn(mockVendors.subList(1, 3).stream()
-                .map(v -> new VendorRankingService.Ranked(v, v.getRating() / 5.0))
+                .map(v -> { double ratingTerm = v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0); })
                 .toList());
         when(vendorRepository.findActiveByCategory("av")).thenReturn(mockVendors);
         when(bookedDateRepository.existsByVendorIdAndBookedDate(1L, testDate)).thenReturn(true);
