@@ -129,32 +129,60 @@ class WorkflowEngineTest {
         workflowEngine.validateTransition(
                 EventStatus.NEEDS_COORDINATOR,
                 EventStatus.CONFIRMED,
-                Role.COORDINATOR
-        );
-    }
-
-    @Test
-    @DisplayName("DECLINED → OPEN is a valid assignment transition triggered by the vendor")
-    void declinedToOpenAssignmentValid() {
-        // Produced by autoReassign when the ranked vendor list is exhausted. The
-        // vendor's own decline is what triggered that path, hence Role.VENDOR.
-        assertThat(workflowEngine.isValidAssignmentTransition(
-                VendorAssignmentStatus.DECLINED,
-                VendorAssignmentStatus.OPEN
-        )).isTrue();
-
-        workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.DECLINED,
-                VendorAssignmentStatus.OPEN,
                 Role.VENDOR
         );
     }
 
     @Test
+    @DisplayName("DECLINED is terminal: a failed attempt is never rewritten")
+    void declinedIsTerminal() {
+        // The pool offer is now a separate vendor-less row inserted by the service,
+        // not a rewrite of the declining vendor's row. Recycling that row meant the
+        // eventual claim overwrote vendor_id and erased the attempt from the trail
+        // and from findTriedVendorIds, letting the ranker re-offer the same event to
+        // a vendor who had already declined it.
+        assertThat(VendorAssignmentStatus.DECLINED.isTerminal()).isTrue();
+
+        for (VendorAssignmentStatus target : VendorAssignmentStatus.values()) {
+            assertThat(workflowEngine.isValidAssignmentTransition(
+                    VendorAssignmentStatus.DECLINED, target))
+                    .as("DECLINED → %s should be invalid", target)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("PENDING → EXPIRED is valid and EXPIRED is terminal")
+    void pendingToExpiredValidAndTerminal() {
+        assertThat(workflowEngine.isValidAssignmentTransition(
+                VendorAssignmentStatus.PENDING,
+                VendorAssignmentStatus.EXPIRED
+        )).isTrue();
+
+        // Attributed to the vendor: the cause is the vendor failing to act, the
+        // same actor as a decline, which also keeps the resulting event rollup
+        // inside the roles already permitted for AWAITING_VENDORS → NEEDS_COORDINATOR.
+        workflowEngine.validateAssignmentTransition(
+                VendorAssignmentStatus.PENDING,
+                VendorAssignmentStatus.EXPIRED,
+                Role.VENDOR
+        );
+
+        assertThat(VendorAssignmentStatus.EXPIRED.isTerminal()).isTrue();
+
+        for (VendorAssignmentStatus target : VendorAssignmentStatus.values()) {
+            assertThat(workflowEngine.isValidAssignmentTransition(
+                    VendorAssignmentStatus.EXPIRED, target))
+                    .as("EXPIRED → %s should be invalid", target)
+                    .isFalse();
+        }
+    }
+
+    @Test
     @DisplayName("PENDING → OPEN is not a valid assignment transition")
     void pendingToOpenAssignmentInvalid() {
-        // Nothing produces this: an assignment reaches OPEN only via
-        // PENDING → DECLINED → OPEN (autoReassign exhaustion).
+        // Nothing produces this: a category reaches OPEN only when the service
+        // inserts a new vendor-less row after the ranked list is exhausted.
         assertThat(workflowEngine.isValidAssignmentTransition(
                 VendorAssignmentStatus.PENDING,
                 VendorAssignmentStatus.OPEN
@@ -210,7 +238,8 @@ class WorkflowEngineTest {
     void assignmentTableInvariantsHold() {
         // Re-run init: throws if a terminal assignment state has outgoing transitions,
         // a non-terminal one has none, or a transition lacks a role map entry.
-        // DECLINED must be non-terminal (→ OPEN) and CANCELLED terminal for this to pass.
+        // PENDING, ACCEPTED and OPEN are the non-terminal states; DECLINED, EXPIRED,
+        // COMPLETED and CANCELLED are terminal and must declare no outgoing edges.
         WorkflowEngine fresh = new WorkflowEngine();
         assertThatCode(fresh::init).doesNotThrowAnyException();
     }
@@ -445,6 +474,7 @@ class WorkflowEngineTest {
         assertThat(workflowEngine.isValidTransition(
                 EventStatus.EVENT_CREATED, EventStatus.CANCELLED)).isFalse();
     }
+
     // ============ ROLLUP-PRODUCED TRANSITIONS (Gap 1) ============
 
     @Test
