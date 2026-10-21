@@ -28,7 +28,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.aicc.eventmanagement.payload.VendorTrailResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -838,5 +838,124 @@ public class VendorService {
 
         log.info("Coordinator force-assigned vendor {} to open assignment {}", vendorId, assignmentId);
         return saved;
+    }
+    // ============ VENDOR TRAIL ============
+
+    /**
+     * The ordered offer history for every category of an event.
+     *
+     * Categories are the event's required ones first, then any category that has
+     * attempts without being required. A coordinator can assign a category the event
+     * type does not list, and leaving it out would hide real history from the trail.
+     */
+    @Transactional(readOnly = true)
+    public VendorTrailResponse getVendorTrail(Long eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
+
+        List<VendorAssignment> all = assignmentRepository.findByEventId(eventId);
+
+        List<String> ordered = new ArrayList<>(requiredCategoriesFor(event));
+        all.stream()
+                .map(VendorAssignment::getServiceCategory)
+                .distinct()
+                .filter(c -> !ordered.contains(c))
+                .forEach(ordered::add);
+
+        List<VendorTrailResponse.CategoryTrail> categories = ordered.stream()
+                .map(category -> toCategoryTrail(new CategoryEscalation(
+                        eventId,
+                        category,
+                        all.stream()
+                                .filter(a -> category.equals(a.getServiceCategory()))
+                                .sorted(Comparator.comparing(VendorAssignment::getId))
+                                .toList())))
+                .toList();
+
+        return new VendorTrailResponse(event.getId(), event.getName(), categories);
+    }
+
+    private VendorTrailResponse.CategoryTrail toCategoryTrail(CategoryEscalation escalation) {
+        List<VendorAssignment> attempts = escalation.attempts();
+        List<VendorTrailResponse.Attempt> rows = new ArrayList<>();
+
+        for (int i = 0; i < attempts.size(); i++) {
+            VendorAssignment next = (i + 1 < attempts.size()) ? attempts.get(i + 1) : null;
+            rows.add(toAttempt(i + 1, attempts.get(i), next));
+        }
+
+        String state = escalation.isResolved()
+                ? "RESOLVED"
+                : escalation.isPending() ? "PENDING" : "EXHAUSTED";
+
+        return new VendorTrailResponse.CategoryTrail(
+                escalation.category(), state, rows.size(), rows);
+    }
+
+    private VendorTrailResponse.Attempt toAttempt(
+            int number, VendorAssignment a, VendorAssignment next) {
+
+        Vendor vendor = a.getVendor();
+
+        // An unclaimed pool row has no vendor and so no assignedAt. createdAt is when
+        // it was opened to the pool, which is the moment the coordinator cares about.
+        LocalDateTime offeredAt = a.getAssignedAt() != null
+                ? a.getAssignedAt()
+                : a.getCreatedAt();
+
+        return new VendorTrailResponse.Attempt(
+                number,
+                a.getId(),
+                vendor == null ? null : vendor.getId(),
+                a.getVendorName(),
+                a.getStatus(),
+                a.getRankingScore(),
+                a.getSelectionReason(),
+                a.getSelectionReason() == null ? null : a.getSelectionReason().getLabel(),
+                offeredAt,
+                a.getRespondedAt(),
+                a.getExpiresAt(),
+                a.getDeclineReason(),
+                describeOutcome(a, next)
+        );
+    }
+
+    /**
+     * What happened after this attempt, in one line.
+     *
+     * For a failed attempt this is derived from the NEXT row's stored selectionReason
+     * rather than its current status. A pool row that has since been claimed is now
+     * PENDING with a vendor attached, so reading its status would report "advanced to
+     * X" and lose the fact that the category went to the whole pool first.
+     */
+    private String describeOutcome(VendorAssignment a, VendorAssignment next) {
+        switch (a.getStatus()) {
+            case ACCEPTED:
+                return "accepted";
+            case COMPLETED:
+                return "completed";
+            case CANCELLED:
+                return "cancelled";
+            case PENDING:
+                return "awaiting response";
+            case OPEN:
+                return "open to the vendor pool";
+            case DECLINED:
+            case EXPIRED:
+                if (next == null) {
+                    return "no further action yet";
+                }
+                SelectionReason nextReason = next.getSelectionReason();
+                if (nextReason == SelectionReason.POOL_OPENED
+                        || nextReason == SelectionReason.POOL_CLAIM
+                        || nextReason == SelectionReason.COORDINATOR_FORCED) {
+                    return "opened to the vendor pool";
+                }
+                return next.getVendorName() == null
+                        ? "advanced to the next attempt"
+                        : "advanced to " + next.getVendorName();
+            default:
+                return null;
+        }
     }
 }
