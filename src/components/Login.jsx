@@ -43,9 +43,14 @@ export default function Login() {
       // Navigate immediately upon success
       navigate(ROLE_DASHBOARDS[data?.role] || '/', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data || 'Login failed');
-      setSubmitting(false); // Only stop submitting if it fails
-    }
+      const response = err.response?.data;
+    setError(
+      (response && typeof response === 'object' ? response.message : response) ||
+        'Login failed'
+    );
+  } finally {
+    setSubmitting(false);
+  }
   };
 
   const handleSignUp = async (e) => {
