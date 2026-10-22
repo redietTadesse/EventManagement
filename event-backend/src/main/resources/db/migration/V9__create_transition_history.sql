@@ -1,5 +1,5 @@
 -- ============================================================
--- V8: Create transition_history table for the audit trail
+-- V9: Create transition_history table for the audit trail
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS transition_history (
