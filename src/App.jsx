@@ -24,6 +24,7 @@ import OpenAssignments from './vendor/OpenAssignments';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
+import AvailabilityGrid from './coordinator/AvailabilityGrid.jsx';
 
 function AppRoutes() {
   return (
@@ -145,6 +146,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/coordinator/availability"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <AvailabilityGrid />
+          </ProtectedRoute>
+        }
+      />
+     
       <Route
         path="/coordinator/venues"
         element={
