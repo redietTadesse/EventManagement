@@ -16,7 +16,7 @@ import java.util.Optional;
  *
  * A category is:
  *   RESOLVED   if any attempt is ACCEPTED or COMPLETED
- *   EXHAUSTED  if the current attempt is DECLINED, OPEN, or CANCELLED,
+ *   EXHAUSTED  if the current attempt is DECLINED, EXPIRED, OPEN, or CANCELLED,
  *              or if there are no attempts at all
  *   PENDING    if the current attempt is PENDING
  *
@@ -39,9 +39,15 @@ public record CategoryEscalation(
                         || a.getStatus() == VendorAssignmentStatus.COMPLETED);
     }
 
+    /**
+     * EXPIRED counts as exhausted. Without it a category whose latest offer timed
+     * out would be neither exhausted, pending, nor resolved, and the rollup would
+     * park the event in AWAITING_VENDORS forever waiting on an offer nobody holds.
+     */
     public boolean isExhausted() {
         return currentAttempt()
                 .map(a -> a.getStatus() == VendorAssignmentStatus.DECLINED
+                        || a.getStatus() == VendorAssignmentStatus.EXPIRED
                         || a.getStatus() == VendorAssignmentStatus.OPEN
                         || a.getStatus() == VendorAssignmentStatus.CANCELLED)
                 .orElse(true);

@@ -27,6 +27,23 @@ public class WorkflowScheduler {
     private final InquiryRepository inquiryRepository;
     private final WorkflowEngine workflowEngine;
     private final ApplicationEventPublisher eventPublisher;
+    private final VendorService vendorService;
+
+    /**
+     * Expire vendor offers nobody answered, and advance each affected category.
+     *
+     * Hourly rather than daily: the deadline is stored per offer, so checking often
+     * keeps the expiry close to the time the vendor was actually given, instead of
+     * rounding every expiry to midnight.
+     */
+    @Scheduled(cron = "0 15 * * * *")
+    public void expireStaleVendorOffers() {
+        log.info("Scheduler: expiring stale vendor offers");
+        int expired = vendorService.expireStaleOffers();
+        if (expired > 0) {
+            log.info("Scheduler: expired {} vendor offer(s)", expired);
+        }
+    }
 
     @Scheduled(cron = "0 0 0 * * *")
     @Transactional
@@ -69,7 +86,7 @@ public class WorkflowScheduler {
 
                 eventPublisher.publishEvent(new WorkflowTransitionEvent(
                         this, old, EventStatus.CLOSED,
-                        String.valueOf(inquiry.getId()), Role.ADMIN));
+                        "EVENT-" + inquiry.getId(), Role.ADMIN));
 
                 log.info("Auto-closed inquiry {}", inquiry.getId());
             } catch (Exception e) {

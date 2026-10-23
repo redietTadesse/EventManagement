@@ -5,6 +5,7 @@ import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.SelectionReason;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
@@ -20,6 +21,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,12 +30,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration tests for the event-level rollup (Gap 1).
  *
  * The rollup derives the event status from the per-category assignment states:
- *   - any required category stuck (no assignment, or DECLINED/OPEN/CANCELLED)
+ *   - any required category stuck (no assignment, or DECLINED/EXPIRED/OPEN/CANCELLED)
  *       -> NEEDS_COORDINATOR
  *   - all required categories ACCEPTED                    -> CONFIRMED
  *   - otherwise                                           -> AWAITING_VENDORS
  *
- * Uses eventType "conference", whose required categories are: av, catering, security.
+ * The fixture pins requiredCategories to av, catering, security. The event type
+ * "conference" actually defaults to five categories (venue, av, catering, security,
+ * registration), and the two these tests never assign would be permanently stuck,
+ * forcing every rollup to NEEDS_COORDINATOR regardless of what the test did.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -62,7 +68,7 @@ class EventRollupTest {
         Inquiry inquiry = Inquiry.builder()
                 .clientId(1L)
                 .clientName("Rollup Test Client")
-                .eventType("conference") // required: av, catering, security
+                .eventType("conference")
                 .eventDate(LocalDate.now().plusDays(45))
                 .expectedAttendees(150)
                 .status(EventStatus.EVENT_CREATED)
@@ -72,6 +78,7 @@ class EventRollupTest {
         event = Event.builder()
                 .inquiry(inquiry)
                 .name("Rollup Test Event")
+                .requiredCategories("av,catering,security")
                 .status(EventStatus.AWAITING_VENDORS)
                 .build();
         event = eventRepository.save(event);
@@ -175,24 +182,40 @@ class EventRollupTest {
     }
 
     @Test
-    @DisplayName("Declined assignment with exhausted ranked list transitions to OPEN")
-    void declinedAssignmentBecomesOpenWhenRankedListExhausted() {
-        // All categories assigned PENDING; only one catering vendor exists.
+    @DisplayName("Exhausted ranked list leaves the decline intact and opens a separate pool row")
+    void declinedAttemptSurvivesAndPoolRowIsOpened() {
         assignment("av", vendor("AV Pros", "av"), VendorAssignmentStatus.PENDING);
         assignment("security", vendor("Guard Corp", "security"), VendorAssignmentStatus.PENDING);
+        Vendor cateringVendor = vendor("Cater Co", "catering");
         VendorAssignment catering = assignment(
-                "catering", vendor("Cater Co", "catering"), VendorAssignmentStatus.PENDING);
+                "catering", cateringVendor, VendorAssignmentStatus.PENDING);
 
-        // Vendor declines; no alternative catering vendor exists, so the ranked
-        // list is exhausted and the assignment opens to the pool.
+        // Vendor declines and no alternative catering vendor exists, so the ranked
+        // list is exhausted and the category goes to the pool.
         VendorAssignment responded = vendorService.respondToAssignment(
                 catering.getId(), "DECLINED", "Fully booked");
 
-        assertThat(responded.getStatus()).isEqualTo(VendorAssignmentStatus.OPEN);
+        // The decline is a permanent historical fact. It used to be recycled into
+        // the pool row and then overwritten by whoever claimed it, which deleted
+        // the attempt from the trail and from findTriedVendorIds.
+        assertThat(responded.getStatus()).isEqualTo(VendorAssignmentStatus.DECLINED);
+        assertThat(responded.getVendor().getId()).isEqualTo(cateringVendor.getId());
+        assertThat(responded.getDeclineReason()).isEqualTo("Fully booked");
+
+        // The pool offer is a separate row belonging to nobody.
+        List<VendorAssignment> attempts =
+                assignmentRepository.findByEventIdAndServiceCategory(event.getId(), "catering");
+        assertThat(attempts).hasSize(2);
+
+        VendorAssignment poolRow = attempts.stream()
+                .max(Comparator.comparing(VendorAssignment::getId))
+                .orElseThrow();
+        assertThat(poolRow.getStatus()).isEqualTo(VendorAssignmentStatus.OPEN);
+        assertThat(poolRow.getVendor()).isNull();
+        assertThat(poolRow.getSelectionReason()).isEqualTo(SelectionReason.POOL_OPENED);
 
         Event reloaded = eventRepository.findById(event.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(EventStatus.NEEDS_COORDINATOR);
         assertThat(reloaded.getUnfilledCategories()).contains("catering");
     }
 }
-

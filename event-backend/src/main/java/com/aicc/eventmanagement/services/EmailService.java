@@ -30,6 +30,11 @@ public class EmailService {
     @Value("${app.email.enabled:true}")
     private boolean emailEnabled;
 
+    /**
+     * NOTE: this default only applies when app.base-url is ABSENT from the
+     * properties. A present-but-empty "app.base-url=" resolves to "" and every
+     * link below renders without a host.
+     */
     @Value("${app.base-url:http://localhost:8080}")
     private String baseUrl;
 
@@ -209,6 +214,10 @@ public class EmailService {
 
         String subject = "🔔 New Assignment: " + event.getName();
 
+        // The template has nine placeholders. The "Service:" line in the details
+        // block needs its own argument: without it every later argument shifts up
+        // one position and the %d for attendees receives baseUrl, throwing
+        // IllegalFormatConversionException at runtime.
         String body = String.format("""
                 Hello %s,
 
@@ -233,6 +242,7 @@ public class EmailService {
                 assignment.getVendorName(),
                 assignment.getServiceCategory().replace("_", " ").toUpperCase(),
                 event.getName(),
+                assignment.getServiceCategory().replace("_", " ").toUpperCase(),
                 event.getInquiry().getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 event.getInquiry().getClientName(),
                 event.getInquiry().getExpectedAttendees(),
@@ -240,7 +250,7 @@ public class EmailService {
                 assignment.getId()
         );
 
-        sendEmail(vendor.getEmail(), subject, body);
+        sendEmail(vendor != null ? vendor.getEmail() : null, subject, body);
     }
 
     /**
@@ -317,7 +327,7 @@ public class EmailService {
                 assignment.getId()
         );
 
-        sendEmail(vendor.getEmail(), subject, body);
+        sendEmail(vendor != null ? vendor.getEmail() : null, subject, body);
     }
 
     /**
