@@ -24,9 +24,7 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Resolved: Using registerClient from the context
-  const { login, registerClient, state } = useApp();
-  const { loading } = state;
+  const { login, registerClient } = useApp();
   const navigate = useNavigate();
 
   const portalKey = portal?.toLowerCase();
@@ -35,10 +33,6 @@ export default function Login() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const afterAuth = (data) => {
-    navigate(ROLE_DASHBOARDS[data?.role] || '/', { replace: true });
-  };
-
   const handleSignIn = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -46,12 +40,17 @@ export default function Login() {
     setNotice('');
     try {
       const data = await login(form.username, form.password);
-      afterAuth(data);
+      // Navigate immediately upon success
+      navigate(ROLE_DASHBOARDS[data?.role] || '/', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data || 'Login failed');
-    } finally {
-      setSubmitting(false);
-    }
+      const response = err.response?.data;
+    setError(
+      (response && typeof response === 'object' ? response.message : response) ||
+        'Login failed'
+    );
+  } finally {
+    setSubmitting(false);
+  }
   };
 
   const handleSignUp = async (e) => {
@@ -76,14 +75,6 @@ export default function Login() {
 
   const inputClass =
     'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none';
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">

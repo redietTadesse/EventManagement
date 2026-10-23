@@ -29,7 +29,7 @@ public class AvailabilityService {
 
     public AvailabilityGridResponse getAvailabilityGrid(String category, int daysAhead) {
         LocalDate startDate = LocalDate.now();
-        LocalDate endDate = startDate.plusDays(daysAhead);
+        LocalDate endDate = startDate.plusDays(daysAhead -1);
 
         // 1. Fetch all active vendors for this category
         List<Vendor> vendors = vendorRepository.findActiveByCategory(category);
@@ -57,7 +57,7 @@ public class AvailabilityService {
             List<VendorAssignment> vendorAssignments = assignmentsByVendor.getOrDefault(vendor.getId(), List.of());
             List<LocalDate> vendorBlockedDates = bookedDatesByVendor.getOrDefault(vendor.getId(), List.of());
 
-            for (int i = 0; i <= daysAhead; i++) {
+            for (int i = 0; i < daysAhead; i++) {
                 LocalDate currentDate = startDate.plusDays(i);
                 AvailabilityGridResponse.DayCell cell = buildCellForDate(currentDate, vendorAssignments, vendorBlockedDates);
                 days.add(cell);
