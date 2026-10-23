@@ -17,6 +17,7 @@ import org.mockito.quality.Strictness;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,6 +37,9 @@ class VendorSuggestionServiceTest {
 
     @Mock
     private VendorAssignmentRepository assignmentRepository;
+
+        @Mock
+        private VendorRankingService rankingService;
 
     @InjectMocks
     private VendorSuggestionService suggestionService;
@@ -70,6 +74,16 @@ class VendorSuggestionServiceTest {
                         .isActive(true)
                         .build()
         );
+
+        when(rankingService.rank(any(), any(), any())).thenAnswer(invocation -> {
+                        Set<Long> argumentExcluded = invocation.getArgument(2);
+                        Set<Long> excluded = argumentExcluded == null ? Set.of() : argumentExcluded;
+            return mockVendors.stream()
+                    .filter(v -> !excluded.contains(v.getId()))
+                    .map(v -> { double ratingTerm = v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0); })
+                    .toList();
+        });
+        when(assignmentRepository.countActiveAndPendingByVendor(anyLong())).thenReturn(0L);
     }
 
     @Test
@@ -94,6 +108,7 @@ class VendorSuggestionServiceTest {
     @DisplayName("Should return empty list when no vendors available")
     void testGetSuggestionsEmpty() {
         when(vendorRepository.findActiveByCategory("av")).thenReturn(List.of());
+                when(rankingService.rank(any(), any(), any())).thenReturn(List.of());
 
         List<VendorSuggestionService.VendorSuggestion> suggestions =
                 suggestionService.getSuggestions("av", testDate, null, null);
@@ -137,6 +152,9 @@ class VendorSuggestionServiceTest {
     @Test
     @DisplayName("Should filter out unavailable vendors (booked dates)")
     void testFilterUnavailableVendors() {
+        when(rankingService.rank(any(), any(), any())).thenReturn(mockVendors.subList(1, 3).stream()
+                .map(v -> { double ratingTerm = v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0); })
+                .toList());
         when(vendorRepository.findActiveByCategory("av")).thenReturn(mockVendors);
         when(bookedDateRepository.existsByVendorIdAndBookedDate(1L, testDate)).thenReturn(true);
         when(bookedDateRepository.existsByVendorIdAndBookedDate(2L, testDate)).thenReturn(false);
@@ -189,6 +207,7 @@ class VendorSuggestionServiceTest {
     @DisplayName("Should return empty optional when no vendors for best match")
     void testGetBestMatchEmpty() {
         when(vendorRepository.findActiveByCategory("av")).thenReturn(List.of());
+                when(rankingService.rank(any(), any(), any())).thenReturn(List.of());
 
         var bestMatch = suggestionService.getBestMatch("av", testDate, null, null);
 

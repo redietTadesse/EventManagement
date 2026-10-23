@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
@@ -69,6 +69,7 @@ export default function InquiryDetail() {
   }
 
   const canConvert = inquiry?.status === 'PROPOSAL_ACCEPTED';
+  const canSendProposal = inquiry?.status === 'INQUIRY_SUBMITTED';
 
   return (
     <Layout title="Inquiry Detail">
@@ -158,7 +159,7 @@ export default function InquiryDetail() {
           </div>
         )}
 
-        {!canConvert && inquiry?.status !== 'PROPOSAL_ACCEPTED' && (
+        {!canConvert && !canSendProposal && (
           <div className="bg-white rounded-xl shadow p-6">
             <div className="text-center py-6 text-gray-500">
               <p className="text-lg font-medium">Cannot Create Event</p>

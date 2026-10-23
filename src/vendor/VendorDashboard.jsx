@@ -64,6 +64,40 @@ export default function VendorDashboard() {
               {myAssignments.filter(a => a.status === 'ACCEPTED').length}
             </p>
           </div>
+          {accepted.length === 0 ? (
+            <div className="p-6 text-center text-gray-500 text-sm">
+              No accepted assignments yet.
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {accepted.slice(0, 5).map((a) => (
+                <li key={a.id}>
+                  <Link
+                    to={`/vendor/assignments/${a.id}`}
+                    className="block px-6 py-4 hover:bg-gray-50 flex justify-between items-center"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">{a.eventName}</p>
+                      <p className="text-sm text-gray-500">
+                        {a.serviceCategory?.toUpperCase()} · {a.eventDate}
+                        {a.eventVenue ? ` · ${a.eventVenue}` : ''}
+                      </p>
+                    </div>
+                    <StatusBadge status={a.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="text-center">
+          <Link
+            to="/vendor/open"
+            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium text-sm"
+          >
+            Browse open assignments
+          </Link>
         </div>
 
         {/* Assignments List */}

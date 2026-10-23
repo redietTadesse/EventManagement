@@ -23,11 +23,14 @@ public class InquiryResponse {
     private LocalDate eventDate;
     private Integer expectedAttendees;
     private String requirements;
+    private List<String> requestedCategories;
+    private List<String> categories;
     private EventStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private EventSummary event;
     private ProposalResponse proposal;
+    private List<Long> preferredVendorIds;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -40,11 +43,22 @@ public class InquiryResponse {
         response.setEventDate(inquiry.getEventDate());
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
+        response.setRequestedCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getRequestedCategories()));
+        response.setCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getCategories()));
         response.setStatus(inquiry.getStatus());
         response.setCreatedAt(inquiry.getCreatedAt());
         response.setUpdatedAt(inquiry.getUpdatedAt());
 
-        // Parse proposal JSON if present
+        if (inquiry.getPreferredVendorIds() != null && !inquiry.getPreferredVendorIds().isBlank()) {
+            try {
+                response.setPreferredVendorIds(
+                        objectMapper.readValue(inquiry.getPreferredVendorIds(), new TypeReference<List<Long>>() {})
+                );
+            } catch (Exception e) {
+                log.warn("Failed to parse preferredVendorIds for inquiry {}: {}", inquiry.getId(), e.getMessage());
+            }
+        }
+
         if (inquiry.getProposal() != null && !inquiry.getProposal().isBlank()) {
             try {
                 response.setProposal(parseProposal(inquiry.getProposal()));
@@ -73,6 +87,13 @@ public class InquiryResponse {
         proposal.setPrice(proposalMap.get("price") != null ? ((Number) proposalMap.get("price")).intValue() : null);
         proposal.setTerms((String) proposalMap.get("terms"));
         proposal.setPricingTier((String) proposalMap.get("pricingTier"));
+
+        if (proposalMap.containsKey("categories") && proposalMap.get("categories") != null) {
+            Object rawCategories = proposalMap.get("categories");
+            if (rawCategories instanceof List<?> list) {
+                proposal.setCategories(list.stream().map(String::valueOf).toList());
+            }
+        }
 
         if (proposalMap.containsKey("vendorShortlist") && proposalMap.get("vendorShortlist") != null) {
             @SuppressWarnings("unchecked")

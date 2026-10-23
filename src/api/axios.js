@@ -1,14 +1,15 @@
 import axios from 'axios';
 
-// Use environment variable for base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+// All resource endpoints live under /api/v1; auth lives outside the version
+// prefix at /api/auth (see AuthController @RequestMapping("/api/auth")).
+const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_ROOT,
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Auth endpoints live under /api/auth
+// Auth lives outside /v1
 export const authApi = axios.create({
   baseURL: API_BASE_URL.replace('/api', ''), // Removes /api for auth routes
   headers: { 'Content-Type': 'application/json' },
@@ -17,9 +18,7 @@ export const authApi = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => Promise.reject(error)

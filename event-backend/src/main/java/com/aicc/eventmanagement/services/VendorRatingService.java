@@ -42,16 +42,19 @@ public class VendorRatingService {
         List<VendorAssignment> completed = assignmentRepository
             .findByVendorIdAndStatus(vendor.getId(), VendorAssignmentStatus.COMPLETED);
 
-        if (completed.isEmpty()) {
+        List<VendorAssignment> rated = completed.stream()
+            .filter(a -> a.getVendorRating() != null)
+            .toList();
+
+        if (rated.isEmpty()) {
             return vendor.getRating() != null ? vendor.getRating().doubleValue() : 0.0;
         }
 
-        // Sum all ratings from completed assignments
-        double total = completed.stream()
-            .mapToDouble(a -> a.getVendorRating() != null ? a.getVendorRating() : 0.0)
+        double total = rated.stream()
+            .mapToDouble(VendorAssignment::getVendorRating)
             .sum();
 
-        double average = total / completed.size();
+        double average = total / rated.size();
         return Math.round(average * 10) / 10.0; // Round to 1 decimal place
     }
 
@@ -92,13 +95,14 @@ public class VendorRatingService {
         List<VendorAssignment> completed = assignmentRepository
             .findByVendorIdAndStatus(vendorId, VendorAssignmentStatus.COMPLETED);
 
-        if (completed.isEmpty()) {
+        List<Double> ratings = completed.stream()
+            .map(VendorAssignment::getVendorRating)
+            .filter(java.util.Objects::nonNull)
+            .toList();
+
+        if (ratings.isEmpty()) {
             return new RatingStats(0.0, 0, 0.0, 0.0);
         }
-
-        List<Double> ratings = completed.stream()
-            .map(a -> a.getVendorRating() != null ? a.getVendorRating() : 0.0)
-            .collect(Collectors.toList());
 
         double avg = ratings.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double min = ratings.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);

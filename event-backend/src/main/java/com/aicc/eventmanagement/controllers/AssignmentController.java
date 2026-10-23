@@ -1,10 +1,16 @@
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.entities.Vendor;
+import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
+import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.ManualAssignRequest;
+import com.aicc.eventmanagement.payload.RateAssignmentRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.payload.VendorResponseRequest;
 import com.aicc.eventmanagement.services.VendorService;
+import com.aicc.eventmanagement.services.WorkflowEngine;
+import com.aicc.eventmanagement.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -12,6 +18,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +33,8 @@ import java.util.stream.Collectors;
 public class AssignmentController {
 
     private final VendorService vendorService;
+    private final WorkflowEngine workflowEngine;
+    private final UserRepository userRepository;
 
     @GetMapping("/event/{eventId}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
@@ -73,12 +83,110 @@ public class AssignmentController {
     @Operation(summary = "Vendor responds to assignment (ACCEPTED or DECLINED)")
     public ResponseEntity<VendorAssignmentResponse> respondToAssignment(
             @PathVariable Long id,
-            @Valid @RequestBody VendorResponseRequest request) {
-        VendorAssignment assignment = vendorService.respondToAssignment(
+            @Valid @RequestBody VendorResponseRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        Vendor caller = vendorService.getVendorByUser(principal.getUsername());
+        VendorAssignment assignment = vendorService.getAssignmentById(id);
+
+        if (assignment.getVendor() == null
+                || !assignment.getVendor().getId().equals(caller.getId())) {
+            throw new BusinessException(
+                "You can only respond to your own assignments",
+                "ACCESS_DENIED");
+        }
+
+        VendorAssignment updated = vendorService.respondToAssignment(
+            id, request.getResponse(), request.getDeclineReason());
+        return ResponseEntity.ok(VendorAssignmentResponse.from(updated));
+    }
+
+    // ============ BROWSE-AND-VOLUNTEER ENDPOINTS ============
+
+    @GetMapping("/open")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get open assignments for the authenticated vendor's service category")
+    public ResponseEntity<List<VendorAssignmentResponse>> getOpenAssignments(
+            @AuthenticationPrincipal UserDetails principal) {
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        List<VendorAssignment> openAssignments = vendorService.getOpenAssignmentsForCategory(vendor.getServiceCategory());
+        return ResponseEntity.ok(openAssignments.stream()
+            .map(VendorAssignmentResponse::from)
+            .collect(Collectors.toList()));
+    }
+
+    @PostMapping("/{id}/claim")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Claim an open assignment (transitions OPEN → PENDING)")
+    public ResponseEntity<VendorAssignmentResponse> claimAssignment(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        VendorAssignment assignment = vendorService.claimOpenAssignment(id, vendor.getId());
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    @PostMapping("/{id}/rate")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "Rate a completed vendor assignment")
+    public ResponseEntity<VendorAssignmentResponse> rate(
+            @PathVariable Long id,
+            @Valid @RequestBody RateAssignmentRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        Long clientId = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BusinessException("User not found", "USER_NOT_FOUND"))
+                .getId();
+        VendorAssignment assignment = vendorService.rateAssignment(
+                id, request.getRating(), request.getComment(), clientId);
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    // ============ COORDINATOR FALLBACK ============
+
+    @PostMapping("/{id}/force-assign")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Coordinator force-assigns a vendor to an open/unclaimed assignment")
+    public ResponseEntity<VendorAssignmentResponse> forceAssign(
+            @PathVariable Long id,
+            @Valid @RequestBody ManualAssignRequest request) {
+        VendorAssignment assignment = vendorService.forceAssignToOpenAssignment(
             id,
-            request.getResponse(),
-            request.getDeclineReason()
+            request.getVendorId()
         );
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+    }
+
+    // ============ MY ASSIGNMENTS (vendor-scoped) ============
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get the authenticated vendor's assignments")
+    public ResponseEntity<List<VendorAssignmentResponse>> getMyAssignments(
+            @AuthenticationPrincipal UserDetails principal) {
+
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(vendor.getId());
+        return ResponseEntity.ok(assignments.stream()
+            .map(VendorAssignmentResponse::from)
+            .collect(Collectors.toList()));
+    }
+
+    @GetMapping("/me/{id}")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get one of the authenticated vendor's assignments by ID")
+    public ResponseEntity<VendorAssignmentResponse> getMyAssignment(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        VendorAssignment assignment = vendorService.getAssignmentById(id);
+
+        if (assignment.getVendor() == null
+                || !assignment.getVendor().getId().equals(vendor.getId())) {
+            throw new BusinessException(
+                "You can only view your own assignments",
+                "ACCESS_DENIED");
+        }
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 }

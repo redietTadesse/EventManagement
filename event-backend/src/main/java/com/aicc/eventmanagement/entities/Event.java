@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.entities;
 
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
@@ -27,6 +28,7 @@ public class Event {
     private Long id;
 
     @NotNull
+    @JsonIgnore
     @OneToOne
     @JoinColumn(name = "inquiry_id", nullable = false)
     private Inquiry inquiry;
@@ -48,10 +50,13 @@ public class Event {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "venue_details", columnDefinition = "JSON")
-    private String venueDetails; // Could be a Map or a POJO
+    private String venueDetails;
 
     @Column(name = "unfilled_categories")
     private String unfilledCategories;
+
+    @Column(name = "required_categories", columnDefinition = "TEXT")
+    private String requiredCategories;
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
@@ -65,7 +70,6 @@ public class Event {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Helper method to add checklist items
     public void addChecklistItem(Checklist item) {
         checklist.add(item);
         item.setEvent(this);

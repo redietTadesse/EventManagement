@@ -1,8 +1,14 @@
 package com.aicc.eventmanagement.controllers;
 
+import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.exceptions.BusinessException;
+import com.aicc.eventmanagement.payload.AvailabilityGridResponse;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
+import com.aicc.eventmanagement.repositories.UserRepository;
+import com.aicc.eventmanagement.services.AvailabilityService;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
 import com.aicc.eventmanagement.services.ConflictResolutionService.AlternativeVendor;
 import com.aicc.eventmanagement.services.ConflictResolutionService.ResolutionSuggestion;
@@ -16,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -29,9 +37,31 @@ import java.util.stream.Collectors;
 @Tag(name = "Vendor Management", description = "Endpoints for managing vendors")
 public class VendorController {
 
+    private final AvailabilityService availabilityService;
     private final VendorService vendorService;
     private final VendorRatingService ratingService;
     private final ConflictResolutionService conflictService;
+    private final UserRepository userRepository;
+
+    // ============================================================
+    // AVAILABILITY GRID (NEW)
+    // ============================================================
+
+    @GetMapping("/availability-grid")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get availability grid for vendors",
+            description = "Returns a 30-day availability grid for all active vendors in a category")
+    public ResponseEntity<AvailabilityGridResponse> getAvailabilityGrid(
+            @RequestParam String category,
+            @RequestParam(defaultValue = "30") int daysAhead) {
+
+        log.info("Fetching availability grid for category: {}, daysAhead: {}", category, daysAhead);
+        return ResponseEntity.ok(availabilityService.getAvailabilityGrid(category, daysAhead));
+    }
+
+    // ============================================================
+    // EXISTING ENDPOINTS
+    // ============================================================
 
     @GetMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
@@ -45,6 +75,15 @@ public class VendorController {
     @Operation(summary = "Get all active vendors")
     public ResponseEntity<List<Vendor>> getActiveVendors() {
         return ResponseEntity.ok(vendorService.getActiveVendors());
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('VENDOR')")
+    @Operation(summary = "Get the authenticated vendor's profile")
+    public ResponseEntity<Vendor> getMyProfile(
+            @AuthenticationPrincipal UserDetails principal) {
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        return ResponseEntity.ok(vendor);
     }
 
     @GetMapping("/{id}")
@@ -80,21 +119,37 @@ public class VendorController {
     @GetMapping("/{id}/assignments")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Get all assignments for a vendor")
-    public ResponseEntity<List<VendorAssignmentResponse>> getVendorAssignments(@PathVariable Long id) {
+    public ResponseEntity<List<VendorAssignmentResponse>> getVendorAssignments(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        // IDOR fix: vendors can only access their own assignments
+        if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
+            throw new BusinessException(
+                    "You can only view your own assignments",
+                    "ACCESS_DENIED");
+        }
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(id);
         return ResponseEntity.ok(assignments.stream()
-            .map(VendorAssignmentResponse::from)
-            .collect(Collectors.toList()));
+                .map(VendorAssignmentResponse::from)
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/pending")
-    @PreAuthorize("hasRole('VENDOR')")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Get pending assignments for a vendor")
-    public ResponseEntity<List<VendorAssignmentResponse>> getPendingAssignments(@PathVariable Long id) {
+    public ResponseEntity<List<VendorAssignmentResponse>> getPendingAssignments(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        // IDOR fix: vendors can only access their own pending assignments
+        if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
+            throw new BusinessException(
+                    "You can only view your own pending assignments",
+                    "ACCESS_DENIED");
+        }
         List<VendorAssignment> assignments = vendorService.getPendingAssignmentsForVendor(id);
         return ResponseEntity.ok(assignments.stream()
-            .map(VendorAssignmentResponse::from)
-            .collect(Collectors.toList()));
+                .map(VendorAssignmentResponse::from)
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/load")
@@ -184,5 +239,29 @@ public class VendorController {
     public ResponseEntity<Void> recalculateAllRatings() {
         ratingService.recalculateAllVendorRatings();
         return ResponseEntity.ok().build();
+    }
+
+    // ===== IDOR Prevention Helpers =====
+
+    private boolean hasRole(UserDetails principal, Role role) {
+        if (principal == null) return false;
+        return principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role.name()));
+    }
+
+    private boolean isVendorIdMatch(Long vendorId, UserDetails principal) {
+        if (principal == null) return false;
+        // Use the proper User-Vendor relationship through VendorService
+        try {
+            User user = userRepository.findByUsername(principal.getUsername())
+                    .orElse(null);
+            if (user != null) {
+                Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+                return vendor != null && vendor.getId().equals(vendorId);
+            }
+        } catch (Exception e) {
+            log.debug("Failed to resolve vendor for user: {}", principal.getUsername());
+        }
+        return false;
     }
 }

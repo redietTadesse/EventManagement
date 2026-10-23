@@ -1,6 +1,6 @@
 -- ==============================================
 -- AICC Event Management System
--- Version 6 — venues table (re-applied after restructure)
+-- Version 6 — venues table
 -- ==============================================
 
 CREATE TABLE IF NOT EXISTS venues (

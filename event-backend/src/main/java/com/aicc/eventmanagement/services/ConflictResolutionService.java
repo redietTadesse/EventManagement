@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,7 +27,7 @@ public class ConflictResolutionService {
     private final VendorRepository vendorRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorBookedDateRepository bookedDateRepository;
-    private final VendorService vendorService;
+    private final VendorRankingService rankingService;
 
     // ============ CONFLICT DETECTION ============
 
@@ -84,26 +85,17 @@ public class ConflictResolutionService {
             LocalDate date,
             Long excludedVendorId) {
 
-        List<Vendor> available = vendorService.findAvailableVendors(category, date, excludedVendorId);
-
-        if (available.isEmpty()) {
+        Set<Long> excluded = excludedVendorId == null ? Set.of() : Set.of(excludedVendorId);
+        List<VendorRankingService.Ranked> ranked = rankingService.rank(category, date, excluded);
+        if (ranked.isEmpty()) {
             return List.of();
         }
 
-        // Get active assignment counts for load balancing
-        List<Long> vendorIds = available.stream()
-            .map(Vendor::getId)
-            .collect(Collectors.toList());
-
-        Map<Long, Long> assignmentCounts = assignmentRepository
-            .countActiveAssignmentsByVendors(vendorIds).stream()
-            .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
-
-        // Score and sort vendors
-        return available.stream()
-            .map(v -> {
-                long activeCount = assignmentCounts.getOrDefault(v.getId(), 0L);
-                double score = calculateVendorScore(v, activeCount);
+        return ranked.stream()
+            .map(result -> {
+                Vendor v = result.vendor();
+                long activeCount = assignmentRepository.countActiveAndPendingByVendor(v.getId());
+                double score = result.score() * 100.0;
                 return new AlternativeVendor(
                     v.getId(),
                     v.getCompanyName(),
@@ -115,7 +107,6 @@ public class ConflictResolutionService {
                     v.getEmail()
                 );
             })
-            .sorted(Comparator.comparingDouble(AlternativeVendor::score).reversed())
             .collect(Collectors.toList());
     }
 
@@ -144,16 +135,6 @@ public class ConflictResolutionService {
         }
 
         return alternatives.get(0);
-    }
-
-    // ============ SCORING ============
-
-    private double calculateVendorScore(Vendor vendor, long activeCount) {
-        double ratingScore = (vendor.getRating() != null ? vendor.getRating().doubleValue() : 0.0) / 5.0;
-        double loadScore = Math.max(0, 1.0 - (activeCount / 10.0));
-
-        // Weight: rating 60%, load 40%
-        return (ratingScore * 0.6) + (loadScore * 0.4);
     }
 
     // ============ CONFLICT RESOLUTION SUGGESTIONS ============

@@ -2,11 +2,16 @@ package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
+import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
+import com.aicc.eventmanagement.services.VenueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +26,9 @@ public class EventService {
     private final EventRepository eventRepository;
     private final InquiryRepository inquiryRepository;
     private final VendorService vendorService;
+    private final WorkflowEngine workflowEngine;
+    private final ApplicationEventPublisher eventPublisher;
+    private final VenueService venueService;
 
     @Transactional
     public Event createEvent(Event event) {
@@ -79,6 +87,7 @@ public class EventService {
         log.info("Updating event {}", id);
         Event event = getEventById(id);
         
+        Long oldVenueId = event.getVenueId();
         if (request.getName() != null) {
             event.setName(request.getName());
         }
@@ -95,15 +104,60 @@ public class EventService {
             event.setUnfilledCategories(request.getUnfilledCategories());
         }
         
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+        
+        // Book or rebook venue if venueId changed
+        if (request.getVenueId() != null && !request.getVenueId().equals(oldVenueId)) {
+            try {
+                // Get the inquiry to find the event date
+                inquiryRepository.findById(event.getInquiry().getId())
+                    .ifPresent(inquiry -> {
+                        try {
+                            venueService.bookVenue(
+                                request.getVenueId(),
+                                saved.getId(),
+                                inquiry.getEventDate()
+                            );
+                            log.info("Venue {} rebooked for event {} on {}",
+                                request.getVenueId(), saved.getId(), inquiry.getEventDate());
+                        } catch (BusinessException e) {
+                            log.warn("Venue rebooking failed for event {}: {}", saved.getId(), e.getMessage());
+                        }
+                    });
+            } catch (Exception e) {
+                log.warn("Failed to process venue booking for event {}: {}", saved.getId(), e.getMessage());
+            }
+        }
+        
+        return saved;
     }
 
     @Transactional
-    public Event updateEventStatus(Long id, EventStatus status) {
-        log.info("Updating event {} status to {}", id, status);
+    public Event updateEventStatus(Long id, EventStatus status, Role userRole) {
+        log.info("Updating event {} status to {} by {}", id, status, userRole);
         Event event = getEventById(id);
+
+        EventStatus oldStatus = event.getStatus();
+        if (oldStatus == status) {
+            return event;
+        }
+
+        workflowEngine.validateTransition(oldStatus, status, userRole);
+
         event.setStatus(status);
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+
+        // Cascade assignment status changes when event completes or cancels
+        if (status == EventStatus.COMPLETED) {
+            vendorService.completeAssignmentsForEvent(id, userRole);
+        } else if (status == EventStatus.CANCELLED) {
+            vendorService.cancelAssignmentsForEvent(id, userRole);
+        }
+
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(
+                this, oldStatus, status, "EVENT-" + id, userRole));
+
+        return saved;
     }
 
     @Transactional
@@ -115,6 +169,6 @@ public class EventService {
 
     public List<Event> getUpcomingEvents() {
         log.info("Fetching upcoming events");
-        return eventRepository.findByStatusNotIn(List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED));
+        return eventRepository.findAllActiveEvents(List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED));
     }
 }

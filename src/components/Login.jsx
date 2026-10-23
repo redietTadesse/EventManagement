@@ -23,6 +23,7 @@ export default function Login() {
   const [mode, setMode] = useState('signin');
   const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { login, loading } = useAuth();
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ export default function Login() {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+    setNotice('');
     try {
       const data = await login(form.username, form.password);
       afterAuth(data);
@@ -59,6 +61,7 @@ export default function Login() {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+    setNotice('');
     try {
       setError('Registration is handled by the backend, not available in UI yet.');
     } catch (err) {
@@ -97,6 +100,12 @@ export default function Login() {
               ? `Create your ${portalLabel} Portal account`
               : 'Create a client account'}
         </p>
+
+        {notice && (
+          <div role="status" className="bg-green-100 text-green-700 p-3 rounded-lg mb-4">
+            {notice}
+          </div>
+        )}
 
         {mode === 'signin' ? (
           <form onSubmit={handleSignIn}>

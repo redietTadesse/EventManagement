@@ -104,11 +104,11 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- ─── H2 Database (for tests) ─── -->
+ <!-- ─── H2 Database (for tests) ─── -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- ─── AssertJ (for fluent assertions) ─── -->
@@ -117,7 +117,6 @@
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
-
         <!-- ─── Development Tools ─── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
