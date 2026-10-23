@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 import RatingStars from './RatingStars';
 
-const VendorRatingForm = ({ vendor, eventId }) => {
-  const { dispatch } = useApp();
+const VendorRatingForm = ({ vendor, assignmentId }) => {
+  const { rateAssignment } = useApp();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (rating === 0) {
       alert('Please select a rating');
       return;
     }
-    dispatch({
-      type: 'RATE_VENDOR',
-      payload: { eventId, vendorId: vendor.id, rating, comment },
-    });
+    await rateAssignment(assignmentId, rating, comment);
     setSubmitted(true);
   };
 

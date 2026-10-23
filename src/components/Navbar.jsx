@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 import NotificationsBell from './NotificationsBell';
 
 const Navbar = () => {
@@ -14,13 +14,14 @@ const Navbar = () => {
   const links = {
     CLIENT: [
       { to: '/client/dashboard', label: 'Dashboard' },
-      { to: '/client/inquiries/new', label: 'New Inquiry' },
       { to: '/client/inquiries', label: 'My Inquiries' },
-      { to: '/client/vendors', label: 'Vendors' },
+      { to: '/client/events', label: 'My Events' },
+      { to: '/client/new-inquiry', label: 'New Inquiry' },
     ],
     VENDOR: [
       { to: '/vendor/dashboard', label: 'Dashboard' },
       { to: '/vendor/assignments', label: 'My Assignments' },
+      { to: '/vendor/open', label: 'Open Requests' },
     ],
     COORDINATOR: [
       { to: '/coordinator/dashboard', label: 'Dashboard' },

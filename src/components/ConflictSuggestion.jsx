@@ -1,5 +1,5 @@
 import React from 'react';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 import { ExclamationTriangleIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 const ConflictSuggestion = ({ assignment, eventDate, onSuggestSwap }) => {

@@ -1,14 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 import { CheckIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/outline';
 
 const InlineNotification = ({ notification }) => {
-  const { dispatch } = useApp();
+  const { markNotificationRead, respondToAssignment } = useApp();
   const navigate = useNavigate();
 
   const markRead = (id) => {
-    dispatch({ type: 'MARK_NOTIFICATION_READ', payload: { notificationId: id } });
+    markNotificationRead(id);
   };
 
   const handleOpen = () => {
@@ -29,27 +29,21 @@ const InlineNotification = ({ notification }) => {
     }
   };
 
-  const handleRespond = (action) => {
+  const handleRespond = async (action) => {
     markRead(notification.id);
     if (!notification.referenceId) {
       navigate('/vendor/assignments');
       return;
     }
     if (action === 'accept') {
-      dispatch({
-        type: 'RESPOND_TO_ASSIGNMENT',
-        payload: { assignmentId: notification.referenceId, status: 'ACCEPTED' },
-      });
+      await respondToAssignment(notification.referenceId, 'ACCEPTED');
       navigate(`/vendor/assignments/${notification.referenceId}`);
     } else {
-      dispatch({
-        type: 'RESPOND_TO_ASSIGNMENT',
-        payload: {
-          assignmentId: notification.referenceId,
-          status: 'DECLINED',
-          declineReason: 'Declined directly from notification',
-        },
-      });
+      await respondToAssignment(
+        notification.referenceId,
+        'DECLINED',
+        'Declined directly from notification'
+      );
       navigate('/vendor/assignments');
     }
   };

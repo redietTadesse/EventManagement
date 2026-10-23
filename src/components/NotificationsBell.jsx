@@ -1,18 +1,18 @@
 import React from 'react';
 import { Popover, Transition } from '@headlessui/react';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 import { BellIcon } from '@heroicons/react/24/outline';
 import InlineNotification from './InlineNotification';
 
 const NotificationsBell = () => {
-  const { state, dispatch } = useApp();
+  const { state, markAllNotificationsRead } = useApp();
   const { currentUser, notifications } = state;
   const myNotifications = notifications.filter(n => n.userId === currentUser?.id);
   const unreadCount = myNotifications.filter(n => !n.isRead).length;
 
   const markAllRead = () => {
     if (currentUser) {
-      dispatch({ type: 'MARK_NOTIFICATIONS_READ', payload: { userId: currentUser.id } });
+      markAllNotificationsRead();
     }
   };
 
