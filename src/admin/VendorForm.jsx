@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../store/AppContext';
 
 export default function VendorForm() {
   const { id } = useParams();

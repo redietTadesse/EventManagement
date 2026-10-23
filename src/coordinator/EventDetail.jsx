@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import VendorTrailDrawer from '../components/VendorTrailDrawer';
 import { useApp } from '../context/AppContext';
-import api from '../api/axios';
 
 export default function EventDetail() {
   const { id } = useParams();
@@ -13,8 +11,6 @@ export default function EventDetail() {
 
   const [event, setEvent] = useState(null);
   const [assignments, setAssignments] = useState([]);
-  const [trail, setTrail] = useState(null);
-  const [openTrailCategory, setOpenTrailCategory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [forceAssignModal, setForceAssignModal] = useState(false);
@@ -25,9 +21,11 @@ export default function EventDetail() {
     const loadEvent = async () => {
       setLoading(true);
       try {
+        // Load event details and assignments
         const assignmentsData = await fetchAssignmentsForEvent(id);
         setAssignments(assignmentsData || []);
-
+        
+        // Extract event info from first assignment if available
         if (assignmentsData.length > 0) {
           setEvent({
             id: assignmentsData[0].eventId,
@@ -39,7 +37,7 @@ export default function EventDetail() {
             expectedAttendees: assignmentsData[0].expectedAttendees
           });
         }
-
+        
         setError('');
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load event details');
@@ -47,50 +45,28 @@ export default function EventDetail() {
         setLoading(false);
       }
     };
-
+    
     loadEvent();
   }, [id, fetchAssignmentsForEvent]);
-
-  // The trail loads separately so a failure here never blocks the page. It is
-  // supporting detail: the coordinator can still work without it.
-  useEffect(() => {
-    let cancelled = false;
-    api.get(`/events/${id}/vendor-trail`)
-      .then(res => { if (!cancelled) setTrail(res.data); })
-      .catch(() => { if (!cancelled) setTrail(null); });
-    return () => { cancelled = true; };
-  }, [id]);
-
-  const reloadAll = async () => {
-    const assignmentsData = await fetchAssignmentsForEvent(id);
-    setAssignments(assignmentsData || []);
-    try {
-      const res = await api.get(`/events/${id}/vendor-trail`);
-      setTrail(res.data);
-    } catch {
-      setTrail(null);
-    }
-  };
 
   const handleForceAssign = async () => {
     if (!selectedAssignment || !selectedVendor) {
       setError('Please select both an assignment and a vendor');
       return;
     }
-
+    
     try {
       await forceAssign(selectedAssignment.id, selectedVendor, selectedAssignment.serviceCategory);
       setForceAssignModal(false);
       setSelectedAssignment(null);
       setSelectedVendor('');
-      await reloadAll();
+      // Reload assignments
+      const assignmentsData = await fetchAssignmentsForEvent(id);
+      setAssignments(assignmentsData || []);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to force assign vendor');
     }
   };
-
-  const trailFor = (category) =>
-    trail?.categories?.find(c => c.category === category) || null;
 
   const openAssignments = assignments.filter(a => a.status === 'OPEN');
   const pendingAssignments = assignments.filter(a => a.status === 'PENDING');
@@ -210,62 +186,46 @@ export default function EventDetail() {
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h3 className="font-medium text-gray-800">Assignments by Category</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Open a category to see every vendor that was offered it, and why.
-            </p>
           </div>
           <div className="divide-y divide-gray-100">
-            {Object.entries(assignmentsByCategory).map(([category, categoryAssignments]) => {
-              const categoryTrail = trailFor(category);
-              return (
-                <div key={category} className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium text-gray-800">{category}</h4>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-gray-500">
-                        {categoryAssignments.length} assignment(s)
-                      </span>
-                      <button
-                        onClick={() => setOpenTrailCategory(category)}
-                        disabled={!categoryTrail}
-                        className="text-indigo-600 hover:text-indigo-700 text-sm font-medium disabled:text-gray-300 disabled:cursor-not-allowed"
-                      >
-                        View trail
-                        {categoryTrail ? ` (${categoryTrail.attemptCount})` : ''}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {categoryAssignments.map(assignment => (
-                      <div key={assignment.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center gap-3">
-                          <StatusBadge status={assignment.status} />
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">
-                              {assignment.vendorName || 'Unassigned'}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {assignment.status} {assignment.respondedAt && `· ${new Date(assignment.respondedAt).toLocaleDateString()}`}
-                            </p>
-                          </div>
-                        </div>
-                        {assignment.status === 'OPEN' && (
-                          <button
-                            onClick={() => {
-                              setSelectedAssignment(assignment);
-                              setForceAssignModal(true);
-                            }}
-                            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
-                          >
-                            Force Assign
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+            {Object.entries(assignmentsByCategory).map(([category, categoryAssignments]) => (
+              <div key={category} className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-gray-800">{category}</h4>
+                  <span className="text-sm text-gray-500">
+                    {categoryAssignments.length} assignment(s)
+                  </span>
                 </div>
-              );
-            })}
+                <div className="space-y-2">
+                  {categoryAssignments.map(assignment => (
+                    <div key={assignment.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center gap-3">
+                        <StatusBadge status={assignment.status} />
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">
+                            {assignment.vendorName || 'Unassigned'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {assignment.status} {assignment.respondedAt && `· ${new Date(assignment.respondedAt).toLocaleDateString()}`}
+                          </p>
+                        </div>
+                      </div>
+                      {assignment.status === 'OPEN' && (
+                        <button
+                          onClick={() => {
+                            setSelectedAssignment(assignment);
+                            setForceAssignModal(true);
+                          }}
+                          className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                        >
+                          Force Assign
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -294,17 +254,12 @@ export default function EventDetail() {
         </div>
       </div>
 
-      <VendorTrailDrawer
-        categoryTrail={openTrailCategory ? trailFor(openTrailCategory) : null}
-        onClose={() => setOpenTrailCategory(null)}
-      />
-
       {/* Force Assign Modal */}
       {forceAssignModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Force Assign Vendor</h3>
-
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

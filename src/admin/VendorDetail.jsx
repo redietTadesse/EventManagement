@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../store/AppContext';
 
 export default function VendorDetail() {
   const { id } = useParams();

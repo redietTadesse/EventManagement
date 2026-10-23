@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../store/AppContext';
 
 export default function RootRedirect() {
   const { state } = useApp();

@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 const PORTAL_LABELS = {
   client: 'Client',
   vendor: 'Vendor',
   coordinator: 'Coordinator',
+  admin: 'Administrator',
 };
 
 const ROLE_DASHBOARDS = {
   CLIENT: '/client/dashboard',
   VENDOR: '/vendor/dashboard',
   COORDINATOR: '/coordinator/dashboard',
+  ADMIN: '/admin/dashboard',
 };
 
-const SIGNUP_ALLOWED = ['client', undefined];
+const SIGNUP_ALLOWED = ['client', 'vendor', undefined];
 
 export default function Login() {
   const { portal } = useParams();
@@ -23,13 +25,14 @@ export default function Login() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { login, loading } = useAuth();
 
   const { login, registerClient } = useApp();
   const navigate = useNavigate();
 
   const portalKey = portal?.toLowerCase();
   const portalLabel = PORTAL_LABELS[portalKey];
-  const signupAllowed = SIGNUP_ALLOWED.includes(portalKey);
+  const signupAllowed = portalKey ? SIGNUP_ALLOWED.includes(portalKey) : true;
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -43,6 +46,14 @@ export default function Login() {
       // Navigate immediately upon success
       navigate(ROLE_DASHBOARDS[data?.role] || '/', { replace: true });
     } catch (err) {
+      let errorMsg = 'Login failed. Check your credentials.';
+      if (err.response?.data?.message) errorMsg = err.response.data.message;
+      else if (typeof err.response?.data === 'string') errorMsg = err.response.data;
+      else if (err.message) errorMsg = err.message;
+      setError(errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
       const response = err.response?.data;
     setError(
       (response && typeof response === 'object' ? response.message : response) ||
@@ -59,15 +70,9 @@ export default function Login() {
     setError('');
     setNotice('');
     try {
-      await registerClient(form);
-      setMode('signin');
-      setNotice('Account created. Sign in with your new username and password.');
+      setError('Registration is handled by the backend, not available in UI yet.');
     } catch (err) {
-      const response = err.response?.data;
-      setError(
-        (response && typeof response === 'object' ? response.message : response) ||
-          'Registration failed'
-      );
+      setError('Registration failed');
     } finally {
       setSubmitting(false);
     }
@@ -104,7 +109,7 @@ export default function Login() {
         {mode === 'signin' ? (
           <form onSubmit={handleSignIn}>
             {error && (
-              <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">
+              <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4 text-sm">
                 {error}
               </div>
             )}
@@ -139,7 +144,7 @@ export default function Login() {
             </button>
 
             <p className="text-center text-sm text-gray-500 mt-4">
-              Seeded client account: client / password: Admin@123
+              Demo accounts: client1, coordinator1, vendor1, admin / password: password123
             </p>
 
             {signupAllowed && (
@@ -164,11 +169,16 @@ export default function Login() {
                 Coordinator accounts are created by AICC administration.
               </p>
             )}
+            {portalLabel === 'Administrator' && (
+              <p className="text-center text-xs text-gray-400 mt-4">
+                Admin accounts are restricted.
+              </p>
+            )}
           </form>
         ) : (
           <form onSubmit={handleSignUp}>
             {error && (
-              <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">
+              <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4 text-sm">
                 {error}
               </div>
             )}

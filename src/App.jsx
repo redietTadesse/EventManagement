@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AppProvider } from './context/AppContext';
+import { AuthProvider } from './context/AuthContext';
+import { AppProvider } from './store/AppContext';
+
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
 import PortalSelect from './components/PortalSelect';
@@ -24,6 +26,7 @@ import OpenAssignments from './vendor/OpenAssignments';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
+import AdminDashboard from './admin/Dashboard';
 import AvailabilityGrid from './coordinator/AvailabilityGrid.jsx';
 
 function AppRoutes() {
@@ -33,55 +36,20 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/login/:portal?" element={<Login />} />
 
-      <Route
-        path="/client/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/new-inquiry"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <NewInquiry />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/inquiries"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientInquiries />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/inquiries/:id"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <InquiryDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/events"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientEventHistory />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/events/:id"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientEventDetail />
-          </ProtectedRoute>
-        }
-      />
+      {/* Client routes */}
+      <Route element={<ProtectedRoute allowedRoles={['CLIENT']} />}>
+        <Route path="/client/dashboard" element={<ClientDashboard />} />
+        <Route path="/client/new-inquiry" element={<NewInquiry />} />
+      </Route>
 
+      {/* Coordinator routes */}
+      <Route element={<ProtectedRoute allowedRoles={['COORDINATOR']} />}>
+        <Route path="/coordinator/dashboard" element={<CoordinatorDashboard />} />
+        <Route path="/coordinator/inquiries" element={<AllInquiries />} />
+        <Route path="/coordinator/inquiries/:id" element={<InquiryDetail />} />
+        <Route path="/coordinator/events" element={<Events />} />
+        <Route path="/coordinator/calendar" element={<Calendar />} />
+      </Route>
       <Route
         path="/coordinator/dashboard"
         element={
@@ -172,71 +140,19 @@ function AppRoutes() {
         }
       />
 
-      <Route
-        path="/vendor/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <VendorDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendor/assignments"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <MyAssignments />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendor/assignments/:id"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <AssignmentDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendor/open"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <OpenAssignments />
-          </ProtectedRoute>
-        }
-      />
+      {/* Vendor routes */}
+      <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
+        <Route path="/vendor/dashboard" element={<VendorDashboard />} />
+      </Route>
 
-      <Route
-        path="/admin/vendors"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorManagement />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors/new"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorForm />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors/:id/edit"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorForm />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors/:id"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorDetail />
-          </ProtectedRoute>
-        }
-      />
+      {/* Admin routes */}
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/vendors" element={<VendorManagement />} />
+        <Route path="/admin/vendors/new" element={<VendorForm />} />
+        <Route path="/admin/vendors/:id/edit" element={<VendorForm />} />
+        <Route path="/admin/vendors/:id" element={<VendorDetail />} />
+      </Route>
 
       <Route path="*" element={<RootRedirect />} />
     </Routes>
@@ -245,11 +161,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AppProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AppProvider>
+    </AuthProvider>
   );
 }
 
