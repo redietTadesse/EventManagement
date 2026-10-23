@@ -52,22 +52,18 @@ public class Inquiry {
     @Column(columnDefinition = "TEXT")
     private String requirements;
 
-    @Column(name = "requested_categories")
+    // FIXED: Only one declaration of requestedCategories
+    @Column(name = "requested_categories", columnDefinition = "TEXT")
     private String requestedCategories;
 
-    @Column(name = "categories")
+    // FIXED: Only one declaration of categories
+    @Column(name = "categories", columnDefinition = "TEXT")
     private String categories;
 
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private EventStatus status;
-
-    @Column(name = "requested_categories", columnDefinition = "TEXT")
-    private String requestedCategories;
-
-    @Column(name = "categories", columnDefinition = "TEXT")
-    private String categories;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "proposal", columnDefinition = "JSON")

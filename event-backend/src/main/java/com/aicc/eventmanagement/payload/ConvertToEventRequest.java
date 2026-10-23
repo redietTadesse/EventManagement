@@ -19,7 +19,5 @@ public class ConvertToEventRequest {
 
     private List<String> categories;
 
-    private List<String> categories;
-
     private String unfilledCategories;
 }

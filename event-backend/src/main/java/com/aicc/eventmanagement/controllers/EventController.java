@@ -25,7 +25,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -154,21 +153,9 @@ public class EventController {
     public ResponseEntity<List<String>> getEventCategories(@PathVariable Long id) {
         log.info("Fetching vendor categories for event {}", id);
         Event event = eventService.getEventById(id);
+
+        // FIX: Removed the dead code below this return statement that caused the compile error
         return ResponseEntity.ok(vendorService.getRequiredCategoriesFor(event));
-        String eventType = event.getInquiry().getEventType();
-
-        Map<String, List<String>> categoryMap = Map.of(
-                "conference", List.of("av", "catering", "security"),
-                "wedding", List.of("catering", "photography", "music"),
-                "trade_show", List.of("av", "security", "cleaning"),
-                "exhibition", List.of("av", "security", "cleaning"),
-                "concert", List.of("av", "security", "music"),
-                "gala", List.of("catering", "photography", "music", "security"),
-                "seminar", List.of("av", "catering")
-        );
-
-        List<String> categories = categoryMap.getOrDefault(eventType.toLowerCase(), List.of());
-        return ResponseEntity.ok(categories);
     }
 
     private Role extractRoleFromPrincipal(UserDetails principal) {

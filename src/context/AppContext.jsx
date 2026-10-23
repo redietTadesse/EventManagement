@@ -77,7 +77,6 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Resolved: Keep registerClient, which doesn't auto-login but simply creates the account.
   const registerClient = async ({ fullName, username, email, password }) => {
     const res = await authApi.post('/auth/register', {
       fullName,
@@ -142,11 +141,6 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  /**
-   * Client-scoped list. GET /inquiries is COORDINATOR/ADMIN-only, so CLIENT-role
-   * callers get 403 there. The backend exposes GET /inquiries/client/{clientId}
-   * for CLIENT/COORDINATOR/ADMIN — use that for all client-facing pages.
-   */
   const fetchMyInquiries = useCallback(async (clientId) => {
     if (clientId == null) return [];
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -182,11 +176,7 @@ export const AppProvider = ({ children }) => {
         : (typeof venueDetails === 'string' ? venueDetails : JSON.stringify(venueDetails)),
       price: Number.isFinite(price) ? price : 0,
       terms,
-<<<<<<< HEAD
       categories: Array.isArray(categories) ? categories : [],
-      // Normalise {cat: '3'} | {cat: 3} | {cat: ['3']} into {cat: ['3']}
-=======
->>>>>>> cc55c28b9d69a1b6eaefb716d892bdb531f97865
       vendorShortlist: vendorShortlist
         ? Object.fromEntries(
             Object.entries(vendorShortlist)
@@ -302,6 +292,13 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
+  const fetchAvailabilityGrid = useCallback(async (category, daysAhead = 30) => {
+    const res = await api.get('/vendors/availability-grid', {
+      params: { category, daysAhead },
+    });
+    return res.data;
+  }, []);
+
   // ===== NOTIFICATIONS (client-side only) =====
 
   const addNotification = useCallback((notification) => {
@@ -330,7 +327,7 @@ export const AppProvider = ({ children }) => {
     // inquiries
     fetchInquiries, fetchMyInquiries, fetchInquiryById, createInquiry, updateInquiry,
     sendProposal, acceptProposal, rejectProposal,
-    previewConversion,          // <-- add
+    previewConversion,
     convertInquiryToEvent,
     // assignments
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment,
@@ -338,6 +335,7 @@ export const AppProvider = ({ children }) => {
     fetchMyAssignments, fetchMyAssignment, rateAssignment,
     // venues
     fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,
+    fetchAvailabilityGrid, // <-- added for the heatmap
     // coordinator
     fetchCoordinatorStats,
     // notifications
