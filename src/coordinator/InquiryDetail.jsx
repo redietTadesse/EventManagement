@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../store/AppContext';
 
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, fetchInquiryById, convertInquiryToEvent } = useApp();
-  const { loading } = state;
+  const { state } = useApp(); // Get mock data from Context
+  const { inquiries = [] } = state;
+  
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -20,17 +21,15 @@ export default function InquiryDetail() {
     venueDetails: '',
   });
 
+  // Load inquiry from local state instead of API
   useEffect(() => {
-    const loadInquiry = async () => {
-      const data = await fetchInquiryById(id);
-      if (data) {
-        setInquiry(data);
-      } else {
-        setError('Failed to load inquiry');
-      }
-    };
-    loadInquiry();
-  }, [id]);
+    const found = inquiries.find(i => i.id === parseInt(id));
+    if (found) {
+      setInquiry(found);
+    } else {
+      setError('Inquiry not found in mock data');
+    }
+  }, [id, inquiries]);
 
   const handleConvert = async (e) => {
     e.preventDefault();
@@ -43,32 +42,28 @@ export default function InquiryDetail() {
     setError('');
 
     try {
-      await convertInquiryToEvent(id, {
-        name: proposal.name,
-        venue: proposal.venue,
-        venueId: proposal.venueId || null,
-        venueDetails: proposal.venueDetails || null,
-      });
+      // In a real app, this would call the API.
+      // For now, we just navigate back to the dashboard.
       navigate('/coordinator/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to convert');
+      setError('Failed to convert');
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading || !inquiry) {
-    return (
-      <Layout title="Inquiry Detail">
-        <div className="text-center py-10">Loading...</div>
-      </Layout>
-    );
-  }
-
   if (error && !inquiry) {
     return (
       <Layout title="Inquiry Detail">
         <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>
+      </Layout>
+    );
+  }
+
+  if (!inquiry) {
+    return (
+      <Layout title="Inquiry Detail">
+        <div className="text-center py-10">Loading...</div>
       </Layout>
     );
   }
@@ -84,6 +79,7 @@ export default function InquiryDetail() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
+        {/* Inquiry Details */}
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex justify-between items-start">
             <h3 className="text-xl font-bold text-gray-800">Inquiry #{inquiry.id}</h3>
@@ -115,6 +111,7 @@ export default function InquiryDetail() {
           </div>
         </div>
 
+        {/* Convert to Event */}
         {canConvert && (
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Create Event</h3>

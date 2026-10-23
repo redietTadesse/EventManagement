@@ -6,14 +6,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 3000, // 3 seconds timeout
 });
 
 // Auth endpoints live under /api/auth
 export const authApi = axios.create({
-  baseURL: API_BASE_URL.replace('/api', ''),
+  baseURL: API_BASE_URL.replace('/api', ''), // Removes /api for auth routes
   headers: { 'Content-Type': 'application/json' },
-  timeout: 3000,
 });
 
 api.interceptors.request.use(
@@ -38,5 +36,4 @@ api.interceptors.response.use(
   }
 );
 
-// ✅ THIS IS THE IMPORTANT LINE - ADD THIS
 export default api;

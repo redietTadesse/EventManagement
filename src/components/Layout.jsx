@@ -1,18 +1,18 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function Layout({ children, title }) {
-  const { state, logout } = useApp();
-  const { currentUser } = state;
+  const { user, logout } = useAuth(); // <--- USE AUTH CONTEXT HERE
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Navbar */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -23,7 +23,9 @@ export default function Layout({ children, title }) {
               <span className="text-sm text-gray-500">{title}</span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">{currentUser?.name || currentUser?.fullName}</span>
+              <span className="text-sm text-gray-600">
+                {user?.fullName || user?.username}
+              </span>
               <button
                 onClick={handleLogout}
                 className="text-sm text-gray-500 hover:text-gray-700"
@@ -35,6 +37,7 @@ export default function Layout({ children, title }) {
         </div>
       </nav>
 
+      {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>

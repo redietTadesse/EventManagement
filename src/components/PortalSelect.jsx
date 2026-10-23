@@ -1,10 +1,11 @@
 import { Link, Navigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 const ROLE_DASHBOARDS = {
   CLIENT: '/client/dashboard',
   VENDOR: '/vendor/dashboard',
   COORDINATOR: '/coordinator/dashboard',
+  ADMIN: '/admin/dashboard',
 };
 
 const portals = [
@@ -29,11 +30,17 @@ const portals = [
     description: 'Manage inquiries, events, venues, and vendor assignments.',
     accent: 'bg-slate-800',
   },
+  {
+    id: 'admin',
+    icon: '🛡️',
+    title: 'Admin Portal',
+    description: 'Manage system users, platform settings, and global configurations.',
+    accent: 'bg-red-600',
+  },
 ];
 
 export default function PortalSelect() {
-  const { state } = useApp();
-  const { currentUser, loading } = state;
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -43,8 +50,8 @@ export default function PortalSelect() {
     );
   }
 
-  if (currentUser) {
-    const path = ROLE_DASHBOARDS[currentUser.role];
+  if (user) {
+    const path = ROLE_DASHBOARDS[user.role];
     return <Navigate to={path || '/login'} replace />;
   }
 
@@ -56,7 +63,7 @@ export default function PortalSelect() {
       </header>
 
       <main className="flex-1 flex items-start justify-center px-4 pb-16">
-        <div className="grid gap-6 md:grid-cols-3 max-w-5xl w-full">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 max-w-7xl w-full">
           {portals.map((portal) => (
             <Link
               key={portal.id}

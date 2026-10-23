@@ -37,16 +37,16 @@ public class User {
 
     private String phone;
 
+    // FIXED: Removed the duplicate column and the 'countByIsActive' typo
     @Column(name = "is_active")
-    private boolean isActive;
+    @Builder.Default
+    private boolean isActive = true;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-
-
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-    }
+    } 
 }
