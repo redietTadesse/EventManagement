@@ -27,6 +27,7 @@ const Navbar = () => {
       { to: '/coordinator/dashboard', label: 'Dashboard' },
       { to: '/coordinator/inquiries', label: 'All Inquiries' },
       { to: '/coordinator/events', label: 'Events' },
+       { to: '/coordinator/availability', label: 'Availability' },
       { to: '/coordinator/vendors', label: 'Vendors' },
       { to: '/coordinator/venues', label: 'Venues' },
     ],

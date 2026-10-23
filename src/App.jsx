@@ -27,6 +27,7 @@ import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
 import AdminDashboard from './admin/Dashboard';
+import AvailabilityGrid from './coordinator/AvailabilityGrid.jsx';
 
 function AppRoutes() {
   return (
@@ -49,6 +50,95 @@ function AppRoutes() {
         <Route path="/coordinator/events" element={<Events />} />
         <Route path="/coordinator/calendar" element={<Calendar />} />
       </Route>
+      <Route
+        path="/coordinator/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <CoordinatorDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/inquiries"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <AllInquiries />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/inquiries/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <InquiryDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/events"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Events />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/events/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <EventDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Venues />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <VenueDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/calendar"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Calendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/availability"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <AvailabilityGrid />
+          </ProtectedRoute>
+        }
+      />
+     
+      <Route
+        path="/coordinator/venues"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <Venues />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/coordinator/venues/:id"
+        element={
+          <ProtectedRoute allowedRoles={['COORDINATOR']}>
+            <VenueDetail />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Vendor routes */}
       <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
