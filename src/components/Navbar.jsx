@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import NotificationsBell from './NotificationsBell';
+// import NotificationsBell from './NotificationsBell';
 
 const Navbar = () => {
   const { state, logout } = useApp();
@@ -63,7 +63,7 @@ const Navbar = () => {
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <NotificationsBell />
+            {/* <NotificationsBell /> */}
             <div className="hidden sm:flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-ice text-navy flex items-center justify-center text-sm font-semibold">
                 {currentUser.fullName.split(' ').map(w => w[0]).join('')}

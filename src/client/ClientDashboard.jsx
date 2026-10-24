@@ -162,7 +162,7 @@ export default function ClientDashboard() {
                       </p>
                     </div>
                     <Link 
-                      to={`/client/events/${event.event?.id || event.id}`}
+                      to={`/client/events/${event.id}`}
                       className="text-indigo-600 hover:text-indigo-700 text-sm font-medium ml-4"
                     >
                       View →

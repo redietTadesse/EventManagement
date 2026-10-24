@@ -5,6 +5,7 @@ import StatusBadge from '../components/StatusBadge';
 import PipelineLadder from '../components/PipelineLadder';
 import AuditTimeline from '../components/AuditTimeline';
 import VendorTrailDrawer from '../components/VendorTrailDrawer';
+import ManualAssignModal from '../components/ManualAssignModal';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -12,7 +13,7 @@ import api from '../api/axios';
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { fetchAssignmentsForEvent, forceAssign, fetchEventHistory, fetchChecklist } = useApp();
+  const { fetchAssignmentsForEvent, forceAssign, fetchEventHistory, fetchChecklist, toggleChecklistItem } = useApp();
 
   const [event, setEvent] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -23,10 +24,15 @@ export default function EventDetail() {
   const [forceAssignModal, setForceAssignModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedVendor, setSelectedVendor] = useState('');
+  const [vendors, setVendors] = useState([]);
   const [checklist, setChecklist] = useState([]);
   const [checklistExpanded, setChecklistExpanded] = useState(false);
 
   useEffect(() => {
+  api.get('/vendors').then(res => setVendors(res.data)).catch(() => {});
+}, []);
+
+useEffect(() => {
     const loadEvent = async () => {
       setLoading(true);
       try {
@@ -120,6 +126,24 @@ export default function EventDetail() {
     );
   }
 
+  const reloadAll = async () => {
+    const assignmentsData = await fetchAssignmentsForEvent(id);
+    setAssignments(assignmentsData || []);
+    if (assignmentsData.length > 0) {
+      setEvent({
+        id: assignmentsData[0].eventId,
+        name: assignmentsData[0].eventName,
+        status: assignmentsData[0].eventStatus,
+        date: assignmentsData[0].eventDate,
+        venue: assignmentsData[0].eventVenue,
+        clientName: assignmentsData[0].eventClientName,
+        expectedAttendees: assignmentsData[0].expectedAttendees,
+      });
+    }
+    const checklistData = await fetchChecklist(id);
+    setChecklist(checklistData || []);
+  };
+
   return (
     <Layout title="Event Detail">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
@@ -141,17 +165,40 @@ export default function EventDetail() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="text-sm text-gray-600 hover:text-gray-700 px-3 py-2 border border-gray-300 rounded-lg">
-                  Edit venue
-                </button>
-                <button className="text-sm text-rose-600 hover:text-rose-700 px-3 py-2 border border-rose-300 rounded-lg">
-                  Cancel event
-                </button>
-                {event?.status === 'CONFIRMED' && (
-                  <button className="text-sm text-emerald-600 hover:text-emerald-700 px-3 py-2 border border-emerald-300 rounded-lg">
-                    Complete event
-                  </button>
-                )}
+<button
+                          onClick={async () => {
+                            if (!confirm('Cancel this event? This cannot be undone.')) return;
+                            try {
+                              await api.patch(`/events/${event.id}/status`, null, {
+                                params: { status: 'CANCELLED' }
+                              });
+                              window.location.reload();
+                            } catch (err) {
+                              setError(err.response?.data?.message || 'Failed to cancel event');
+                            }
+                          }}
+                          className="text-sm text-rose-600 hover:text-rose-700 px-3 py-2 border border-rose-300 rounded-lg"
+                        >
+                          Cancel event
+                        </button>
+                        {event?.status === 'CONFIRMED' && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Mark this event as COMPLETED?')) return;
+                              try {
+                                await api.patch(`/events/${event.id}/status`, null, {
+                                  params: { status: 'COMPLETED' }
+                                });
+                                window.location.reload();
+                              } catch (err) {
+                                setError(err.response?.data?.message || 'Failed to complete event');
+                              }
+                            }}
+                            className="text-sm text-emerald-600 hover:text-emerald-700 px-3 py-2 border border-emerald-300 rounded-lg"
+                          >
+                            Complete event
+                          </button>
+                        )}
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-4 text-sm border-t border-gray-100 pt-4">
@@ -220,7 +267,16 @@ export default function EventDetail() {
                         <input
                           type="checkbox"
                           checked={item.isComplete}
-                          onChange={() => {/* Toggle complete */}}
+                          onChange={async () => {
+                            try {
+                              await toggleChecklistItem(item.id, !item.isComplete);
+                              setChecklist(prev => prev.map(c =>
+                                c.id === item.id ? { ...c, isComplete: !c.isComplete } : c
+                              ));
+                            } catch (err) {
+                              setError(err.response?.data?.message || 'Failed to update checklist');
+                            }
+                          }}
                           className="w-4 h-4 text-emerald-600 rounded"
                         />
                         <span className={`text-sm ${item.isComplete ? 'line-through text-gray-400' : 'text-gray-700'}`}>
@@ -315,69 +371,28 @@ export default function EventDetail() {
         eventId={id}
       />
 
-      {/* Force Assign Modal */}
-      {forceAssignModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Force Assign Vendor</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Assignment
-                </label>
-                <select
-                  value={selectedAssignment?.id || ''}
-                  onChange={(e) => {
-                    const assignment = assignments.find(a => a.id === parseInt(e.target.value));
-                    setSelectedAssignment(assignment);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="">Select assignment</option>
-                  {assignments.filter(a => a.status === 'OPEN' || a.status === 'DECLINED').map(assignment => (
-                    <option key={assignment.id} value={assignment.id}>
-                      {assignment.serviceCategory} - {assignment.eventName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vendor ID
-                </label>
-                <input
-                  type="number"
-                  value={selectedVendor}
-                  onChange={(e) => setSelectedVendor(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Enter vendor ID"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setForceAssignModal(false);
-                    setSelectedAssignment(null);
-                    setSelectedVendor('');
-                  }}
-                  className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleForceAssign(null, selectedVendor, selectedAssignment?.serviceCategory)}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg"
-                >
-                  Assign
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ManualAssignModal
+        isOpen={forceAssignModal}
+        onClose={() => {
+          setForceAssignModal(false);
+          setSelectedAssignment(null);
+        }}
+        onAssign={async (vendorId) => {
+          await handleForceAssign(
+            selectedAssignment?.id,
+            vendorId,
+            selectedAssignment?.serviceCategory
+          );
+        }}
+        availableVendors={
+          selectedAssignment
+            ? vendors.filter(v =>
+                v.serviceCategory === selectedAssignment.serviceCategory && v.isActive
+              )
+            : []
+        }
+        serviceCategory={selectedAssignment?.serviceCategory}
+      />
     </Layout>
   );
 }

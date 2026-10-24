@@ -102,7 +102,7 @@ export default function ClientEventHistory() {
                     </td>
                     <td className="px-4 py-3">
                       <Link
-                        to={`/client/events/${event.event?.id || event.id}`}
+                        to={`/client/events/${event.id}`}
                         className="text-indigo-600 hover:text-indigo-700 font-medium"
                       >
                         View
