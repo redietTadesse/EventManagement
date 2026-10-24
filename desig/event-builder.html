@@ -1,0 +1,330 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>AICC - Event Plan Builder</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface": "#0b1c30",
+                      "secondary": "#b61722",
+                      "surface-container-low": "#eff4ff",
+                      "on-tertiary": "#ffffff",
+                      "on-tertiary-fixed-variant": "#773205",
+                      "primary": "#00236f",
+                      "outline-variant": "#c5c5d3",
+                      "inverse-on-surface": "#eaf1ff",
+                      "surface-container-high": "#dce9ff",
+                      "surface-tint": "#4059aa",
+                      "error-container": "#ffdad6",
+                      "on-secondary-fixed": "#410004",
+                      "surface": "#f8f9ff",
+                      "inverse-primary": "#b6c4ff",
+                      "secondary-fixed-dim": "#ffb3ad",
+                      "on-error-container": "#93000a",
+                      "on-tertiary-container": "#f39461",
+                      "surface-bright": "#f8f9ff",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-container": "#e5eeff",
+                      "primary-container": "#1e3a8a",
+                      "on-primary": "#ffffff",
+                      "on-primary-container": "#90a8ff",
+                      "surface-container-highest": "#d3e4fe",
+                      "on-surface-variant": "#444651",
+                      "on-primary-fixed-variant": "#264191",
+                      "on-error": "#ffffff",
+                      "outline": "#757682",
+                      "on-background": "#0b1c30",
+                      "on-primary-fixed": "#00164e",
+                      "on-tertiary-fixed": "#341100",
+                      "tertiary-container": "#6e2c00",
+                      "primary-fixed": "#dce1ff",
+                      "on-secondary-container": "#fffbff",
+                      "tertiary-fixed-dim": "#ffb691",
+                      "tertiary-fixed": "#ffdbcb",
+                      "primary-fixed-dim": "#b6c4ff",
+                      "surface-dim": "#cbdbf5",
+                      "tertiary": "#4b1c00",
+                      "error": "#ba1a1a",
+                      "secondary-container": "#da3437",
+                      "inverse-surface": "#213145",
+                      "on-secondary": "#ffffff",
+                      "on-secondary-fixed-variant": "#930013",
+                      "secondary-fixed": "#ffdad7",
+                      "background": "#f8f9ff",
+                      "surface-variant": "#d3e4fe"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "base": "4px",
+                      "margin-mobile": "16px",
+                      "margin-desktop": "40px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "gutter": "24px",
+                      "xl": "32px",
+                      "xs": "4px",
+                      "container-max": "1440px",
+                      "md": "16px"
+              },
+              "fontFamily": {
+                      "display-lg": ["Inter"],
+                      "title-lg": ["Inter"],
+                      "label-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-sm": ["Inter"]
+              },
+              "fontSize": {
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "title-lg": ["18px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "600"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+        .timeline-grid {
+            background-size: 100% 60px;
+            background-image: linear-gradient(to bottom, #E2E8F0 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col">
+<div class="flex min-h-screen">
+  <aside class="hidden w-64 flex-col bg-primary text-on-primary md:flex">
+    <div class="px-6 py-6 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-3xl">domain</span>
+        <div>
+          <h1 class="text-lg font-bold">AICC</h1>
+          <p class="text-[10px] uppercase tracking-[0.2em] opacity-80">Operations</p>
+        </div>
+      </div>
+    </div>
+    <nav class="flex-1 space-y-2 px-3 py-4">
+      <a class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors" href="dashboard.html"><span class="material-symbols-outlined">dashboard</span>Dashboard</a>
+      <a class="flex items-center gap-3 rounded-lg bg-white/10 px-4 py-3 text-sm font-semibold shadow-inner transition-colors" href="calendar.html"><span class="material-symbols-outlined">calendar_month</span>Calendar</a>
+      <a class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors" href="venues.html"><span class="material-symbols-outlined">location_on</span>Venues</a>
+      <a class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors" href="reports.html"><span class="material-symbols-outlined">analytics</span>Reports</a>
+      <a class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors" href="admin-panel.html"><span class="material-symbols-outlined">admin_panel_settings</span>Admin</a>
+      <a class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors" href="finance-dashboard.html"><span class="material-symbols-outlined">payments</span>Finance</a>
+      <a class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors" href="index.html"><span class="material-symbols-outlined">home</span>Home</a>
+    </nav>
+  </aside>
+  <div class="flex flex-1 flex-col">
+    <nav class="sticky top-0 z-50 border-b border-outline-variant bg-surface-container-lowest/95 backdrop-blur-sm">
+      <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-3 px-4 py-3 md:px-8">
+        <div class="flex items-center gap-2 text-sm font-semibold text-primary">
+          <span class="material-symbols-outlined text-base">view_module</span>
+          <span>Pages</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-xs font-medium text-on-surface-variant">
+          <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="event-builder.html">Event Builder</a>
+          <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="coordinator-dashboard.html">Coordinator</a>
+          <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="planner-dashboard.html">Planner</a>
+          <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="admin-panel.html">Admin</a>
+          <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="finance-dashboard.html">Finance</a>
+          <a class="rounded-md border border-outline-variant bg-surface px-3 py-1.5 hover:bg-surface-container transition-colors" href="index.html">Home</a>
+        </div>
+      </div>
+    </nav>
+<!-- TopNavBar -->
+<header class="bg-surface-container-lowest dark:bg-inverse-surface text-primary dark:text-inverse-primary text-body-md font-body-md fixed top-0 w-full z-50 border-b border-outline-variant dark:border-outline flat no shadows flex justify-between items-center h-16 px-margin-desktop w-full">
+<div class="flex items-center gap-4">
+<h1 class="text-title-lg font-title-lg font-bold text-primary dark:text-inverse-primary">Addis Convention Center</h1>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex gap-6">
+<!-- Suppressed global nav to focus on the Event Builder canvas -->
+</nav>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined cursor-pointer hover:bg-surface-container-low transition-colors rounded-full p-2" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:bg-surface-container-low transition-colors rounded-full p-2" data-icon="help">help</span>
+<div class="w-8 h-8 bg-surface-variant rounded-full overflow-hidden border border-outline-variant cursor-pointer hover:opacity-80">
+<img alt="Coordinator Profile" class="object-cover w-full h-full" data-alt="A professional headshot of a corporate event coordinator with a friendly smile, well-lit in a modern office environment, wearing a neat navy blue blazer, light mode aesthetic, crisp details." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXUK1bjlqORS6e2oO8C1yWqP8hZz4f02s8evsGRcKnhcRIuXRgSaN-33Qlv3l_07qgqYdjPipzKQlCtq_JjH1gBeXUHa1MOzDX_BiDPsD1AFHDrwqML9H16ZGyPD4nBz0-72XDP2NazXQvQEbIDZV5dEeIJuXa-AQy9AV8--lBUg1xnOBn5OknNwo8hq2gXIRjrOeyD6pZGbt14pI8eH3CnA-5Nmp9590BX0EIelMMZfNb8VYIyzbx">
+</div>
+</div>
+</div>
+</header>
+<!-- SideNavBar (Suppressed for focus on Event Builder) -->
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-16 max-w-[1440px] mx-auto w-full p-margin-desktop grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Header Section -->
+<div class="col-span-12 flex justify-between items-end mb-lg border-b border-outline-variant pb-lg">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<span class="bg-surface-container-low text-primary px-3 py-1 rounded-full text-label-md font-label-md font-bold uppercase tracking-wider">Confirmed</span>
+</div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface m-0">Trade Bazar</h2>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-2 border border-outline-variant text-on-surface rounded-md font-label-md hover:bg-surface-container transition-colors focus:ring-2 focus:ring-primary">Cancel</button>
+<button class="px-6 py-2 bg-primary-container text-on-primary rounded-md font-label-md shadow-sm hover:opacity-90 transition-opacity focus:ring-2 focus:ring-primary focus:ring-offset-2">Save Plan</button>
+</div>
+</div>
+<!-- Left Panel: Timeline -->
+<section class="col-span-12 md:col-span-7 lg:col-span-8 bg-surface-container-lowest rounded-lg border border-outline-variant shadow-sm overflow-hidden flex flex-col h-[700px]">
+<div class="p-4 border-b border-outline-variant bg-surface-bright flex justify-between items-center">
+<h3 class="text-title-lg font-title-lg text-on-surface">Event Timeline</h3>
+<span class="text-body-md text-on-surface-variant">Saturday, Nov 18, 2023</span>
+</div>
+<div class="flex-1 overflow-y-auto relative bg-surface p-4">
+<!-- Timeline Grid Background -->
+<div class="absolute inset-0 ml-16 timeline-grid pointer-events-none opacity-50"></div>
+<div class="relative h-[900px]"> <!-- Set height based on total time (60px per hour) -->
+<!-- Time Markers -->
+<div class="absolute left-0 top-0 bottom-0 w-16 border-r border-outline-variant flex flex-col pt-[30px]">
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">9 AM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">10 AM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">11 AM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">12 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">1 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">2 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">3 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">4 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">5 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">6 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">7 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">8 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">9 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">10 PM</div>
+<div class="h-[60px] text-label-md text-on-surface-variant text-right pr-2">11 PM</div>
+</div>
+<!-- Event Blocks Container -->
+<div class="absolute left-20 right-4 top-0 bottom-0">
+<!-- Setup Block (9:00 AM - 12:00 PM) -->
+<div class="absolute top-0 w-full h-[180px] bg-surface-container border-l-4 border-outline-variant rounded-md shadow-sm p-3 flex flex-col group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-bold text-on-surface">Setup</h4>
+<span class="material-symbols-outlined text-outline drag-handle" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<span class="text-label-md text-on-surface-variant">09:00 - 12:00 (Hall A)</span>
+</div>
+<!-- Main Ceremony Block (2:00 PM - 3:30 PM) -->
+<div class="absolute top-[300px] w-full h-[90px] bg-surface-container-high border-l-4 border-primary rounded-md shadow-sm p-3 flex flex-col group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-bold text-primary">Exhibitor Setup &amp; Registration</h4>
+<span class="material-symbols-outlined text-outline drag-handle" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<span class="text-label-md text-on-surface-variant">14:00 - 15:30 (Hall A)</span>
+</div>
+<!-- Dinner Block (5:00 PM - 9:00 PM) -->
+<div class="absolute top-[480px] w-full h-[240px] bg-[#FEF3C7] border-l-4 border-[#D97706] rounded-md shadow-sm p-3 flex flex-col group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-bold text-[#92400E]">VIP Networking Luncheon</h4>
+<span class="material-symbols-outlined text-outline drag-handle" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<span class="text-label-md text-[#B45309]">17:00 - 21:00 (Banquet Hall)</span>
+</div>
+<!-- Teardown Block (10:00 PM - 11:30 PM) -->
+<div class="absolute top-[780px] w-full h-[90px] bg-surface-container border-l-4 border-outline-variant rounded-md shadow-sm p-3 flex flex-col group hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start">
+<h4 class="text-body-md font-bold text-on-surface">Teardown</h4>
+<span class="material-symbols-outlined text-outline drag-handle" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<span class="text-label-md text-on-surface-variant">22:00 - 23:30 (All Assigned)</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Panel: Resources -->
+<section class="col-span-12 md:col-span-5 lg:col-span-4 flex flex-col gap-lg">
+<!-- Assignments Card -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant shadow-sm p-6">
+<h3 class="text-title-lg font-title-lg text-on-surface border-b border-outline-variant pb-4 mb-4">Resource Assignments</h3>
+<form class="flex flex-col gap-4">
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Hall / Room</label>
+<select class="w-full rounded-md border-outline-variant shadow-sm focus:border-primary focus:ring-primary text-body-md p-2">
+<option>Hall A (Main)</option>
+<option>Banquet Hall</option>
+<option>Meeting Room 1</option>
+</select>
+</div>
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Equipment</label>
+<select class="w-full rounded-md border-error shadow-sm focus:border-error focus:ring-error text-body-md p-2 bg-error-container/20">
+<option>Projector A</option>
+<option>Sound System Base</option>
+<option>Lighting Rig C</option>
+</select>
+</div>
+<div>
+<label class="block text-label-md font-label-md text-on-surface mb-1">Staff</label>
+<select class="w-full rounded-md border-outline-variant shadow-sm focus:border-primary focus:ring-primary text-body-md p-2">
+<option>Team Alpha (5 Pax)</option>
+<option>Team Beta (3 Pax)</option>
+<option>Security Detail (2 Pax)</option>
+</select>
+</div>
+</form>
+<!-- Conflict Banner -->
+<div class="mt-6 bg-[#FEF3C7] border border-[#F59E0B] rounded-md p-4 flex gap-3 items-start shadow-sm">
+<span class="material-symbols-outlined text-[#D97706]" data-icon="warning">warning</span>
+<div>
+<h4 class="text-body-md font-bold text-[#92400E] m-0">Resource Conflict</h4>
+<p class="text-body-md text-[#92400E] mt-1">
+                            'Projector A' is already booked for 'Corporate Tech Summit' on this day at 2:00 PM.
+                        </p>
+<button class="mt-2 text-label-md font-label-md font-bold text-secondary border border-secondary rounded px-3 py-1 hover:bg-error-container transition-colors">Resolve Conflict</button>
+</div>
+</div>
+</div>
+<!-- Vendor Status Card -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant shadow-sm p-6 flex-1">
+<div class="flex justify-between items-center border-b border-outline-variant pb-4 mb-4">
+<h3 class="text-title-lg font-title-lg text-on-surface">Vendor Status</h3>
+<button class="text-label-md font-label-md text-primary hover:bg-surface-container-low px-2 py-1 rounded transition-colors">+ Request Service</button>
+</div>
+<ul class="flex flex-col gap-3">
+<li class="flex justify-between items-center p-3 border border-outline-variant rounded-md bg-surface">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-outline" data-icon="restaurant">restaurant</span>
+<span class="text-body-md font-medium text-on-surface">Premium Catering</span>
+</div>
+<span class="px-2 py-1 bg-[#D1FAE5] text-[#065F46] rounded text-label-sm font-label-sm border border-[#34D399]">Confirmed</span>
+</li>
+<li class="flex justify-between items-center p-3 border border-outline-variant rounded-md bg-surface">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-outline" data-icon="local_florist">local_florist</span>
+<span class="text-body-md font-medium text-on-surface">Floral Arrangements</span>
+</div>
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant rounded text-label-sm font-label-sm border border-outline-variant">Pending Response</span>
+</li>
+<li class="flex justify-between items-center p-3 border border-outline-variant rounded-md bg-surface">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-outline" data-icon="cleaning_services">cleaning_services</span>
+<span class="text-body-md font-medium text-on-surface">Post-Event Cleaning</span>
+</div>
+<span class="px-2 py-1 bg-[#DBEAFE] text-[#1E40AF] rounded text-label-sm font-label-sm border border-[#60A5FA]">Requested</span>
+</li>
+</ul>
+</div>
+</section>
+</main>
+
+
+</body></html>

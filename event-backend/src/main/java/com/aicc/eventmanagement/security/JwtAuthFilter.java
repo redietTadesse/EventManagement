@@ -27,7 +27,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            response.setStatus(HttpServletResponse.SC_OK);
+            filterChain.doFilter(request, response);
+            return;
+        }
         final String header = request.getHeader("Authorization");
 
         if (header != null && header.startsWith("Bearer ") && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -35,7 +39,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             if (jwtUtils.validateJwtToken(token)) {
                 String username = jwtUtils.getUserNameFromJwtToken(token);
+<<<<<<< HEAD
+               User user = userRepository.findByUsername(username)
+    .orElseThrow(() -> new RuntimeException("User not found"));
+=======
                 User user = userRepository.findByUsername(username).orElse(null);
+>>>>>>> 9502703f0f87f6cba525531ad2e81db07fd4834a
 
                 if (user != null && user.isActive()) {
                     List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));

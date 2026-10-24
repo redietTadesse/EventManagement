@@ -7,14 +7,12 @@ const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 const api = axios.create({
   baseURL: API_ROOT,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10000, // 10s: a cold Render instance can take several seconds to wake
 });
 
 // Auth lives outside /v1
 export const authApi = axios.create({
-  baseURL: API_ROOT.replace('/api/v1', '/api'),
+  baseURL: API_BASE_URL.replace('/api', ''), // Removes /api for auth routes
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
 });
 
 api.interceptors.request.use(

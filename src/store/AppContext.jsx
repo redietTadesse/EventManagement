@@ -38,6 +38,36 @@ const reducer = (state, action) => {
     case 'LOGOUT':
       return { ...state, currentUser: null };
 
+    // ===== ADMIN USER MANAGEMENT CRUD =====
+    case 'TOGGLE_USER_STATUS': {
+      const updatedUsers = state.users.map(u => 
+        u.id === action.payload ? { ...u, isActive: u.isActive === false ? true : false } : u
+      );
+      return { ...state, users: updatedUsers };
+    }
+
+    case 'DELETE_USER': {
+      return { 
+        ...state, 
+        users: state.users.filter(u => u.id !== action.payload) 
+      };
+    }
+
+    case 'UPDATE_USER': {
+      return {
+        ...state,
+        users: state.users.map(u => u.id === action.payload.id ? { ...u, ...action.payload } : u)
+      };
+    }
+
+    case 'RESET_PASSWORD': {
+      // In a real app, this would trigger a backend email. 
+      // Here we just simulate a successful reset in the console.
+      console.log(`Password reset for user ID: ${action.payload}`);
+      return state; 
+    }
+
+    // ===== INQUIRY ACTIONS =====
     case 'CREATE_INQUIRY': {
       const { eventType, eventDate, expectedAttendees, requirements } = action.payload;
       const newInquiry = {
@@ -223,7 +253,6 @@ const reducer = (state, action) => {
         const eventsMap = buildEventsMap(state.inquiries);
         const eventDate = state.inquiries.find(i => i.event?.id === assignment.eventId)?.eventDate;
         if (hasConflict(assignment.vendorId, eventDate, state.assignments, eventsMap)) {
-          // Block – we'll handle in UI; but for safety we still reject the action
           alert('Conflict detected: you already have an assignment on this date.');
           return state;
         }
@@ -248,7 +277,6 @@ const reducer = (state, action) => {
           ...event,
           checklist: deriveChecklist(event, state.assignments.map(a => a.id === assignmentId ? updatedAssignment : a)),
         };
-        // Check if all required categories are now accepted
         const categoriesNeeded = eventCategoryMap[state.inquiries.find(i => i.event?.id === event.id)?.eventType] || [];
         const acceptedCategories = newState.assignments
           .filter(a => a.eventId === event.id && a.status === 'ACCEPTED')
@@ -256,27 +284,23 @@ const reducer = (state, action) => {
         const allFilled = categoriesNeeded.every(cat => acceptedCategories.includes(cat));
         if (allFilled) {
           updatedEvent.status = 'CONFIRMED';
-          // Add timeline entry
           const entry = createTimelineEntry(event.id, 'System', 'CONFIRMED', 'All vendor categories confirmed');
           newState.timeline = [...newState.timeline, entry];
         }
-        // Update inquiry event
         newState.inquiries = newState.inquiries.map(i => i.event?.id === event.id ? { ...i, event: updatedEvent } : i);
       }
 
       // If declined: auto‑reassign
       if (status === 'DECLINED') {
         const eventDate = state.inquiries.find(i => i.event?.id === event.id)?.eventDate;
-        // Find a new vendor for that category
         const newVendor = findBestVendor(
           assignment.serviceCategory,
           eventDate,
           state.vendors,
           newState.assignments,
-          assignment.vendorId // exclude declining vendor
+          assignment.vendorId
         );
         if (newVendor) {
-          // Create new assignment
           const maxId = newState.assignments.reduce((max, a) => Math.max(max, a.id), 0);
           const newAssignment = {
             id: maxId + 1,
@@ -291,7 +315,6 @@ const reducer = (state, action) => {
             declineReason: null,
           };
           newState.assignments = [...newState.assignments, newAssignment];
-          // Notify new vendor
           const notif = {
             id: newState.notifications.reduce((max, n) => Math.max(max, n.id), 0) + 1,
             userId: newVendor.userId || 0,
@@ -303,18 +326,15 @@ const reducer = (state, action) => {
             createdAt: new Date().toISOString(),
           };
           newState.notifications = [...newState.notifications, notif];
-          // Add timeline entry
           const entry = createTimelineEntry(event.id, 'System', 'AWAITING_VENDORS', `Reassigned ${assignment.serviceCategory} to ${newVendor.companyName}`);
           newState.timeline = [...newState.timeline, entry];
         } else {
-          // No vendor available → mark NEEDS_COORDINATOR
           const updatedEvent = {
             ...event,
             status: 'NEEDS_COORDINATOR',
             unfilledCategories: event.unfilledCategories || [assignment.serviceCategory],
           };
           newState.inquiries = newState.inquiries.map(i => i.event?.id === event.id ? { ...i, event: updatedEvent } : i);
-          // Notify coordinator
           const notif = {
             id: newState.notifications.reduce((max, n) => Math.max(max, n.id), 0) + 1,
             userId: 4,
@@ -340,18 +360,15 @@ const reducer = (state, action) => {
       const event = inquiry.event;
       const vendor = state.vendors.find(v => v.id === vendorId);
       if (!vendor) return state;
-      // Check if vendor already has accepted assignment for that category
       const existing = state.assignments.find(a => a.eventId === eventId && a.serviceCategory === vendor.serviceCategory);
-      if (existing) return state; // already assigned
+      if (existing) return state; 
 
-      // Check conflict
       const eventsMap = buildEventsMap(state.inquiries);
       if (hasConflict(vendorId, inquiry.eventDate, state.assignments, eventsMap)) {
         alert('Conflict detected: you already have an assignment on this date.');
         return state;
       }
 
-      // Create new assignment with ACCEPTED status
       const maxId = state.assignments.reduce((max, a) => Math.max(max, a.id), 0);
       const newAssignment = {
         id: maxId + 1,
@@ -367,13 +384,11 @@ const reducer = (state, action) => {
       };
       const newAssignments = [...state.assignments, newAssignment];
 
-      // Update checklist
       const updatedEvent = {
         ...event,
         checklist: deriveChecklist(event, newAssignments),
       };
 
-      // Check if all categories confirmed
       const categoriesNeeded = eventCategoryMap[inquiry.eventType] || [];
       const acceptedCategories = newAssignments
         .filter(a => a.eventId === eventId && a.status === 'ACCEPTED')
@@ -385,7 +400,6 @@ const reducer = (state, action) => {
         state.timeline = [...state.timeline, entry];
       }
 
-      // Update inquiry
       const updatedInquiry = { ...inquiry, event: updatedEvent, updatedAt: new Date().toISOString() };
 
       return {
@@ -424,7 +438,6 @@ const reducer = (state, action) => {
       const vendor = state.vendors.find(v => v.id === vendorId);
       if (!vendor) return state;
 
-      // Create PENDING assignment
       const maxId = state.assignments.reduce((max, a) => Math.max(max, a.id), 0);
       const newAssignment = {
         id: maxId + 1,
@@ -439,7 +452,6 @@ const reducer = (state, action) => {
         declineReason: null,
       };
 
-      // Remove category from unfilled
       const unfilled = (event.unfilledCategories || []).filter(c => c !== category);
       const updatedEvent = {
         ...event,
@@ -481,10 +493,8 @@ const reducer = (state, action) => {
 
     case 'RATE_VENDOR': {
       const { eventId, vendorId, rating, comment } = action.payload;
-      // Only allow rating for completed events
       const inquiry = state.inquiries.find(i => i.event?.id === eventId);
       if (!inquiry || inquiry.event?.status !== 'COMPLETED') return state;
-      // Store rating on the vendor object
       const updatedVendors = state.vendors.map(v => {
         if (v.id === vendorId) {
           const oldRatings = v.ratings || [];
@@ -492,7 +502,6 @@ const reducer = (state, action) => {
         }
         return v;
       });
-      // Recalculate average rating for the vendor
       const finalVendors = updatedVendors.map(v => {
         if (v.id === vendorId && v.ratings?.length > 0) {
           const avgRating = v.ratings.reduce((sum, r) => sum + r.rating, 0) / v.ratings.length;
@@ -615,8 +624,26 @@ const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
+
+  // ===== WRAPPER FUNCTIONS =====
+  const createInquiry = (inquiryData) => {
+    dispatch({ type: 'CREATE_INQUIRY', payload: inquiryData });
+  };
+
+  const fetchInquiries = () => {
+    // Mock data is already loaded, so this is a no-op
+  };
+
+  const login = (user) => {
+    dispatch({ type: 'LOGIN', payload: user });
+  };
+
+  const logout = () => {
+    dispatch({ type: 'LOGOUT' });
+  };
+
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ state, dispatch, createInquiry, fetchInquiries, login, logout }}>
       {children}
     </AppContext.Provider>
   );

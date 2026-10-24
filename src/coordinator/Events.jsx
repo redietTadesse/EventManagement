@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../store/AppContext';
 
 export default function Events() {
   const { state, fetchInquiries } = useApp();

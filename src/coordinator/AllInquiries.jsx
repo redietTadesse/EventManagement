@@ -2,39 +2,19 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../store/AppContext';
 
 export default function AllInquiries() {
   const { state, fetchInquiries } = useApp();
   const { inquiries, loading } = state;
   const [filter, setFilter] = useState('All');
-  const [dataLoaded, setDataLoaded] = useState(false);
 
-  useEffect(() => {
-    // Only fetch once when component mounts
-    if (!dataLoaded && !loading) {
-      console.log('📋 AllInquiries: Fetching inquiries...');
-      fetchInquiries();
-      setDataLoaded(true);
-    }
-  }, []); // ← Empty dependency array = runs once
-
-  // If inquiries is empty and not loading, use mock data directly
-  if (!loading && inquiries.length === 0) {
-    return (
-      <Layout title="All Inquiries">
-        <div className="text-center py-10 text-gray-500">
-          <p>No inquiries found.</p>
-          <p className="text-sm mt-2">Try creating a new inquiry.</p>
-        </div>
-      </Layout>
-    );
-  }
+  
 
   const statuses = ['All', ...new Set(inquiries.map((i) => i.status).filter(Boolean))];
   const filtered = filter === 'All' ? inquiries : inquiries.filter((i) => i.status === filter);
 
-  if (loading && inquiries.length === 0) {
+  if (loading) {
     return (
       <Layout title="All Inquiries">
         <div className="text-center py-10">Loading...</div>
