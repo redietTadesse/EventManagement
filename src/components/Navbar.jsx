@@ -75,7 +75,7 @@ const Navbar = () => {
             </div>
             <button
               onClick={handleLogout}
-              className="text-sm text-slate-500 hover:text-rose transition-colors"
+              className="text-sm text-slate-500 hover:text-rose-600 transition-colors"
             >
               Logout
             </button>

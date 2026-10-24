@@ -77,7 +77,10 @@ export default function InquiryDetail() {
       setShowPreview(false);
       navigate('/coordinator/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to convert');
+      console.error('Convert error:', err);
+      console.error('Error response:', err.response?.data);
+      const errorMsg = err.response?.data?.message || err.response?.data || err.message || 'Failed to convert';
+      setError(errorMsg);
     } finally {
       setSubmitting(false);
     }

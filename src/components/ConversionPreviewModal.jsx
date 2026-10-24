@@ -6,6 +6,7 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
   if (!preview) return null;
 
   const { venue, categories, eventDate, eventType, expectedAttendees, timelineEstimate } = preview;
+  const venueInfo = venue || { available: false, message: 'No venue selected in proposal', venueName: 'Not specified' };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -21,16 +22,16 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
         <div className="overflow-y-auto p-6 space-y-6 flex-1">
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Venue</h3>
-            <div className={`rounded-lg border p-3 ${venue.available ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+            <div className={`rounded-lg border p-3 ${venueInfo.available ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-medium text-gray-800">
-                    {venue.venueName || 'Not specified'}
+                    {venueInfo.venueName || 'Not specified'}
                   </p>
-                  {venue.capacity && (
+                  {venueInfo.capacity && (
                     <p className="text-xs text-gray-500">Capacity: {venue.capacity}</p>
                   )}
-                  <p className={`text-sm mt-1 ${venue.available ? 'text-green-700' : 'text-red-700'}`}>
+                  <p className={`text-sm mt-1 ${venueInfo.available ? 'text-green-700' : 'text-red-700'}`}>
                     {venue.available ? '✓ ' : '✗ '}{venue.message}
                   </p>
                   {!venue.available && (

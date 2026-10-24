@@ -274,10 +274,19 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const convertInquiryToEvent = useCallback(async (inquiryId, eventData) => {
-    const res = await api.post(`/inquiries/${inquiryId}/convert`, eventData);
-    await fetchInquiries();
-    return res.data;
-  }, [fetchInquiries]);
+    try {
+      const res = await api.post(`/inquiries/${inquiryId}/convert`, eventData);
+      await fetchInquiries();
+      showToast('Event created successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || err.response?.data || 'Failed to convert inquiry to event';
+      console.error('Convert error:', err);
+      console.error('Error response:', err.response?.data);
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [fetchInquiries, showToast]);
 
   // ===== ASSIGNMENTS =====
 

@@ -1,5 +1,5 @@
-@config "../tailwind.config.js";
 @import "tailwindcss";
+@config "../tailwind.config.js";
 
 @theme {
   --color-gray-50: #F9FAFB;
@@ -38,15 +38,16 @@
   --color-green-100: #DCFCE7;
   --color-green-700: #15803D;
 
-  --color-gray-50-bg: #F9FAFB;
-  --color-card-border: #E5E7EB;
-  --color-text-primary: #111827;
-  --color-text-secondary: #6B7280;
-  --color-text-tertiary: #9CA3AF;
+  /* Semantic tokens (renamed so they don't generate junk utilities) */
+  --surface-page: #F9FAFB;
+  --border-card: #E5E7EB;
+  --text-primary: #111827;
+  --text-secondary: #6B7280;
+  --text-tertiary: #9CA3AF;
 
-  --shadow-card-rest: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.08);
-  --shadow-modal: 0 25px 50px -12px rgba(0,0,0,0.25);
+  --shadow-card-rest: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
   --radius-card: 16px;
   --radius-button: 12px;
@@ -57,8 +58,8 @@
 
 html, body, #root {
   min-height: 100vh;
-  background-color: var(--color-gray-50-bg);
-  color: var(--color-gray-900);
+  background-color: var(--surface-page);
+  color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -81,7 +82,7 @@ html, body, #root {
     justify-content: center;
     border-radius: var(--radius-button);
     background-color: var(--color-indigo-600);
-    padding: 0.275rem 0.625rem;
+    padding: 0.5rem 1rem;              /* was 0.275rem 0.625rem — see note */
     font-size: 0.875rem;
     font-weight: 600;
     color: white;
@@ -100,7 +101,7 @@ html, body, #root {
     border-radius: var(--radius-button);
     border: 1px solid var(--color-gray-200);
     background-color: white;
-    padding: 0.275rem 0.625rem;
+    padding: 0.5rem 1rem;
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-gray-700);
@@ -115,7 +116,7 @@ html, body, #root {
     justify-content: center;
     border-radius: var(--radius-button);
     background-color: var(--color-emerald-600);
-    padding: 0.275rem 0.625rem;
+    padding: 0.5rem 1rem;
     font-size: 0.875rem;
     font-weight: 600;
     color: white;
@@ -130,7 +131,7 @@ html, body, #root {
     justify-content: center;
     border-radius: var(--radius-button);
     background-color: var(--color-rose-600);
-    padding: 0.275rem 0.625rem;
+    padding: 0.5rem 1rem;
     font-size: 0.875rem;
     font-weight: 600;
     color: white;
@@ -143,7 +144,7 @@ html, body, #root {
     background-color: white;
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card-rest);
-    border: 1px solid var(--color-card-border);
+    border: 1px solid var(--border-card);
     padding: 1.5rem;
   }
 
@@ -151,7 +152,7 @@ html, body, #root {
     background-color: white;
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card-rest);
-    border: 1px solid var(--color-card-border);
+    border: 1px solid var(--border-card);
     padding: 1.5rem;
     transition: transform 0.15s, box-shadow 0.15s;
   }
@@ -163,53 +164,35 @@ html, body, #root {
 
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.page-enter {
-  animation: fadeSlideIn 0.35s ease both;
-}
+.page-enter { animation: fadeSlideIn 0.35s ease both; }
 
-/* Toast animations */
 @keyframes slideInRight {
   from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-.animate-slide-in {
-  animation: slideInRight 0.3s ease both;
-}
+.animate-slide-in { animation: slideInRight 0.3s ease both; }
 
 @keyframes slideOutRight {
   from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 0; transform: translateX(100%); }
 }
-.animate-slide-out {
-  animation: slideOutRight 0.3s ease both;
-}
+.animate-slide-out { animation: slideOutRight 0.3s ease both; }
 
-/* Fade in animation */
 @keyframes fadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
-.animate-fade-in {
-  animation: fadeIn 0.2s ease both;
-}
+.animate-fade-in { animation: fadeIn 0.2s ease both; }
 
-/* Smooth transitions for interactive elements */
 button, a, .card, .stat-card {
   transition: all 0.2s ease;
 }
 
-/* Collapsible transitions */
 .collapsible-content {
   transition: max-height 0.3s ease, opacity 0.3s ease;
   overflow: hidden;
 }
-.collapsible-content.collapsed {
-  max-height: 0;
-  opacity: 0;
-}
-.collapsible-content.expanded {
-  max-height: 1000px;
-  opacity: 1;
-}
+.collapsible-content.collapsed { max-height: 0; opacity: 0; }
+.collapsible-content.expanded  { max-height: 1000px; opacity: 1; }

@@ -1,6 +1,5 @@
 import { useApp } from '../context/AppContext';
 import Navbar from './Navbar';
-import ToastContainer from './ToastContainer';
 
 export default function Layout({ children, title }) {
   const { state } = useApp();
@@ -22,7 +21,6 @@ export default function Layout({ children, title }) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         {children}
       </main>
-      <ToastContainer />
     </div>
   );
 }

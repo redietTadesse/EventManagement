@@ -1,17 +1,20 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
+
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
 import PortalSelect from './components/PortalSelect';
 import Login from './components/Login';
 import VendorApplication from './components/VendorApplication';
+
 import ClientDashboard from './client/ClientDashboard';
 import NewInquiry from './client/NewInquiry';
 import ClientInquiries from './client/ClientInquiries';
 import ClientInquiryDetail from './client/ClientInquiryDetail';
 import ClientEventHistory from './client/ClientEventHistory';
 import ClientEventDetail from './client/ClientEventDetail';
+
 import CoordinatorDashboard from './coordinator/Dashboard';
 import AllInquiries from './coordinator/AllInquiries';
 import InquiryDetail from './coordinator/InquiryDetail';
@@ -20,11 +23,14 @@ import EventDetail from './coordinator/EventDetail';
 import Venues from './coordinator/Venues';
 import VenueDetail from './coordinator/VenueDetail';
 import Calendar from './components/Calendar';
-import CoordinatorVendors from './coordinator/CoordinatorVendors';
+import AvailabilityGrid from './coordinator/AvailabilityGrid';
+
 import VendorDashboard from './vendor/VendorDashboard';
 import MyAssignments from './vendor/MyAssignments';
 import AssignmentDetail from './vendor/AssignmentDetail';
 import OpenAssignments from './vendor/OpenAssignments';
+
+import AdminDashboard from './admin/Dashboard';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
@@ -37,201 +43,45 @@ function AppRoutes() {
       <Route path="/login/:portal?" element={<Login />} />
       <Route path="/vendor-application" element={<VendorApplication />} />
 
-      <Route
-        path="/client/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/new-inquiry"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <NewInquiry />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/inquiries"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientInquiries />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/inquiries/:id"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientInquiryDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/events"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientEventHistory />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/client/events/:id"
-        element={
-          <ProtectedRoute allowedRoles={['CLIENT']}>
-            <ClientEventDetail />
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<ProtectedRoute allowedRoles={['CLIENT']} />}>
+        <Route path="/client/dashboard" element={<ClientDashboard />} />
+        <Route path="/client/new-inquiry" element={<NewInquiry />} />
+        <Route path="/client/inquiries" element={<ClientInquiries />} />
+        <Route path="/client/inquiries/:id" element={<ClientInquiryDetail />} />
+        <Route path="/client/events" element={<ClientEventHistory />} />
+        <Route path="/client/events/:id" element={<ClientEventDetail />} />
+      </Route>
 
-      <Route
-        path="/coordinator/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <CoordinatorDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/inquiries"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <AllInquiries />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/inquiries/:id"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <InquiryDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/events"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <Events />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/events/:id"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <EventDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/venues"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <Venues />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/venues/:id"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <VenueDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/calendar"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <Calendar />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/vendors"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <CoordinatorVendors />
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<ProtectedRoute allowedRoles={['COORDINATOR']} />}>
+        <Route path="/coordinator/dashboard" element={<CoordinatorDashboard />} />
+        <Route path="/coordinator/inquiries" element={<AllInquiries />} />
+        <Route path="/coordinator/inquiries/:id" element={<InquiryDetail />} />
+        <Route path="/coordinator/events" element={<Events />} />
+        <Route path="/coordinator/events/:id" element={<EventDetail />} />
+        <Route path="/coordinator/venues" element={<Venues />} />
+        <Route path="/coordinator/venues/:id" element={<VenueDetail />} />
+        <Route path="/coordinator/calendar" element={<Calendar />} />
+        <Route path="/coordinator/availability" element={<AvailabilityGrid />} />
+        {/* Uncomment only if the backend authorizes COORDINATOR on
+            PATCH /vendors/{id}/toggle-active:
+        <Route path="/coordinator/vendors" element={<VendorManagement />} />
+        */}
+      </Route>
 
-      <Route
-        path="/vendor/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <VendorDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendor/assignments"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <MyAssignments />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendor/assignments/:id"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <AssignmentDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendor/open"
-        element={
-          <ProtectedRoute allowedRoles={['VENDOR']}>
-            <OpenAssignments />
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
+        <Route path="/vendor/dashboard" element={<VendorDashboard />} />
+        <Route path="/vendor/assignments" element={<MyAssignments />} />
+        <Route path="/vendor/assignments/:id" element={<AssignmentDetail />} />
+        <Route path="/vendor/open" element={<OpenAssignments />} />
+      </Route>
 
-      <Route
-        path="/admin/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <Navigate to="/admin/vendors" replace />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorManagement />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors/new"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorForm />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors/:id/edit"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorForm />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/vendors/:id"
-        element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
-            <VendorDetail />
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/vendors" element={<VendorManagement />} />
+        <Route path="/admin/vendors/new" element={<VendorForm />} />
+        <Route path="/admin/vendors/:id/edit" element={<VendorForm />} />
+        <Route path="/admin/vendors/:id" element={<VendorDetail />} />
+      </Route>
 
       <Route path="*" element={<RootRedirect />} />
     </Routes>
