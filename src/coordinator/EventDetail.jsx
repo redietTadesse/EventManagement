@@ -27,10 +27,31 @@ export default function EventDetail() {
   const [vendors, setVendors] = useState([]);
   const [checklist, setChecklist] = useState([]);
   const [checklistExpanded, setChecklistExpanded] = useState(false);
+  const [alternativesByCategory, setAlternativesByCategory] = useState({});
 
   useEffect(() => {
   api.get('/vendors').then(res => setVendors(res.data)).catch(() => {});
 }, []);
+
+useEffect(() => {
+  if (!event?.date || assignments.length === 0) return;
+  const byCat = assignments.reduce((acc, a) => {
+    (acc[a.serviceCategory] = acc[a.serviceCategory] || []).push(a);
+    return acc;
+  }, {});
+  const unfilled = Object.keys(byCat).filter(cat =>
+    !byCat[cat].some(a => a.status === 'ACCEPTED' || a.status === 'COMPLETED')
+  );
+  unfilled.forEach(cat => {
+    api.get('/vendors/alternatives', {
+      params: { category: cat, date: event.date }
+    })
+      .then(res => {
+        setAlternativesByCategory(prev => ({ ...prev, [cat]: res.data || [] }))
+      })
+      .catch(() => {});
+  });
+}, [assignments, event?.date]);
 
 useEffect(() => {
     const loadEvent = async () => {
@@ -232,7 +253,7 @@ useEffect(() => {
                   key={category}
                   category={category}
                   assignments={categoryAssignments}
-                  alternativeVendors={[]} // Would fetch from alternatives endpoint
+                  alternativeVendors={alternativesByCategory[category] || []} // Would fetch from alternatives endpoint
                   onForceAssign={handleForceAssign}
                 />
               ))}

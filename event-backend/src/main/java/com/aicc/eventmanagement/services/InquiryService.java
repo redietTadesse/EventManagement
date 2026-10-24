@@ -17,6 +17,7 @@ import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
+import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
 import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.util.CategoryUtils;
@@ -24,6 +25,7 @@ import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
+import com.aicc.eventmanagement.repositories.VendorRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,6 +59,7 @@ public class InquiryService {
     private final VendorService vendorService;
     private final VendorRankingService rankingService;
     private final VendorAssignmentRepository assignmentRepository;
+    private final VendorRepository vendorRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -431,16 +434,45 @@ public class InquiryService {
     public Inquiry rejectProposal(Long id, String reason, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
 
-        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_REJECTED, userRole);
-        inquiry.setStatus(EventStatus.PROPOSAL_REJECTED);
-
-        if (reason != null) {
+        // If a reason is provided (change request), keep status as PROPOSAL_SENT
+        // Otherwise, transition to PROPOSAL_REJECTED (full rejection)
+        if (reason != null && !reason.trim().isEmpty()) {
+            // Keep status as PROPOSAL_SENT for change requests
             inquiry.setRequirements((inquiry.getRequirements() != null ? inquiry.getRequirements() + "\n" : "") + "Proposal rejected on " + LocalDateTime.now() + ": " + reason);
+            Inquiry saved = inquiryRepository.save(inquiry);
+            eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_SENT));
+            return saved;
+        } else {
+            // Full rejection without reason
+            workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_REJECTED, userRole);
+            inquiry.setStatus(EventStatus.PROPOSAL_REJECTED);
+            Inquiry saved = inquiryRepository.save(inquiry);
+            eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
+            return saved;
+        }
+    }
+
+    @Transactional
+    public Inquiry updateProposal(Long id, UpdateProposalRequest request, Role userRole) {
+        Inquiry inquiry = getInquiryById(id);
+        if (inquiry.getStatus() != EventStatus.PROPOSAL_SENT) {
+            throw new BusinessException(String.format("Cannot update proposal. Inquiry status is: %s (expected: PROPOSAL_SENT)", inquiry.getStatus()), "INVALID_STATE");
         }
 
-        Inquiry saved = inquiryRepository.save(inquiry);
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
+        String proposalJson = buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
+                request.getPrice(), request.getTerms(), request.getCategories(), request.getPricingTier(),
+                request.getVendorShortlist(), inquiry);
 
+        inquiry.setCategories(request.getCategories() != null && !request.getCategories().isEmpty()
+                ? CategoryUtils.join(request.getCategories())
+                : inquiry.getCategories() != null && !inquiry.getCategories().isBlank() ? inquiry.getCategories() : inquiry.getRequestedCategories());
+        inquiry.setProposal(proposalJson);
+
+        Inquiry saved = inquiryRepository.save(inquiry);
+
+        eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_SENT));
+
+        log.info("Updated proposal for inquiry {} by {}", id, userRole);
         return saved;
     }
 
@@ -502,19 +534,51 @@ public class InquiryService {
     }
 
     private String buildProposalJson(SendProposalRequest request, Inquiry inquiry) {
+        return buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
+                request.getPrice(), request.getTerms(), request.getCategories(), request.getPricingTier(),
+                request.getVendorShortlist(), inquiry);
+    }
+
+    private String buildProposalJsonInternal(String venue, Long venueId, String venueDetails, Integer price,
+                                             String terms, List<String> categories, String pricingTier,
+                                             Map<String, List<Long>> vendorShortlist, Inquiry inquiry) {
         try {
             Map<String, Object> proposal = new LinkedHashMap<>();
             proposal.put("proposalNumber", String.format("AICC-P-%d-%03d", LocalDate.now().getYear(), inquiry.getId()));
             proposal.put("sentDate", LocalDateTime.now().toString());
             proposal.put("expiryDate", LocalDateTime.now().plusDays(7).toString());
-            proposal.put("venue", request.getVenue());
-            proposal.put("venueId", request.getVenueId());
-            proposal.put("venueDetails", request.getVenueDetails());
-            proposal.put("price", request.getPrice());
-            proposal.put("terms", request.getTerms());
-            proposal.put("categories", request.getCategories());
-            proposal.put("pricingTier", request.getPricingTier() != null ? request.getPricingTier() : "standard");
-            proposal.put("vendorShortlist", request.getVendorShortlist());
+            proposal.put("venue", venue);
+            proposal.put("venueId", venueId);
+            proposal.put("venueDetails", venueDetails);
+            proposal.put("price", price);
+            proposal.put("terms", terms);
+            proposal.put("categories", categories);
+            proposal.put("pricingTier", pricingTier != null ? pricingTier : "standard");
+
+            // Enrich vendor shortlist with vendor details
+            List<Map<String, Object>> enrichedShortlist = new ArrayList<>();
+            if (vendorShortlist != null && !vendorShortlist.isEmpty()) {
+                for (Map.Entry<String, List<Long>> entry : vendorShortlist.entrySet()) {
+                    Map<String, Object> catMap = new LinkedHashMap<>();
+                    catMap.put("category", entry.getKey());
+
+                    List<Map<String, Object>> vendorsForCat = new ArrayList<>();
+                    for (Long vendorId : entry.getValue()) {
+                        vendorRepository.findById(vendorId).ifPresent(v -> {
+                            Map<String, Object> vMap = new LinkedHashMap<>();
+                            vMap.put("id", v.getId());
+                            vMap.put("companyName", v.getCompanyName());
+                            vMap.put("rating", v.getRating());
+                            vMap.put("description", v.getDescription());
+                            vendorsForCat.add(vMap);
+                        });
+                    }
+                    catMap.put("vendors", vendorsForCat);
+                    enrichedShortlist.add(catMap);
+                }
+            }
+            proposal.put("vendorShortlist", enrichedShortlist);
+
             proposal.put("clientName", inquiry.getClientName());
             proposal.put("eventType", inquiry.getEventType());
             proposal.put("eventDate", inquiry.getEventDate().toString());

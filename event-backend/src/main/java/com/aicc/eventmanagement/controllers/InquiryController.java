@@ -11,6 +11,7 @@ import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
+import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
 import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.services.InquiryService;
@@ -272,6 +273,29 @@ public class InquiryController {
         Role userRole = extractRoleFromPrincipal(principal);
 
         Inquiry updated = inquiryService.sendProposal(id, request, userRole);
+        return ResponseEntity.ok(InquiryResponse.from(updated));
+    }
+
+    @PutMapping("/{id}/proposal")
+    @PreAuthorize("hasRole('COORDINATOR')")
+    @Operation(summary = "Update proposal for an inquiry", description = "Coordinator updates an existing proposal (only in PROPOSAL_SENT state)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Proposal updated successfully",
+                    content = @Content(schema = @Schema(implementation = InquiryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid state or input"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Inquiry not found")
+    })
+    public ResponseEntity<InquiryResponse> updateProposal(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateProposalRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        log.info("Updating proposal for inquiry {} by {}", id, principal.getUsername());
+
+        Role userRole = extractRoleFromPrincipal(principal);
+
+        Inquiry updated = inquiryService.updateProposal(id, request, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 

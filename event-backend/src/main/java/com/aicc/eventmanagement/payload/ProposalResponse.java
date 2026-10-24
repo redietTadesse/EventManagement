@@ -22,6 +22,6 @@ public class ProposalResponse {
     private String terms;
     private String pricingTier;
     private List<String> categories;
-    private Map<String, List<String>> vendorShortlist;
+    private Object vendorShortlist; // Can be Map<String, List<String>> (old) or List<CategoryVendors> (new enriched)
     private LocalDateTime sentDate;
 }

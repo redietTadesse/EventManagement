@@ -191,7 +191,7 @@ export const AppProvider = ({ children }) => {
           ? Object.fromEntries(
               Object.entries(vendorShortlist)
                 .filter(([, v]) => v !== '' && v !== null && v !== undefined)
-                .map(([k, v]) => [k, (Array.isArray(v) ? v : [v]).map(String)])
+                .map(([k, v]) => [k, (Array.isArray(v) ? v : [v]).map(Number)])
             )
           : null,
         pricingTier,
@@ -203,6 +203,40 @@ export const AppProvider = ({ children }) => {
       return res.data;
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to send proposal';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
+
+  const updateProposal = useCallback(async (inquiryId, proposal) => {
+    try {
+      const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
+
+      const body = {
+        venue,
+        venueId: venueId ?? null,
+        venueDetails: venueDetails == null
+          ? null
+          : (typeof venueDetails === 'string' ? venueDetails : JSON.stringify(venueDetails)),
+        price: Number.isFinite(price) ? price : 0,
+        terms,
+        categories: Array.isArray(categories) ? categories : [],
+        vendorShortlist: vendorShortlist
+          ? Object.fromEntries(
+              Object.entries(vendorShortlist)
+                .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+                .map(([k, v]) => [k, (Array.isArray(v) ? v : [v]).map(Number)])
+            )
+          : null,
+        pricingTier,
+      };
+
+      const res = await api.put(`/inquiries/${inquiryId}/proposal`, body);
+      dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
+      showToast('Proposal updated successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to update proposal';
       showToast(msg, 'error', 5000, true);
       throw err;
     }
@@ -430,7 +464,7 @@ export const AppProvider = ({ children }) => {
     fetchMyVendorProfile,
     // inquiries
     fetchInquiries, fetchMyInquiries, fetchInquiryById, createInquiry, updateInquiry,
-    sendProposal, acceptProposal, rejectProposal,
+    sendProposal, updateProposal, acceptProposal, rejectProposal,
     previewConversion,
     convertInquiryToEvent,
     // assignments

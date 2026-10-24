@@ -15,11 +15,11 @@ import { useApp } from '../context/AppContext';
  *   venueDetails     String  (JSON-serialised, NOT an object)
  *   price            Integer (required, >= 0)
  *   terms            String  (required)
- *   vendorShortlist  Map<String, List<String>>  (values MUST be arrays)
+ *   vendorShortlist  Map<String, List<Long>>  (values MUST be arrays of vendor IDs)
  *   pricingTier      String
  */
-const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
-  const { sendProposal, fetchAvailableVenues, fetchVendors } = useApp();
+const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = false }) => {
+  const { sendProposal, updateProposal, fetchAvailableVenues, fetchVendors } = useApp();
 
   const [step, setStep] = useState(1);
   const [venues, setVenues] = useState([]);
@@ -33,13 +33,47 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
     pricingTier: 'basic',
     customPrice: '',
     terms: '',
-    suggestedVendors: {}, // category -> vendorId
+    vendorShortlist: {}, // category -> array of vendor IDs
   });
 
   const [selectedCategories, setSelectedCategories] = useState(() => {
     if (!inquiry) return [];
     return inquiry.requestedCategories?.length ? inquiry.requestedCategories : (eventCategoryMap[inquiry.eventType] || []);
   });
+
+  // Pre-populate form when editing an existing proposal
+  useEffect(() => {
+    if (editMode && inquiry?.proposal) {
+      try {
+        const proposal = typeof inquiry.proposal === 'string'
+          ? JSON.parse(inquiry.proposal)
+          : inquiry.proposal;
+
+        setFormData({
+          venueId: proposal.venueId?.toString() || '',
+          pricingTier: proposal.pricingTier || 'basic',
+          customPrice: '',
+          terms: proposal.terms || '',
+          vendorShortlist: {},
+        });
+
+        // Parse vendor shortlist back to ID arrays
+        if (Array.isArray(proposal.vendorShortlist)) {
+          const shortlistMap = {};
+          proposal.vendorShortlist.forEach(cat => {
+            shortlistMap[cat.category] = cat.vendors.map(v => v.id);
+          });
+          setFormData(prev => ({ ...prev, vendorShortlist: shortlistMap }));
+        }
+
+        if (proposal.categories?.length) {
+          setSelectedCategories(proposal.categories);
+        }
+      } catch (e) {
+        console.error('Failed to parse proposal for editing:', e);
+      }
+    }
+  }, [editMode, inquiry]);
 
   const categories = inquiry ? selectedCategories : [];
 
@@ -85,6 +119,19 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
   const vendorsForCategory = (category) =>
     vendors.filter(v => v.serviceCategory === category && v.isActive !== false);
 
+  const toggleVendorForCategory = (category, vendorId) => {
+    setFormData((prev) => {
+      const current = prev.vendorShortlist[category] || [];
+      const updated = current.includes(vendorId)
+        ? current.filter(id => id !== vendorId)
+        : [...current, vendorId];
+      return {
+        ...prev,
+        vendorShortlist: { ...prev.vendorShortlist, [category]: updated },
+      };
+    });
+  };
+
   const handleNext = () => setStep(step + 1);
   const handlePrev = () => setStep(step - 1);
 
@@ -93,14 +140,14 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
     setSubmitting(true);
     setError('');
     try {
-      // Only include categories the coordinator actually chose, and always as arrays.
+      // Only include categories the coordinator actually chose, and always as arrays of numbers.
       const shortlist = Object.fromEntries(
-        Object.entries(formData.suggestedVendors)
-          .filter(([, vendorId]) => vendorId)
-          .map(([category, vendorId]) => [category, [String(vendorId)]])
+        Object.entries(formData.vendorShortlist)
+          .filter(([, ids]) => ids && ids.length > 0)
+          .map(([category, ids]) => [category, ids.map(id => Number(id))])
       );
 
-      const saved = await sendProposal(inquiry.id, {
+      const proposalData = {
         venue: selectedVenue?.name || '',
         venueId: selectedVenue?.id ?? null,
         // Serialised here as well as in the context, so the object never leaks through.
@@ -117,14 +164,18 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
         vendorShortlist: shortlist,
         pricingTier: formData.pricingTier,
         categories: selectedCategories,
-      });
+      };
+
+      const saved = editMode
+        ? await updateProposal(inquiry.id, proposalData)
+        : await sendProposal(inquiry.id, proposalData);
 
       if (onSuccess) onSuccess(saved);
       else if (onSubmit) onSubmit(saved);
     } catch (err) {
       const raw = err.response?.data;
       const msg = (raw && typeof raw === 'object') ? (raw.message || raw.error) : raw;
-      setError(typeof msg === 'string' ? msg : 'Failed to send proposal');
+      setError(typeof msg === 'string' ? msg : editMode ? 'Failed to update proposal' : 'Failed to send proposal');
     } finally {
       setSubmitting(false);
     }
@@ -293,34 +344,50 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel }) => {
                 No service categories are mapped for event type “{inquiry?.eventType}”.
               </p>
             )}
-            {categories.map(cat => (
-              <div key={cat}>
-                <label className="block text-sm font-medium text-slate-700 mb-1 capitalize">
-                  {cat.replace('_', ' ')}
-                </label>
-                <select
-                  value={formData.suggestedVendors[cat] || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    suggestedVendors: { ...formData.suggestedVendors, [cat]: e.target.value }
-                  })}
-                  className="w-full rounded-lg border-slate-300 shadow-sm focus:border-navy focus:ring-navy"
-                >
-                  <option value="">No preference</option>
-                  {vendorsForCategory(cat).map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.companyName}
-                      {v.rating ? ` — rating ${v.rating}` : ''}
-                    </option>
-                  ))}
-                </select>
-                {vendorsForCategory(cat).length === 0 && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    No registered vendors for this category.
-                  </p>
-                )}
-              </div>
-            ))}
+            {categories.map(cat => {
+              const vendorsForCat = vendorsForCategory(cat);
+              const chosenIds = formData.vendorShortlist[cat] || [];
+
+              return (
+                <div key={cat} className="bg-slate-50 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-3 capitalize">
+                    {cat.replace('_', ' ')}
+                  </label>
+                  {vendorsForCat.length === 0 ? (
+                    <p className="text-sm text-slate-500 italic">No registered vendors for this category.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {vendorsForCat.map(v => (
+                        <label
+                          key={v.id}
+                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                            chosenIds.includes(v.id)
+                              ? 'bg-brand-50 border-brand-500'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={chosenIds.includes(v.id)}
+                              onChange={() => toggleVendorForCategory(cat, v.id)}
+                              className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-slate-900">{v.companyName}</p>
+                              <p className="text-xs text-slate-500">
+                                {v.rating ? `★ ${v.rating}` : '★ N/A'}
+                                {v.phone ? ` · ${v.phone}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="flex justify-between mt-6">
             <button onClick={handlePrev} className="btn-outline">← Back</button>

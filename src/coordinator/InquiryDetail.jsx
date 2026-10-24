@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext';
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, fetchInquiryById, convertInquiryToEvent, previewConversion } = useApp();
+  const { state, fetchInquiryById, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
   const { loading } = state;
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
@@ -18,6 +18,8 @@ export default function InquiryDetail() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [venueWarning, setVenueWarning] = useState('');
+  const [showProposalForm, setShowProposalForm] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const loadInquiry = useCallback(async () => {
     const data = await fetchInquiryById(id);
@@ -99,6 +101,7 @@ export default function InquiryDetail() {
 
   const canConvert = inquiry?.status === 'PROPOSAL_ACCEPTED';
   const canSendProposal = inquiry?.status === 'INQUIRY_SUBMITTED';
+  const canEditProposal = inquiry?.status === 'PROPOSAL_SENT';
 
   return (
     <Layout title="Inquiry Detail">
@@ -147,6 +150,64 @@ export default function InquiryDetail() {
               inquiry={inquiry}
               onSuccess={loadInquiry}
               onCancel={() => navigate('/coordinator/inquiries')}
+            />
+          </div>
+        )}
+
+        {canEditProposal && !showProposalForm && (
+          <div className="bg-white rounded-xl shadow p-6">
+            <div className="text-center py-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Proposal Sent</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                A proposal has been sent to the client. You can edit it if needed.
+              </p>
+              {inquiry.proposal && (() => {
+                try {
+                  const proposal = typeof inquiry.proposal === 'string'
+                    ? JSON.parse(inquiry.proposal)
+                    : inquiry.proposal;
+                  return (
+                    <div className="text-left text-sm text-gray-600 mb-4 p-3 bg-slate-50 rounded-lg">
+                      <p><strong>Venue:</strong> {proposal.venue || 'TBD'}</p>
+                      <p><strong>Price:</strong> {proposal.price ? `ETB ${Number(proposal.price).toLocaleString()}` : 'TBD'}</p>
+                    </div>
+                  );
+                } catch (e) {
+                  console.error('Failed to parse proposal:', e);
+                  return null;
+                }
+              })()}
+              {inquiry.requirements && inquiry.requirements.includes('Proposal rejected') && (() => {
+                // Extract the latest change request from requirements
+                const lines = inquiry.requirements.split('\n').filter(line => line.includes('Proposal rejected'));
+                const latestLine = lines[lines.length - 1] || '';
+                // Format: "Proposal rejected on <timestamp>: <reason>"
+                const changeReason = latestLine.includes(':') ? latestLine.substring(latestLine.indexOf(': ') + 2) : latestLine;
+                return (
+                  <div className="text-left text-sm text-rose-600 mb-4 p-3 bg-rose-50 rounded-lg border border-rose-200">
+                    <p className="font-semibold">Client requested a change:</p>
+                    <p className="mt-1">{changeReason}</p>
+                  </div>
+                );
+              })()}
+              <button
+                onClick={() => { setShowProposalForm(true); setEditMode(true); }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition"
+              >
+                Edit Proposal
+              </button>
+            </div>
+          </div>
+        )}
+
+        {canEditProposal && showProposalForm && (
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit Proposal</h3>
+            <RichProposalForm
+              inquiry={inquiry}
+              editMode={true}
+              onSuccess={() => { setShowProposalForm(false); setEditMode(false); loadInquiry(); }}
+              onCancel={() => { setShowProposalForm(false); setEditMode(false); }}
             />
           </div>
         )}

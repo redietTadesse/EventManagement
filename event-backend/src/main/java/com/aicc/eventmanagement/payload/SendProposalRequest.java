@@ -31,7 +31,7 @@ public class SendProposalRequest {
     @NotBlank(message = "Terms and conditions are required")
     private String terms;
 
-    private Map<String, List<String>> vendorShortlist;
+    private Map<String, List<Long>> vendorShortlist;
 
     private List<String> categories;
 

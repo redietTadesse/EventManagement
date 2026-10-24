@@ -96,9 +96,16 @@ public class InquiryResponse {
         }
 
         if (proposalMap.containsKey("vendorShortlist") && proposalMap.get("vendorShortlist") != null) {
-            @SuppressWarnings("unchecked")
-            Map<String, List<String>> shortlist = (Map<String, List<String>>) proposalMap.get("vendorShortlist");
-            proposal.setVendorShortlist(shortlist);
+            Object rawShortlist = proposalMap.get("vendorShortlist");
+            // Handle both old format (Map<String, List<String>>) and new format (List of category objects)
+            if (rawShortlist instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, List<String>> shortlist = (Map<String, List<String>>) rawShortlist;
+                proposal.setVendorShortlist(shortlist);
+            } else if (rawShortlist instanceof List) {
+                // New enriched format: List of category objects with vendor details
+                proposal.setVendorShortlist(rawShortlist);
+            }
         }
 
         if (proposalMap.containsKey("sentDate") && proposalMap.get("sentDate") != null) {
