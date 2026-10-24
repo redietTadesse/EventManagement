@@ -88,6 +88,69 @@ public class VendorService {
         return vendorRepository.save(vendor);
     }
 
+    /**
+     * Public onboarding: create an inactive vendor + login so an admin can
+     * review and activate from Vendor Management. The applicant cannot log in
+     * until {@link #toggleActive(Long)} is used.
+     */
+    @Transactional
+    public Vendor applyForOnboarding(com.aicc.eventmanagement.payload.VendorApplyRequest req) {
+        if (userRepository.existsByEmail(req.getEmail())) {
+            throw new BusinessException("Email already registered", "EMAIL_TAKEN");
+        }
+
+        String username = uniqueUsernameFromEmail(req.getEmail());
+
+        StringBuilder description = new StringBuilder(req.getDescription().trim());
+        if (req.getWebsite() != null && !req.getWebsite().isBlank()) {
+            description.append("\nWebsite: ").append(req.getWebsite().trim());
+        }
+        if (req.getEstablishedYear() != null) {
+            description.append("\nEstablished: ").append(req.getEstablishedYear());
+        }
+
+        User user = User.builder()
+                .username(username)
+                .email(req.getEmail())
+                .passwordHash(passwordEncoder.encode(req.getPassword()))
+                .fullName(req.getContactPerson())
+                .phone(req.getPhone())
+                .role(Role.VENDOR)
+                .isActive(false)
+                .build();
+        userRepository.save(user);
+
+        Vendor vendor = Vendor.builder()
+                .userId(user.getId())
+                .companyName(req.getCompanyName())
+                .serviceCategory(req.getServiceCategory())
+                .description(description.toString())
+                .phone(req.getPhone())
+                .email(req.getEmail())
+                .rating(3)
+                .isActive(false)
+                .build();
+        log.info("Vendor application received for company={} username={}", req.getCompanyName(), username);
+        return vendorRepository.save(vendor);
+    }
+
+    private String uniqueUsernameFromEmail(String email) {
+        int at = email.indexOf('@');
+        String local = (at > 0 ? email.substring(0, at) : email).replaceAll("[^a-zA-Z0-9._-]", "");
+        if (local.length() < 3) {
+            local = "vendor";
+        }
+        if (local.length() > 40) {
+            local = local.substring(0, 40);
+        }
+        String username = local;
+        int n = 1;
+        while (Boolean.TRUE.equals(userRepository.existsByUsername(username))) {
+            username = local + n++;
+        }
+        return username;
+    }
+
     @Transactional
     public Vendor updateVendor(Long id, UpdateVendorRequest req) {
         Vendor vendor = getVendorById(id);
@@ -878,6 +941,10 @@ public class VendorService {
     public List<VendorAssignment> getOpenAssignmentsForCategory(String category) {
         return assignmentRepository.findOpenAssignmentsForCategory(category,
                 List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED));
+    }
+
+    public List<VendorAssignment> getOpenAssignmentsForCoordinator() {
+        return assignmentRepository.findByStatus(VendorAssignmentStatus.OPEN);
     }
 
     // ============ COORDINATOR FORCE ASSIGN ============

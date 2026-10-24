@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import api, { authApi } from '../api/axios';
+import { useToast } from './ToastContext';
 
 /**
  * Single source of truth for application state.
@@ -41,6 +42,7 @@ const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { showToast } = useToast();
 
   // Restore session from stored token on mount
   useEffect(() => {
@@ -154,10 +156,17 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const createInquiry = useCallback(async (payload) => {
-    const res = await api.post('/inquiries', payload);
-    dispatch({ type: 'ADD_INQUIRY', payload: res.data });
-    return res.data;
-  }, []);
+    try {
+      const res = await api.post('/inquiries', payload);
+      dispatch({ type: 'ADD_INQUIRY', payload: res.data });
+      showToast('Inquiry created successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to create inquiry';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
 
   const updateInquiry = useCallback(async (id, payload) => {
     const res = await api.put(`/inquiries/${id}`, payload);
@@ -166,43 +175,64 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const sendProposal = useCallback(async (inquiryId, proposal) => {
-    const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
+    try {
+      const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
-    const body = {
-      venue,
-      venueId: venueId ?? null,
-      venueDetails: venueDetails == null
-        ? null
-        : (typeof venueDetails === 'string' ? venueDetails : JSON.stringify(venueDetails)),
-      price: Number.isFinite(price) ? price : 0,
-      terms,
-      categories: Array.isArray(categories) ? categories : [],
-      vendorShortlist: vendorShortlist
-        ? Object.fromEntries(
-            Object.entries(vendorShortlist)
-              .filter(([, v]) => v !== '' && v !== null && v !== undefined)
-              .map(([k, v]) => [k, (Array.isArray(v) ? v : [v]).map(String)])
-          )
-        : null,
-      pricingTier,
-    };
+      const body = {
+        venue,
+        venueId: venueId ?? null,
+        venueDetails: venueDetails == null
+          ? null
+          : (typeof venueDetails === 'string' ? venueDetails : JSON.stringify(venueDetails)),
+        price: Number.isFinite(price) ? price : 0,
+        terms,
+        categories: Array.isArray(categories) ? categories : [],
+        vendorShortlist: vendorShortlist
+          ? Object.fromEntries(
+              Object.entries(vendorShortlist)
+                .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+                .map(([k, v]) => [k, (Array.isArray(v) ? v : [v]).map(String)])
+            )
+          : null,
+        pricingTier,
+      };
 
-    const res = await api.post(`/inquiries/${inquiryId}/proposal`, body);
-    dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
-    return res.data;
-  }, []);
+      const res = await api.post(`/inquiries/${inquiryId}/proposal`, body);
+      dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
+      showToast('Proposal sent successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to send proposal';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
 
   const acceptProposal = useCallback(async (inquiryId, body = {}) => {
-    const res = await api.patch(`/inquiries/${inquiryId}/accept`, body);
-    dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
-    return res.data;
-  }, []);
+    try {
+      const res = await api.patch(`/inquiries/${inquiryId}/accept`, body);
+      dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
+      showToast('Proposal accepted successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to accept proposal';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
 
   const rejectProposal = useCallback(async (inquiryId, reason) => {
-    const res = await api.patch(`/inquiries/${inquiryId}/reject`, null, { params: { reason } });
-    dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
-    return res.data;
-  }, []);
+    try {
+      const res = await api.patch(`/inquiries/${inquiryId}/reject`, null, { params: { reason } });
+      dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
+      showToast('Proposal rejected', 'warning');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to reject proposal';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
 
   const previewConversion = useCallback(async (inquiryId) => {
     const res = await api.get(`/inquiries/${inquiryId}/conversion-preview`);
@@ -223,9 +253,16 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const respondToAssignment = useCallback(async (assignmentId, response, declineReason) => {
-    const res = await api.patch(`/assignments/${assignmentId}/respond`, { response, declineReason });
-    return res.data;
-  }, []);
+    try {
+      const res = await api.patch(`/assignments/${assignmentId}/respond`, { response, declineReason });
+      showToast(`Assignment ${response.toLowerCase()}`, response === 'ACCEPTED' ? 'success' : 'warning');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to respond to assignment';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
 
   const claimAssignment = useCallback(async (assignmentId) => {
     const res = await api.post(`/assignments/${assignmentId}/claim`);
@@ -233,12 +270,19 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const forceAssign = useCallback(async (assignmentId, vendorId, category) => {
-    const res = await api.post(
-      `/assignments/${assignmentId}/force-assign`,
-      { vendorId, category: category || 'unspecified' }
-    );
-    return res.data;
-  }, []);
+    try {
+      const res = await api.post(
+        `/assignments/${assignmentId}/force-assign`,
+        { vendorId, category: category || 'unspecified' }
+      );
+      showToast('Vendor force-assigned successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to force assign vendor';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
 
   const fetchOpenAssignments = useCallback(async () => {
     const res = await api.get('/assignments/open');
@@ -292,10 +336,70 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
+  const fetchCoordinatorExceptions = useCallback(async () => {
+    try {
+      const res = await api.get('/coordinator/action-required');
+      return res.data;
+    } catch (err) {
+      console.error('Failed to load exceptions:', err);
+      // Fallback to individual calls if aggregated endpoint fails
+      const [needsCoordinatorEvents, openAssignments, pendingProposals] = await Promise.all([
+        api.get('/events/status/NEEDS_COORDINATOR').then(res => res.data).catch(() => []),
+        api.get('/assignments/open').then(res => res.data).catch(() => []),
+        api.get('/inquiries/status/PROPOSAL_SENT').then(res => res.data).catch(() => []),
+      ]);
+
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      const staleProposals = pendingProposals.filter(inq => {
+        const proposalDate = inq.updatedAt || inq.createdAt;
+        return new Date(proposalDate) < threeDaysAgo;
+      });
+
+      return {
+        needsCoordinatorEvents,
+        openAssignments,
+        staleProposals,
+      };
+    }
+  }, []);
+
   const fetchAvailabilityGrid = useCallback(async (category, daysAhead = 30) => {
     const res = await api.get('/vendors/availability-grid', {
       params: { category, daysAhead },
     });
+    return res.data;
+  }, []);
+
+  // ===== HISTORY =====
+
+  const fetchEventHistory = useCallback(async (eventId) => {
+    const res = await api.get(`/history/event/${eventId}`);
+    return res.data;
+  }, []);
+
+  const fetchInquiryHistory = useCallback(async (inquiryId) => {
+    const res = await api.get(`/history/inquiry/${inquiryId}`);
+    return res.data;
+  }, []);
+
+  const fetchRecentHistory = useCallback(async () => {
+    const res = await api.get('/history/recent');
+    return res.data;
+  }, []);
+
+  // ===== CHECKLIST =====
+
+  const fetchChecklist = useCallback(async (eventId) => {
+    const res = await api.get(`/checklists/event/${eventId}`);
+    return res.data;
+  }, []);
+
+  const toggleChecklistItem = useCallback(async (checklistId, isComplete) => {
+    const endpoint = isComplete
+      ? `/checklists/${checklistId}/complete`
+      : `/checklists/${checklistId}/incomplete`;
+    const res = await api.patch(endpoint);
     return res.data;
   }, []);
 
@@ -337,7 +441,11 @@ export const AppProvider = ({ children }) => {
     fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,
     fetchAvailabilityGrid, // <-- added for the heatmap
     // coordinator
-    fetchCoordinatorStats,
+    fetchCoordinatorStats, fetchCoordinatorExceptions,
+    // history
+    fetchEventHistory, fetchInquiryHistory, fetchRecentHistory,
+    // checklist
+    fetchChecklist, toggleChecklistItem,
     // notifications
     addNotification, markNotificationRead, markAllNotificationsRead,
   };

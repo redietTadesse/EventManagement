@@ -134,7 +134,7 @@ function VendorCard({ vendor, onToggle }) {
     const handleToggle = async () => {
         setToggling(true);
         try {
-            await api.patch(`/admin/vendors/${vendor.id}/toggle-active`);
+            await api.patch(`/vendors/${vendor.id}/toggle-active`);
             onToggle();
         } catch (err) {
             alert('Failed to toggle vendor status');

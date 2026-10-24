@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { ROLE_DASHBOARDS } from '../utils/roles';
 
 export default function RootRedirect() {
   const { state } = useApp();
@@ -10,10 +11,5 @@ export default function RootRedirect() {
   }
 
   if (!currentUser) return <Navigate to="/" replace />;
-  switch (currentUser.role) {
-    case 'CLIENT': return <Navigate to="/client/dashboard" replace />;
-    case 'COORDINATOR': return <Navigate to="/coordinator/dashboard" replace />;
-    case 'VENDOR': return <Navigate to="/vendor/dashboard" replace />;
-    default: return <Navigate to="/login" replace />;
-  }
+  return <Navigate to={ROLE_DASHBOARDS[currentUser.role] || '/login'} replace />;
 }

@@ -43,7 +43,7 @@ public class TransitionHistoryController {
     }
 
     @GetMapping("/recent")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
     @Operation(summary = "Get the 100 most recent transitions")
     public ResponseEntity<List<TransitionHistory>> getRecentHistory() {
         log.info("Fetching recent transitions");

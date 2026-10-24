@@ -104,15 +104,32 @@ public class AssignmentController {
     // ============ BROWSE-AND-VOLUNTEER ENDPOINTS ============
 
     @GetMapping("/open")
-    @PreAuthorize("hasRole('VENDOR')")
+    @PreAuthorize("hasAnyRole('VENDOR', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get open assignments for the authenticated vendor's service category")
     public ResponseEntity<List<VendorAssignmentResponse>> getOpenAssignments(
             @AuthenticationPrincipal UserDetails principal) {
+
+        // Coordinators/Admins see ALL open assignments; vendors see only their own category
+        if (hasAnyRole(principal, "COORDINATOR", "ADMIN")) {
+            List<VendorAssignment> allOpen = vendorService.getOpenAssignmentsForCoordinator();
+            return ResponseEntity.ok(allOpen.stream()
+                .map(VendorAssignmentResponse::from)
+                .collect(Collectors.toList()));
+        }
+
         Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
         List<VendorAssignment> openAssignments = vendorService.getOpenAssignmentsForCategory(vendor.getServiceCategory());
         return ResponseEntity.ok(openAssignments.stream()
             .map(VendorAssignmentResponse::from)
             .collect(Collectors.toList()));
+    }
+
+    private boolean hasAnyRole(UserDetails principal, String... roles) {
+        if (principal == null) return false;
+        java.util.Set<String> userRoles = principal.getAuthorities().stream()
+                .map(a -> a.getAuthority().replace("ROLE_", ""))
+                .collect(java.util.stream.Collectors.toSet());
+        return java.util.Arrays.stream(roles).anyMatch(userRoles::contains);
     }
 
     @PostMapping("/{id}/claim")

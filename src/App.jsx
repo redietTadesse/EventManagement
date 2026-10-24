@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
 import PortalSelect from './components/PortalSelect';
 import Login from './components/Login';
+import VendorApplication from './components/VendorApplication';
 import ClientDashboard from './client/ClientDashboard';
 import NewInquiry from './client/NewInquiry';
 import ClientInquiries from './client/ClientInquiries';
@@ -18,6 +20,7 @@ import EventDetail from './coordinator/EventDetail';
 import Venues from './coordinator/Venues';
 import VenueDetail from './coordinator/VenueDetail';
 import Calendar from './components/Calendar';
+import CoordinatorVendors from './coordinator/CoordinatorVendors';
 import VendorDashboard from './vendor/VendorDashboard';
 import MyAssignments from './vendor/MyAssignments';
 import AssignmentDetail from './vendor/AssignmentDetail';
@@ -32,6 +35,7 @@ function AppRoutes() {
       <Route path="/" element={<PortalSelect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/login/:portal?" element={<Login />} />
+      <Route path="/vendor-application" element={<VendorApplication />} />
 
       <Route
         path="/client/dashboard"
@@ -147,18 +151,10 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/coordinator/venues"
+        path="/coordinator/vendors"
         element={
           <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <Venues />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/coordinator/venues/:id"
-        element={
-          <ProtectedRoute allowedRoles={['COORDINATOR']}>
-            <VenueDetail />
+            <CoordinatorVendors />
           </ProtectedRoute>
         }
       />
@@ -196,6 +192,14 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <Navigate to="/admin/vendors" replace />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/admin/vendors"
         element={
@@ -236,11 +240,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AppProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AppProvider>
+    <ToastProvider>
+      <AppProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AppProvider>
+    </ToastProvider>
   );
 }
 

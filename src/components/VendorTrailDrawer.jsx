@@ -1,177 +1,75 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import api from '../api/axios';
 
-const STATUS_STYLES = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  ACCEPTED: 'bg-green-100 text-green-800',
-  DECLINED: 'bg-red-100 text-red-800',
-  EXPIRED: 'bg-gray-200 text-gray-700',
-  OPEN: 'bg-orange-100 text-orange-800',
-  COMPLETED: 'bg-blue-100 text-blue-800',
-  CANCELLED: 'bg-gray-100 text-gray-500',
-};
+export default function VendorTrailDrawer({ isOpen, onClose, eventId }) {
+  const [trail, setTrail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-const DOT_STYLES = {
-  PENDING: 'bg-yellow-400',
-  ACCEPTED: 'bg-green-500',
-  DECLINED: 'bg-red-400',
-  EXPIRED: 'bg-gray-400',
-  OPEN: 'bg-orange-400',
-  COMPLETED: 'bg-blue-500',
-  CANCELLED: 'bg-gray-300',
-};
-
-const STATE_STYLES = {
-  RESOLVED: 'bg-green-100 text-green-800',
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  EXHAUSTED: 'bg-red-100 text-red-800',
-};
-
-function timeAgo(iso) {
-  if (!iso) return null;
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? 'yesterday' : `${days} days ago`;
-}
-
-function fullDate(iso) {
-  if (!iso) return null;
-  return new Date(iso).toLocaleString();
-}
-
-export default function VendorTrailDrawer({ categoryTrail, onClose }) {
   useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [onClose]);
+    if (!isOpen || !eventId) return;
+    setLoading(true);
+    api.get(`/events/${eventId}/vendor-trail`)
+      .then(res => setTrail(res.data))
+      .catch(err => setError(err.response?.data?.message || 'Failed to load trail'))
+      .finally(() => setLoading(false));
+  }, [isOpen, eventId]);
 
-  if (!categoryTrail) return null;
-
-  const { category, state, attempts = [] } = categoryTrail;
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div
-        className="flex-1 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <aside className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+    <div className="fixed inset-0 bg-black/50 z-50 flex justify-end">
+      <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-slide-in">
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <div>
-            <p className="text-xs uppercase tracking-wide text-gray-400">Vendor trail</p>
-            <h3 className="text-lg font-semibold text-gray-800 capitalize">{category}</h3>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATE_STYLES[state] || 'bg-gray-100 text-gray-600'}`}>
-                {state}
-              </span>
-              <span className="text-xs text-gray-500">
-                {attempts.length} attempt{attempts.length === 1 ? '' : 's'}
-              </span>
-            </div>
+            <h2 className="text-lg font-bold text-gray-800">Vendor Trail</h2>
+            <p className="text-xs text-gray-500">Full escalation history</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none px-2"
-            aria-label="Close"
-          >
-            ×
+          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full">
+            <XMarkIcon className="w-5 h-5 text-gray-600" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {attempts.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              No vendor has been offered this category yet.
-            </p>
-          ) : (
-            <ol className="relative">
-              {attempts.map((a, i) => {
-                const isLast = i === attempts.length - 1;
-                return (
-                  <li key={a.assignmentId} className="relative pl-8 pb-6 last:pb-0">
-                    {!isLast && (
-                      <span className="absolute left-[5px] top-4 bottom-0 w-px bg-gray-200" />
-                    )}
-                    <span
-                      className={`absolute left-0 top-1.5 w-3 h-3 rounded-full ring-4 ring-white ${DOT_STYLES[a.status] || 'bg-gray-300'}`}
-                    />
-
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">
-                          <span className="text-gray-400 mr-1">#{a.attemptNumber}</span>
-                          {a.vendorName || 'Open to all vendors'}
-                        </p>
-                        <p className="text-xs text-gray-500" title={fullDate(a.offeredAt)}>
-                          offered {timeAgo(a.offeredAt)}
-                          {a.respondedAt && ` · answered ${timeAgo(a.respondedAt)}`}
-                        </p>
-                      </div>
-                      <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[a.status] || 'bg-gray-100 text-gray-600'}`}>
-                        {a.status}
-                      </span>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {loading && <div className="text-center text-gray-500">Loading trail...</div>}
+          {error && <div className="text-rose-500">{error}</div>}
+          
+          {trail && trail.categories.map(cat => (
+            <div key={cat.category} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-gray-800 uppercase text-sm">{cat.category}</h3>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  cat.state === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
+                  cat.state === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                  'bg-rose-100 text-rose-700'
+                }`}>
+                  {cat.state}
+                </span>
+              </div>
+              
+              <div className="space-y-2">
+                {cat.attempts.map(attempt => (
+                  <div key={attempt.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-medium text-sm text-gray-800">{attempt.vendorName || 'Vendor Pool'}</span>
+                      <span className="text-xs font-semibold text-gray-500">{attempt.status}</span>
                     </div>
-
-                    {(a.rankingScore != null || a.reason) && (
-                      <div className="flex items-center gap-3 mt-2">
-                        {a.rankingScore != null && (
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-20 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-indigo-500"
-                                style={{ width: `${Math.max(0, Math.min(1, a.rankingScore)) * 100}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-medium text-gray-600 tabular-nums">
-                              {a.rankingScore.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        {a.reason && (
-                          <span className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
-                            {a.reason}
-                          </span>
-                        )}
-                      </div>
+                    <p className="text-xs text-gray-600 mb-2">{attempt.outcome}</p>
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                      {attempt.offeredAt && <span>Offered {new Date(attempt.offeredAt).toLocaleDateString()}</span>}
+                      {attempt.expiresAt && <span>Expires {new Date(attempt.expiresAt).toLocaleDateString()}</span>}
+                    </div>
+                    {attempt.declineReason && (
+                      <p className="text-xs text-rose-600 mt-2 italic">"{attempt.declineReason}"</p>
                     )}
-
-                    {a.declineReason && (
-                      <p className="mt-2 text-xs text-gray-600 border-l-2 border-red-200 pl-2 italic">
-                        “{a.declineReason}”
-                      </p>
-                    )}
-
-                    {a.outcome && (
-                      <p className="mt-2 text-xs text-gray-500">
-                        → {a.outcome}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
-
-        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50">
-          <p className="text-xs text-gray-500">
-            Scores and reasons are recorded when each offer is made, not recalculated now.
-          </p>
-        </div>
-      </aside>
+      </div>
     </div>
   );
 }

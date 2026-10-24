@@ -8,6 +8,8 @@ import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.AvailabilityGridResponse;
 import com.aicc.eventmanagement.payload.CreateVendorRequest;
 import com.aicc.eventmanagement.payload.UpdateVendorRequest;
+import com.aicc.eventmanagement.payload.VendorApplyRequest;
+import com.aicc.eventmanagement.payload.VendorApplyResponse;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.AvailabilityService;
@@ -84,6 +86,21 @@ public class VendorController {
     @Operation(summary = "Get vendor by ID")
     public ResponseEntity<Vendor> getVendorById(@PathVariable Long id) {
         return ResponseEntity.ok(vendorService.getVendorById(id));
+    }
+
+    @PostMapping("/apply")
+    @Operation(summary = "Public vendor application", description = "Creates an inactive vendor profile for admin review. No authentication required.")
+    public ResponseEntity<VendorApplyResponse> applyAsVendor(@Valid @RequestBody VendorApplyRequest request) {
+        Vendor created = vendorService.applyForOnboarding(request);
+        User user = created.getUserId() != null
+                ? userRepository.findById(created.getUserId()).orElse(null)
+                : null;
+        String username = user != null ? user.getUsername() : null;
+        return ResponseEntity.status(HttpStatus.CREATED).body(new VendorApplyResponse(
+                "Application received. An administrator will review it and activate your account.",
+                created.getCompanyName(),
+                username
+        ));
     }
 
     @PostMapping

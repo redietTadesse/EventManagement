@@ -4,13 +4,13 @@ import { useApp } from '../context/AppContext';
 import NotificationsBell from './NotificationsBell';
 
 const Navbar = () => {
-  const { state, dispatch } = useApp();
+  const { state, logout } = useApp();
   const { currentUser } = state;
   const navigate = useNavigate();
 
   if (!currentUser) return null;
 
-  const roleLabel = { CLIENT: 'Client', VENDOR: 'Vendor', COORDINATOR: 'Coordinator' }[currentUser.role];
+  const roleLabel = { CLIENT: 'Client', VENDOR: 'Vendor', COORDINATOR: 'Coordinator', ADMIN: 'Administrator' }[currentUser.role];
   const links = {
     CLIENT: [
       { to: '/client/dashboard', label: 'Dashboard' },
@@ -27,14 +27,18 @@ const Navbar = () => {
       { to: '/coordinator/dashboard', label: 'Dashboard' },
       { to: '/coordinator/inquiries', label: 'All Inquiries' },
       { to: '/coordinator/events', label: 'Events' },
+      { to: '/coordinator/calendar', label: 'Calendar' },
       { to: '/coordinator/vendors', label: 'Vendors' },
       { to: '/coordinator/venues', label: 'Venues' },
+    ],
+    ADMIN: [
+      { to: '/admin/vendors', label: 'Vendors' },
     ],
   }[currentUser.role] || [];
 
   const handleLogout = () => {
-    dispatch({ type: 'LOGOUT' });
-    navigate('/login');
+    logout();
+    navigate('/');
   };
 
   return (

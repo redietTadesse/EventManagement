@@ -1,133 +1,162 @@
 @import "tailwindcss";
 
 @theme {
-  --color-navy: #1E2761;
-  --color-ice: #CADCFC;
-  --color-amber: #E8A33D;
-  --color-green: #2F9E64;
-  --color-rose: #D64545;
-  --color-slate-50: #F8FAFC;
-  --color-slate-100: #F1F5F9;
-  --color-slate-200: #E2E8F0;
-  --color-slate-300: #CBD5E1;
-  --color-slate-400: #94A3B8;
-  --color-slate-500: #64748B;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1E293B;
-  --color-slate-900: #0F172A;
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --shadow-card: 0 1px 3px rgba(15,23,42,0.06), 0 4px 12px rgba(15,23,42,0.05);
-  --shadow-dropdown: 0 12px 40px rgba(15,23,42,0.12);
+  --color-gray-50: #F9FAFB;
+  --color-gray-100: #F3F4F6;
+  --color-gray-200: #E5E7EB;
+  --color-gray-300: #D1D5DB;
+  --color-gray-400: #9CA3AF;
+  --color-gray-500: #6B7280;
+  --color-gray-600: #4B5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1F2937;
+  --color-gray-900: #111827;
+
+  --color-white: #FFFFFF;
+  --color-indigo-600: #4F46E5;
+  --color-indigo-700: #4338CA;
+  --color-indigo-800: #3730A3;
+
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065F46;
+
+  --color-rose-600: #E11D48;
+  --color-rose-700: #BE123C;
+  --color-rose-800: #9F1239;
+
+  --color-amber-100: #FEF3C7;
+  --color-amber-700: #B45309;
+
+  --color-sky-100: #EFF6FF;
+  --color-sky-700: #0369A1;
+
+  --color-blue-100: #DBEAFE;
+  --color-blue-700: #1D4ED8;
+
+  --color-green-100: #DCFCE7;
+  --color-green-700: #15803D;
+
+  --color-gray-50-bg: #F9FAFB;
+  --color-card-border: #E5E7EB;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-tertiary: #9CA3AF;
+
+  --shadow-card-rest: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-modal: 0 25px 50px -12px rgba(0,0,0,0.25);
+
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --radius-badge: 999px;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 html, body, #root {
   min-height: 100vh;
-  background-color: var(--color-slate-50);
-  color: var(--color-slate-900);
+  background-color: var(--color-gray-50-bg);
+  color: var(--color-gray-900);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer components {
   .badge {
     display: inline-flex;
     align-items: center;
-    border-radius: 9999px;
+    border-radius: var(--radius-badge);
     padding: 0.125rem 0.625rem;
     font-size: 0.75rem;
     font-weight: 500;
     line-height: 1.25rem;
   }
-  .badge-navy { background-color: #1E2761; color: white; }
-  .badge-ice { background-color: #CADCFC; color: #1E2761; }
-  .badge-amber { background-color: #E8A33D; color: white; }
-  .badge-green { background-color: #2F9E64; color: white; }
-  .badge-rose { background-color: #D64545; color: white; }
-  .badge-gray { background-color: var(--color-slate-200); color: var(--color-slate-600); }
 
   .btn-primary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 0.5rem;
-    background-color: var(--color-navy);
-    padding: 0.5rem 1rem;
+    border-radius: var(--radius-button);
+    background-color: var(--color-indigo-600);
+    padding: 0.275rem 0.625rem;
     font-size: 0.875rem;
     font-weight: 600;
     color: white;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-card-rest);
     transition: background-color 0.15s, box-shadow 0.15s;
     cursor: pointer;
   }
-  .btn-primary:hover { background-color: #162052; }
-  .btn-primary:focus { outline: 2px solid var(--color-navy); outline-offset: 2px; }
+  .btn-primary:hover { background-color: var(--color-indigo-700); }
+  .btn-primary:focus { outline: 2px solid var(--color-indigo-600); outline-offset: 2px; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .btn-outline {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 0.5rem;
-    border: 1px solid var(--color-slate-300);
+    border-radius: var(--radius-button);
+    border: 1px solid var(--color-gray-200);
     background-color: white;
-    padding: 0.5rem 1rem;
+    padding: 0.275rem 0.625rem;
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--color-slate-700);
+    color: var(--color-gray-700);
     transition: background-color 0.15s;
     cursor: pointer;
   }
-  .btn-outline:hover { background-color: var(--color-slate-50); }
+  .btn-outline:hover { background-color: var(--color-gray-50); }
 
   .btn-success {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 0.5rem;
-    background-color: var(--color-green);
-    padding: 0.5rem 1rem;
+    border-radius: var(--radius-button);
+    background-color: var(--color-emerald-600);
+    padding: 0.275rem 0.625rem;
     font-size: 0.875rem;
     font-weight: 600;
     color: white;
     transition: background-color 0.15s;
     cursor: pointer;
   }
-  .btn-success:hover { background-color: #258a54; }
+  .btn-success:hover { background-color: var(--color-emerald-700); }
 
   .btn-danger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 0.5rem;
-    background-color: var(--color-rose);
-    padding: 0.5rem 1rem;
+    border-radius: var(--radius-button);
+    background-color: var(--color-rose-600);
+    padding: 0.275rem 0.625rem;
     font-size: 0.875rem;
     font-weight: 600;
     color: white;
     transition: background-color 0.15s;
     cursor: pointer;
   }
-  .btn-danger:hover { background-color: #b93a3a; }
+  .btn-danger:hover { background-color: var(--color-rose-700); }
 
   .card {
     background-color: white;
-    border-radius: 0.75rem;
-    box-shadow: var(--shadow-card);
-    border: 1px solid var(--color-slate-200);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card-rest);
+    border: 1px solid var(--color-card-border);
     padding: 1.5rem;
   }
 
   .stat-card {
     background-color: white;
-    border-radius: 0.75rem;
-    box-shadow: var(--shadow-card);
-    border: 1px solid var(--color-slate-200);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card-rest);
+    border: 1px solid var(--color-card-border);
     padding: 1.5rem;
     transition: transform 0.15s, box-shadow 0.15s;
   }
   .stat-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 12px 32px rgba(15,23,42,0.10);
+    box-shadow: var(--shadow-card-hover);
   }
 }
 
@@ -137,4 +166,49 @@ html, body, #root {
 }
 .page-enter {
   animation: fadeSlideIn 0.35s ease both;
+}
+
+/* Toast animations */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in {
+  animation: slideInRight 0.3s ease both;
+}
+
+@keyframes slideOutRight {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(100%); }
+}
+.animate-slide-out {
+  animation: slideOutRight 0.3s ease both;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease both;
+}
+
+/* Smooth transitions for interactive elements */
+button, a, .card, .stat-card {
+  transition: all 0.2s ease;
+}
+
+/* Collapsible transitions */
+.collapsible-content {
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  overflow: hidden;
+}
+.collapsible-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+.collapsible-content.expanded {
+  max-height: 1000px;
+  opacity: 1;
 }

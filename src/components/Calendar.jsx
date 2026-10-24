@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from './Layout';
+import { useApp } from '../context/AppContext';
 
 // Helper: get number of days in a month
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -18,58 +19,23 @@ const formatDateKey = (year, month, day) => {
   return `${year}-${m}-${d}`;
 };
 
-// Sample events data (in a real app this would come from an API)
-const sampleEvents = [
-  { id: 1, name: 'Team Meeting', date: '2026-09-08', type: 'meeting', status: 'confirmed' },
-  { id: 2, name: 'Product Launch', date: '2026-09-15', type: 'event', status: 'confirmed' },
-  { id: 3, name: 'Client Call', date: '2026-09-10', type: 'meeting', status: 'pending' },
-  { id: 4, name: 'Conference', date: '2026-09-20', type: 'event', status: 'confirmed' },
-  { id: 5, name: 'Workshop', date: '2026-09-25', type: 'workshop', status: 'confirmed' },
-  { id: 6, name: 'Board Meeting', date: '2026-10-01', type: 'meeting', status: 'confirmed' },
-  { id: 7, name: 'Annual Gala', date: '2026-10-15', type: 'event', status: 'pending' },
-  { id: 8, name: 'Training Session', date: '2026-09-06', type: 'workshop', status: 'confirmed' },
-  { id: 9, name: 'Review Meeting', date: '2026-09-12', type: 'meeting', status: 'confirmed' },
-  { id: 10, name: 'Strategy Planning', date: '2026-09-18', type: 'meeting', status: 'pending' },
-  { id: 11, name: 'Team Building', date: '2026-09-22', type: 'event', status: 'confirmed' },
-  { id: 12, name: 'Quarterly Review', date: '2026-09-30', type: 'meeting', status: 'confirmed' },
-  { id: 13, name: 'Holiday', date: '2026-10-05', type: 'event', status: 'confirmed' },
-  { id: 14, name: 'Site Visit', date: '2026-09-03', type: 'meeting', status: 'confirmed' },
-  { id: 15, name: 'Budget Review', date: '2026-09-28', type: 'meeting', status: 'pending' },
-];
+const CONFIRMED_STATUSES = new Set(['CONFIRMED', 'COMPLETED', 'EVENT_CREATED']);
 
-// Generate dynamic events for the current month and surrounding months
-const generateEventsForMonth = (year, month) => {
-  const events = [];
-  const baseEvents = [
-    { name: 'Team Standup', type: 'meeting' },
-    { name: 'Project Review', type: 'meeting' },
-    { name: 'Client Presentation', type: 'event' },
-    { name: 'Workshop', type: 'workshop' },
-    { name: 'Training', type: 'workshop' },
-    { name: 'Board Meeting', type: 'meeting' },
-    { name: 'Strategy Session', type: 'meeting' },
-    { name: 'Product Demo', type: 'event' },
-  ];
-
-  // Seed-based pseudo-random for consistent events per month
-  const seed = year * 100 + month;
-  const numEvents = 8 + (seed % 6); // 8-13 events per month
-
-  for (let i = 0; i < numEvents; i++) {
-    const day = 1 + ((seed * (i + 1) * 7) % 28); // Days 1-28 for safety
-    const eventTemplate = baseEvents[(seed + i) % baseEvents.length];
-    const dateKey = formatDateKey(year, month, day);
-
-    events.push({
-      id: `${year}-${month}-${i}`,
-      name: eventTemplate.name,
-      date: dateKey,
-      type: eventTemplate.type,
-      status: (i + seed) % 3 === 0 ? 'pending' : 'confirmed',
-    });
-  }
-
-  return events;
+const toCalendarItem = (inquiry) => {
+  if (!inquiry?.eventDate) return null;
+  const date = String(inquiry.eventDate).slice(0, 10);
+  const converted = Boolean(inquiry.event);
+  const rawStatus = inquiry.event?.status || inquiry.status || '';
+  return {
+    id: converted ? inquiry.event.id : `inq-${inquiry.id}`,
+    name: inquiry.event?.name || inquiry.eventType || 'Inquiry',
+    date,
+    type: converted ? 'event' : 'inquiry',
+    status: CONFIRMED_STATUSES.has(rawStatus) ? 'confirmed' : 'pending',
+    href: converted
+      ? `/coordinator/events/${inquiry.event.id}`
+      : `/coordinator/inquiries/${inquiry.id}`,
+  };
 };
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -79,15 +45,13 @@ const MONTHS = [
 ];
 
 const EVENT_TYPE_COLORS = {
-  meeting: 'bg-indigo-500',
   event: 'bg-emerald-500',
-  workshop: 'bg-amber-500',
+  inquiry: 'bg-indigo-500',
 };
 
 const EVENT_TYPE_BADGES = {
-  meeting: 'badge-navy',
   event: 'badge-green',
-  workshop: 'badge-amber',
+  inquiry: 'badge-navy',
 };
 
 export default function Calendar() {
@@ -95,9 +59,17 @@ export default function Calendar() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState(null);
+  const { state, fetchInquiries } = useApp();
+  const { inquiries, loading } = state;
 
-  // Generate events for the current month view
-  const events = useMemo(() => generateEventsForMonth(currentYear, currentMonth), [currentYear, currentMonth]);
+  useEffect(() => {
+    fetchInquiries();
+  }, [fetchInquiries]);
+
+  const events = useMemo(
+    () => (inquiries || []).map(toCalendarItem).filter(Boolean),
+    [inquiries]
+  );
 
   // Build a map of date -> events
   const eventsByDate = useMemo(() => {
@@ -221,8 +193,9 @@ export default function Calendar() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Calendar</h1>
+            {loading && <p className="text-xs text-slate-400 mt-1">Refreshing…</p>}
             <p className="text-sm text-slate-500 mt-1">
-              View and manage your schedule. Active dates are highlighted.
+              Inquiries and converted events by event date.
             </p>
           </div>
           <button onClick={goToToday} className="btn-primary">
@@ -390,9 +363,10 @@ export default function Calendar() {
                   {selectedDateEvents.length > 0 ? (
                     <div className="space-y-3">
                       {selectedDateEvents.map((event) => (
-                        <div
+                        <Link
                           key={event.id}
-                          className="p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all"
+                          to={event.href}
+                          className="block p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
@@ -420,7 +394,7 @@ export default function Calendar() {
                               }`}
                             />
                           </div>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   ) : (
@@ -466,7 +440,8 @@ export default function Calendar() {
                 <h4 className="text-sm font-semibold text-slate-700 mb-3">Upcoming Events</h4>
                 <div className="space-y-2">
                   {events
-                    .filter((e) => e.status === 'confirmed')
+                    .filter((e) => e.date >= formatDateKey(today.getFullYear(), today.getMonth(), today.getDate()))
+                    .sort((a, b) => a.date.localeCompare(b.date))
                     .slice(0, 5)
                     .map((event) => (
                       <div
