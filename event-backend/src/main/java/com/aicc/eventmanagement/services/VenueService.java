@@ -122,13 +122,6 @@ public class VenueService {
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
 
-        // Check availability first
-        if (!isVenueAvailable(venueId, date)) {
-            throw new BusinessException(
-                String.format("Venue %s is already booked on %s", venue.getName(), date),
-                "VENUE_CONFLICT");
-        }
-
         try {
             VenueBooking booking = VenueBooking.builder()
                 .venue(venue)

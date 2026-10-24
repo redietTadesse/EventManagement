@@ -27,12 +27,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
-<<<<<<< HEAD
-        User user = userRepository.findByUsername(loginRequest.getUsername())
-        .orElseThrow(() -> new RuntimeException("User not found"));
-=======
         User user = userRepository.findByUsername(loginRequest.getUsername()).orElse(null);
->>>>>>> 9502703f0f87f6cba525531ad2e81db07fd4834a
 
         if (user == null || !encoder.matches(loginRequest.getPassword(), user.getPasswordHash())) {
             return ResponseEntity.badRequest().body("Error: Invalid username or password!");
