@@ -1,1 +1,1 @@
-ALTER TABLE inquiries ADD COLUMN preferred_vendor_ids JSON DEFAULT NULL;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS preferred_vendor_ids JSON DEFAULT NULL;
