@@ -128,14 +128,9 @@ export const AppProvider = ({ children }) => {
   // ===== INQUIRIES =====
 
   const fetchInquiries = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const res = await api.get('/inquiries');
-      dispatch({ type: 'SET_INQUIRIES', payload: res.data });
-      return res.data;
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
+    const res = await api.get('/inquiries');
+    dispatch({ type: 'SET_INQUIRIES', payload: res.data });
+    return res.data;
   }, []);
 
   const fetchInquiryById = useCallback(async (id) => {
@@ -145,14 +140,9 @@ export const AppProvider = ({ children }) => {
 
   const fetchMyInquiries = useCallback(async (clientId) => {
     if (clientId == null) return [];
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const res = await api.get(`/inquiries/client/${clientId}`);
-      dispatch({ type: 'SET_INQUIRIES', payload: res.data });
-      return res.data;
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
+    const res = await api.get(`/inquiries/client/${clientId}`);
+    dispatch({ type: 'SET_INQUIRIES', payload: res.data });
+    return res.data;
   }, []);
 
   const createInquiry = useCallback(async (payload) => {
@@ -385,7 +375,6 @@ export const AppProvider = ({ children }) => {
       return res.data;
     } catch (err) {
       console.error('Failed to load exceptions:', err);
-      // Fallback to individual calls if aggregated endpoint fails
       const [needsCoordinatorEvents, openAssignments, pendingProposals] = await Promise.all([
         api.get('/events/status/NEEDS_COORDINATOR').then(res => res.data).catch(() => []),
         api.get('/assignments/open').then(res => res.data).catch(() => []),
@@ -466,30 +455,16 @@ export const AppProvider = ({ children }) => {
   const value = {
     state,
     dispatch,
-    // auth
     login, registerClient, logout,
-    // users/vendors
-    fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus,
-    fetchMyVendorProfile,
-    // inquiries
+    fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus, fetchMyVendorProfile,
     fetchInquiries, fetchMyInquiries, fetchInquiryById, createInquiry, updateInquiry,
-    sendProposal, updateProposal, acceptProposal, rejectProposal,
-    previewConversion,
-    convertInquiryToEvent,
-    // assignments
-    fetchAssignmentsForEvent, respondToAssignment, claimAssignment,
-    forceAssign, fetchOpenAssignments,
+    sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion, convertInquiryToEvent,
+    fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, fetchOpenAssignments,
     fetchMyAssignments, fetchMyAssignment, rateAssignment,
-    // venues
-    fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,
-    fetchAvailabilityGrid, // <-- added for the heatmap
-    // coordinator
+    fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings, fetchAvailabilityGrid,
     fetchCoordinatorStats, fetchCoordinatorExceptions,
-    // history
     fetchEventHistory, fetchInquiryHistory, fetchRecentHistory,
-    // checklist
     fetchChecklist, toggleChecklistItem,
-    // notifications
     addNotification, markNotificationRead, markAllNotificationsRead,
   };
 
