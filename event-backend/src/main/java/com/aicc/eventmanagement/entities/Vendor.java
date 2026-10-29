@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.entities;
 
 import com.aicc.eventmanagement.enums.Role;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
@@ -54,6 +55,7 @@ public class Vendor {
     @Builder.Default
     private boolean isActive = true;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "vendor", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<VendorBookedDate> bookedDates = new ArrayList<>();
