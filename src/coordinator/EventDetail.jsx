@@ -6,6 +6,7 @@ import PipelineLadder from '../components/PipelineLadder';
 import AuditTimeline from '../components/AuditTimeline';
 import VendorTrailDrawer from '../components/VendorTrailDrawer';
 import ManualAssignModal from '../components/ManualAssignModal';
+import VendorSuggestions from '../components/VendorSuggestions';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -28,6 +29,8 @@ export default function EventDetail() {
   const [checklist, setChecklist] = useState([]);
   const [checklistExpanded, setChecklistExpanded] = useState(false);
   const [alternativesByCategory, setAlternativesByCategory] = useState({});
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedCategoryForSuggestions, setSelectedCategoryForSuggestions] = useState(null);
 
   useEffect(() => {
   api.get('/vendors').then(res => setVendors(res.data)).catch(() => {});
@@ -167,9 +170,9 @@ useEffect(() => {
 
   return (
     <Layout title="Event Detail">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-4 md:space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Event Header Card */}
           <div className="bg-white rounded-xl shadow p-4 md:p-6">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -222,30 +225,12 @@ useEffect(() => {
                         )}
               </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-4 text-sm border-t border-gray-100 pt-4">
-              <div>
-                <p className="text-gray-500">Date</p>
-                <p className="font-medium">{event?.date}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Venue</p>
-                <p className="font-medium">{event?.venue || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Client</p>
-                <p className="font-medium">{event?.clientName || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Expected Attendees</p>
-                <p className="font-medium">{event?.expectedAttendees ?? '—'}</p>
-              </div>
-            </div>
           </div>
 
           {error && <div className="bg-rose-100 text-rose-700 p-3 rounded-lg">{error}</div>}
 
           {/* Pipeline Visualization */}
-          <div className="bg-white rounded-xl shadow p-4 md:p-6">
+          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6">
             <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-4">Vendor Pipeline</h3>
             <div className="space-y-4">
               {Object.entries(assignmentsByCategory).map(([category, categoryAssignments]) => (
@@ -317,7 +302,7 @@ useEffect(() => {
         </div>
 
         {/* Right Sidebar - Assignments Needing Action */}
-        <div className="space-y-4 md:space-y-6">
+        <div className="lg:sticky lg:top-6 space-y-6">
           <div className="bg-white rounded-xl shadow p-4 md:p-6">
             <h3 className="font-semibold text-gray-800 mb-4">Needs Attention</h3>
             {unfilledCategories.length === 0 ? (
@@ -336,22 +321,62 @@ useEffect(() => {
                         {declinedCount > 0 ? `${declinedCount} vendors declined. ` : ''}
                         {openAssignment ? 'Assignment opened, no claim.' : 'Needs assignment.'}
                       </p>
-                      <button
-                        onClick={() => {
-                          const assignment = categoryAssignments.find(a => a.status === 'OPEN') || categoryAssignments[0];
-                          setSelectedAssignment(assignment);
-                          setForceAssignModal(true);
-                        }}
-                        className="mt-2 text-xs bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded font-medium"
-                      >
-                        Assign
-                      </button>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => {
+                            const assignment = categoryAssignments.find(a => a.status === 'OPEN') || categoryAssignments[0];
+                            setSelectedAssignment(assignment);
+                            setForceAssignModal(true);
+                          }}
+                          className="text-xs bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded font-medium"
+                        >
+                          Assign
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedCategoryForSuggestions(category);
+                            setShowSuggestions(true);
+                          }}
+                          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded font-medium"
+                        >
+                          See Suggestions
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {/* Vendor Suggestions Panel */}
+          {showSuggestions && selectedCategoryForSuggestions && (
+            <div className="bg-white rounded-xl shadow p-4 md:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-800">
+                  Vendor Suggestions for {selectedCategoryForSuggestions}
+                </h3>
+                <button
+                  onClick={() => setShowSuggestions(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <VendorSuggestions
+                category={selectedCategoryForSuggestions}
+                eventDate={event?.date}
+                excludeVendorId={assignmentsByCategory[selectedCategoryForSuggestions]?.find(a => a.status === 'ACCEPTED')?.vendorId}
+                onSelectVendor={(vendor) => {
+                  const assignment = assignmentsByCategory[selectedCategoryForSuggestions]?.find(a => a.status === 'OPEN') || assignmentsByCategory[selectedCategoryForSuggestions]?.[0];
+                  if (assignment) {
+                    handleForceAssign(assignment.id, vendor.id, selectedCategoryForSuggestions);
+                    setShowSuggestions(false);
+                  }
+                }}
+              />
+            </div>
+          )}
 
           {/* Assignment Status Summary */}
           <div className="bg-white rounded-xl shadow p-4 md:p-6">

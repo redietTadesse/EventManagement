@@ -77,7 +77,8 @@ export default function ClientEventHistory() {
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
@@ -112,6 +113,7 @@ export default function ClientEventHistory() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

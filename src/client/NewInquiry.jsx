@@ -148,7 +148,7 @@ export default function NewInquiry() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Services needed
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {ALL_CATEGORIES.map((cat) => (
                 <label key={cat} className="flex items-center gap-2 text-sm text-gray-700">
                   <input

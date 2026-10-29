@@ -224,22 +224,22 @@ export default function Calendar() {
           <div className="lg:col-span-2">
             <div className="card">
               {/* Month Navigation */}
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <button
                   onClick={goToPrevMonth}
-                  className="btn-outline p-2"
+                  className="btn-outline p-2 hover:bg-slate-100 transition-colors"
                   aria-label="Previous month"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-base sm:text-lg font-semibold text-slate-900">
                   {MONTHS[currentMonth]} {currentYear}
                 </h2>
                 <button
                   onClick={goToNextMonth}
-                  className="btn-outline p-2"
+                  className="btn-outline p-2 hover:bg-slate-100 transition-colors"
                   aria-label="Next month"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -253,9 +253,9 @@ export default function Calendar() {
                 {WEEKDAYS.map((day) => (
                   <div
                     key={day}
-                    className="text-center text-xs font-semibold text-slate-500 uppercase py-2"
+                    className="text-center text-[10px] sm:text-xs font-semibold text-slate-500 uppercase py-1 sm:py-2"
                   >
-                    {day}
+                    {day.charAt(0)}
                   </div>
                 ))}
               </div>
@@ -268,7 +268,7 @@ export default function Calendar() {
                   const hasEvents = cell.dayEvents && cell.dayEvents.length > 0;
 
                   let cellClasses =
-                    'relative flex flex-col items-center justify-center rounded-lg p-2 min-h-[3rem] sm:min-h-[3.5rem] cursor-pointer transition-all duration-150 ';
+                    'relative flex flex-col items-center justify-center rounded-lg p-1 sm:p-2 min-h-[2.5rem] sm:min-h-[3rem] cursor-pointer transition-all duration-150 active:scale-95 ';
 
                   if (!cell.isCurrentMonth) {
                     // Non-active dates (other months)
@@ -296,7 +296,7 @@ export default function Calendar() {
                       className={cellClasses}
                       onClick={() => handleDateClick(cell)}
                     >
-                      <span className="text-sm">{cell.day}</span>
+                      <span className="text-xs sm:text-sm">{cell.day}</span>
 
                       {/* Event indicators for active dates */}
                       {cell.isCurrentMonth && hasEvents && (
@@ -319,8 +319,8 @@ export default function Calendar() {
                 })}
               </div>
 
-              {/* Legend */}
-              <div className="mt-6 pt-4 border-t border-slate-100">
+              {/* Legend - Hidden on mobile, shown on desktop */}
+              <div className="hidden sm:block mt-6 pt-4 border-t border-slate-100">
                 <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                   <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 rounded bg-indigo-600" />
@@ -343,37 +343,44 @@ export default function Calendar() {
             </div>
           </div>
 
-          {/* Event Details Panel */}
+          {/* Event Details Panel - Mobile: Modal-like, Desktop: Sidebar */}
           <div className="lg:col-span-1">
-            <div className="card sticky top-6">
+            <div className="card sticky top-6 lg:top-8">
               {selectedDate ? (
                 <>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">
-                    {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </h3>
-                  <p className="text-sm text-slate-500 mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-slate-900">
+                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedDate(null)}
+                      className="text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-500 mb-4">
                     {selectedDateEvents.length} event{selectedDateEvents.length !== 1 ? 's' : ''} scheduled
                   </p>
 
                   {selectedDateEvents.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2 sm:space-y-3">
                       {selectedDateEvents.map((event) => (
                         <Link
                           key={event.id}
                           to={event.href}
-                          className="block p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all"
+                          className="block p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all active:scale-[0.98]"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-slate-900 truncate">
+                              <div className="font-medium text-slate-900 truncate text-sm">
                                 {event.name}
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className={`badge ${EVENT_TYPE_BADGES[event.type] || 'badge-gray'}`}>
                                   {event.type}
                                 </span>
@@ -398,9 +405,9 @@ export default function Calendar() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8">
+                    <div className="text-center py-6 sm:py-8">
                       <div className="text-slate-400 mb-2">
-                        <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-10 h-10 sm:w-12 sm:h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -417,9 +424,9 @@ export default function Calendar() {
                   )}
                 </>
               ) : (
-                <div className="text-center py-8">
+                <div className="text-center py-6 sm:py-8">
                   <div className="text-slate-400 mb-2">
-                    <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-10 h-10 sm:w-12 sm:h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -436,8 +443,8 @@ export default function Calendar() {
               )}
 
               {/* Upcoming Events */}
-              <div className="mt-6 pt-4 border-t border-slate-100">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">Upcoming Events</h4>
+              <div className="mt-4 sm:mt-6 pt-4 border-t border-slate-100">
+                <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-3">Upcoming Events</h4>
                 <div className="space-y-2">
                   {events
                     .filter((e) => e.date >= formatDateKey(today.getFullYear(), today.getMonth(), today.getDate()))
@@ -446,7 +453,7 @@ export default function Calendar() {
                     .map((event) => (
                       <div
                         key={event.id}
-                        className="flex items-center gap-2 text-sm p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors"
+                        className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors active:bg-slate-100"
                         onClick={() => setSelectedDate(event.date)}
                       >
                         <div

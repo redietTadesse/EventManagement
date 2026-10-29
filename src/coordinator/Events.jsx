@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import ResponsiveTable from '../components/ResponsiveTable';
+import EmptyState from '../components/EmptyState';
 import { useApp } from '../context/AppContext';
 
 export default function Events() {
@@ -51,18 +53,18 @@ export default function Events() {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl shadow p-4 flex flex-wrap gap-3">
+        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-4 flex flex-wrap gap-3">
           <input
             type="text"
             placeholder="Filter by date..."
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-2 border rounded-lg text-sm flex-1 min-w-[150px]"
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm flex-1 min-w-[150px]"
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border rounded-lg text-sm"
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
           >
             <option value="">All Statuses</option>
             {statusOptions.map(status => (
@@ -71,47 +73,40 @@ export default function Events() {
           </select>
           <button
             onClick={() => { setDateFilter(''); setStatusFilter(''); }}
-            className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700"
+            className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700"
           >
             Clear
           </button>
         </div>
 
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Venue</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredEvents.map((event) => (
-                  <tr key={event.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800">{event.event?.name || event.eventType}</td>
-                    <td className="px-4 py-3 text-gray-600">{event.clientName}</td>
-                    <td className="px-4 py-3 text-gray-600">{event.eventDate}</td>
-                    <td className="px-4 py-3 text-gray-600">{event.event?.venue || 'N/A'}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={event.event?.status || event.status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link to={`/coordinator/events/${event.event?.id || event.id}`} className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {filteredEvents.length === 0 && (
-            <div className="p-6 text-center text-gray-500">No events found.</div>
+        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden p-4 md:p-0">
+          {filteredEvents.length === 0 ? (
+            <EmptyState
+              icon="📅"
+              title="No events found"
+              description="Try adjusting your filters or check back later."
+              size="small"
+            />
+          ) : (
+            <ResponsiveTable
+              columns={[
+                { key: 'name', label: 'Event', render: (event) => (
+                  <span className="text-sm text-slate-600 font-medium">{event.event?.name || event.eventType}</span>
+                )},
+                { key: 'client', label: 'Client', render: (event) => event.clientName },
+                { key: 'date', label: 'Date', render: (event) => event.eventDate },
+                { key: 'venue', label: 'Venue', render: (event) => event.event?.venue || 'N/A' },
+                { key: 'status', label: 'Status', render: (event) => (
+                  <StatusBadge status={event.event?.status || event.status} />
+                )},
+                { key: 'action', label: 'Action', render: (event) => (
+                  <Link to={`/coordinator/events/${event.event?.id || event.id}`} className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
+                    View
+                  </Link>
+                )},
+              ]}
+              data={filteredEvents}
+            />
           )}
         </div>
       </div>

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import Skeleton from '../components/Skeleton';
+import Skeleton, { LoadingSpinner } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 import { useApp } from '../context/AppContext';
 
 export default function VendorDashboard() {
@@ -40,14 +41,14 @@ export default function VendorDashboard() {
     return (
       <Layout title="Vendor Dashboard">
         <div className="space-y-6">
-          <Skeleton className="h-8 w-64" />
+          <div className="text-center py-10">
+            <LoadingSpinner size="lg" text="Loading dashboard..." />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Skeleton className="h-20" />
             <Skeleton className="h-20" />
             <Skeleton className="h-20" />
           </div>
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
         </div>
       </Layout>
     );
@@ -56,7 +57,7 @@ export default function VendorDashboard() {
   if (error) {
     return (
       <Layout title="Vendor Dashboard">
-        <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>
+        <div className="bg-rose-100 text-rose-700 p-4 rounded-lg">{error}</div>
       </Layout>
     );
   }
@@ -111,9 +112,12 @@ export default function VendorDashboard() {
             </Link>
           </div>
           {pending.length === 0 ? (
-            <div className="p-6 text-center text-gray-500 text-sm">
-              Nothing waiting on you right now.
-            </div>
+            <EmptyState
+              icon="✅"
+              title="All caught up!"
+              description="No assignments waiting for your response."
+              size="small"
+            />
           ) : (
             <ul className="divide-y divide-gray-100">
               {pending.slice(0, 5).map((a) => (
@@ -145,9 +149,12 @@ export default function VendorDashboard() {
             </Link>
           </div>
           {accepted.length === 0 ? (
-            <div className="p-6 text-center text-gray-500 text-sm">
-              No accepted assignments yet.
-            </div>
+            <EmptyState
+              icon="📅"
+              title="No upcoming commitments"
+              description="Accept assignments to see them here."
+              size="small"
+            />
           ) : (
             <ul className="divide-y divide-gray-100">
               {accepted.slice(0, 5).map((a) => (

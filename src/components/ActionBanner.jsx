@@ -19,20 +19,20 @@ const bannerConfig = {
     linkHover: 'hover:text-rose-700',
   },
   warning: {
-    bg: 'bg-orange-50',
-    border: 'border-orange-200',
-    headerBg: 'bg-orange-100',
-    icon: <ClockIcon className="h-5 w-5 text-orange-600" />,
-    iconBg: 'bg-orange-100',
-    iconColor: 'text-orange-600',
-    titleColor: 'text-orange-800',
-    countColor: 'text-orange-600',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    headerBg: 'bg-amber-100',
+    icon: <ClockIcon className="h-5 w-5 text-amber-600" />,
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-600',
+    titleColor: 'text-amber-800',
+    countColor: 'text-amber-600',
     itemBg: 'bg-white',
-    itemBorder: 'border-orange-200',
-    itemHover: 'hover:bg-orange-50',
-    itemColor: 'text-orange-700',
-    linkColor: 'text-orange-600',
-    linkHover: 'hover:text-orange-700',
+    itemBorder: 'border-amber-200',
+    itemHover: 'hover:bg-amber-50',
+    itemColor: 'text-amber-700',
+    linkColor: 'text-amber-600',
+    linkHover: 'hover:text-amber-700',
   },
   info: {
     bg: 'bg-sky-50',
@@ -67,7 +67,7 @@ export default function ActionBanner({
   const config = bannerConfig[type] || bannerConfig.critical;
 
   return (
-    <div className={`${config.bg} border ${config.border} rounded-xl shadow-sm overflow-hidden`}>
+    <div className={`${config.bg} border ${config.border} rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden`}>
       <div className={`px-4 py-3 md:px-6 md:py-4 border-b ${config.border} ${config.headerBg}`}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -120,7 +120,7 @@ export default function ActionBanner({
         ))}
 
         {items.length > 3 && (
-          <div className="text-xs text-gray-500 px-2">
+          <div className="text-xs text-slate-500 px-2">
             +{items.length - 3} more
           </div>
         )}

@@ -58,9 +58,9 @@
 
 html, body, #root {
   min-height: 100vh;
-  background-color: var(--surface-page);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -188,6 +188,56 @@ html, body, #root {
 
 button, a, .card, .stat-card {
   transition: all 0.2s ease;
+}
+
+/* Improved button interactions */
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-outline:active {
+  transform: scale(0.98);
+}
+
+.btn-success:active {
+  transform: scale(0.98);
+}
+
+.btn-danger:active {
+  transform: scale(0.98);
+}
+
+/* Focus states for accessibility */
+button:focus-visible {
+  outline: 2px solid var(--color-indigo-600);
+  outline-offset: 2px;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--color-indigo-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth card hover effects */
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Input focus states */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--color-indigo-600);
+  outline-offset: 2px;
+  border-color: var(--color-indigo-600);
+}
+
+/* Badge hover effects */
+.badge:hover {
+  transform: scale(1.05);
+  transition: transform 0.15s ease;
 }
 
 .collapsible-content {

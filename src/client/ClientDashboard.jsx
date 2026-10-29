@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import EmptyState from '../components/EmptyState';
 import { useApp } from '../context/AppContext';
 
 export default function ClientDashboard() {
@@ -73,7 +74,7 @@ export default function ClientDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <Link
             to="/client/new-inquiry"
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium text-sm transition-colors"
@@ -99,14 +100,16 @@ export default function ClientDashboard() {
             </Link>
           </div>
           {loading ? (
-            <div className="p-6 text-center text-gray-500">Loading...</div>
+            <div className="p-6 text-center text-slate-500">Loading...</div>
           ) : myInquiries.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              No inquiries yet.
-              <Link to="/client/new-inquiry" className="text-indigo-600 hover:underline ml-2">
-                Create one now
-              </Link>
-            </div>
+            <EmptyState
+              icon="📋"
+              title="No inquiries yet"
+              description="Start by creating your first event inquiry."
+              actionText="Create an inquiry"
+              actionLink="/client/new-inquiry"
+              size="small"
+            />
           ) : (
             <div className="divide-y divide-gray-100">
               {myInquiries.slice(0, 5).map((inq) => (
