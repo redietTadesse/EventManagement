@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -112,30 +113,53 @@ public class VenueService {
     }
 
     /**
-     * Books a venue for an event on a specific date.
+     * Books a venue for an event on a specific date range with setup/teardown buffers.
      * Uses database-level unique constraint (uq_venue_date) to prevent double-booking.
      * @throws BusinessException with code VENUE_CONFLICT if the venue is already booked
      */
     @Transactional
-    public VenueBooking bookVenue(Long venueId, Long eventId, LocalDate date) {
+    public List<VenueBooking> bookVenue(Long venueId, Long eventId, LocalDate startDate, LocalDate endDate) {
         Venue venue = getById(venueId);
         Event event = eventRepository.findById(eventId)
             .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
 
-        try {
+        // 1. Validation: endDate cannot be before startDate
+        LocalDate actualEndDate = (endDate != null) ? endDate : startDate;
+        if (actualEndDate.isBefore(startDate)) {
+            throw new BusinessException("End date cannot be before start date", "INVALID_DATE_RANGE");
+        }
+
+        // 2. Calculate the full blocked range including buffers
+        LocalDate blockStart = startDate.minusDays(venue.getSetupBufferDays());
+        LocalDate blockEnd = actualEndDate.plusDays(venue.getTeardownBufferDays());
+
+        // 3. Check availability for the ENTIRE block using a single efficient query
+        long conflicts = venueBookingRepository.countConfirmedBookingsInRange(venueId, blockStart, blockEnd);
+        if (conflicts > 0) {
+            throw new BusinessException(
+                String.format("Venue %s is already booked on one or more days between %s and %s (including setup/teardown).",
+                venue.getName(), blockStart, blockEnd),
+                "VENUE_CONFLICT");
+        }
+
+        // 4. Insert a booking row for EVERY day in the block
+        List<VenueBooking> bookings = new ArrayList<>();
+        LocalDate insertDate = blockStart;
+        while (!insertDate.isAfter(blockEnd)) {
             VenueBooking booking = VenueBooking.builder()
                 .venue(venue)
                 .event(event)
-                .bookingDate(date)
+                .bookingDate(insertDate)
                 .status(VenueBooking.BookingStatus.CONFIRMED)
                 .build();
+            bookings.add(booking);
+            insertDate = insertDate.plusDays(1);
+        }
 
-            return venueBookingRepository.save(booking);
+        try {
+            return venueBookingRepository.saveAll(bookings);
         } catch (DataIntegrityViolationException e) {
-            log.warn("Venue conflict: venue {} already booked on {}", venueId, date);
-            throw new BusinessException(
-                String.format("Venue %s is already booked on %s", venue.getName(), date),
-                "VENUE_CONFLICT");
+            throw new BusinessException("Concurrent booking detected.", "VENUE_CONFLICT");
         }
     }
 
@@ -147,6 +171,16 @@ public class VenueService {
         booking.setStatus(VenueBooking.BookingStatus.CANCELLED);
         venueBookingRepository.save(booking);
         log.info("Cancelled venue booking {}", bookingId);
+    }
+
+    @Transactional
+    public void cancelVenueBookingsForEvent(Long eventId) {
+        List<VenueBooking> bookings = venueBookingRepository.findByEventId(eventId);
+        for (VenueBooking booking : bookings) {
+            booking.setStatus(VenueBooking.BookingStatus.CANCELLED);
+        }
+        venueBookingRepository.saveAll(bookings);
+        log.info("Cancelled {} venue bookings for event {}", bookings.size(), eventId);
     }
 
     public List<com.aicc.eventmanagement.payload.VenueBookingResponse> getVenueBookings(Long venueId) {

@@ -68,6 +68,8 @@ public class VendorRankingService {
         List<Vendor> candidates =
                 vendorRepository.findActiveByCategory(category).stream()
                         .filter(v -> !excluded.contains(v.getId()))
+                        .filter(v -> v.getInsuranceExpiryDate() == null
+                                || !v.getInsuranceExpiryDate().isBefore(date))
                         .filter(v -> !bookedDateRepository
                                 .existsByVendorIdAndBookedDate(v.getId(), date))
                         .filter(v -> !assignmentRepository

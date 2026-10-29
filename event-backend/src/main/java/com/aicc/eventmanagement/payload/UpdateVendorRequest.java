@@ -5,6 +5,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
+
 @Getter
 @Setter
 public class UpdateVendorRequest {
@@ -25,4 +27,6 @@ public class UpdateVendorRequest {
     private String email;
 
     private Boolean active;
+
+    private LocalDate insuranceExpiryDate;
 }

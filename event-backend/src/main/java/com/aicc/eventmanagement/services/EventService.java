@@ -116,7 +116,8 @@ public class EventService {
                         venueService.bookVenue(
                             request.getVenueId(),
                             saved.getId(),
-                            inquiry.getEventDate()
+                            inquiry.getEventDate(),
+                            inquiry.getEndDate()
                         );
                         log.info("Venue {} rebooked for event {} on {}",
                             request.getVenueId(), saved.getId(), inquiry.getEventDate());
@@ -147,6 +148,7 @@ public class EventService {
             vendorService.completeAssignmentsForEvent(id, userRole);
         } else if (status == EventStatus.CANCELLED) {
             vendorService.cancelAssignmentsForEvent(id, userRole);
+            venueService.cancelVenueBookingsForEvent(id);
         }
 
         eventPublisher.publishEvent(new WorkflowTransitionEvent(

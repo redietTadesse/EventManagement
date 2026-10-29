@@ -190,7 +190,7 @@ export default function ClientEventDetail() {
               </div>
               <div>
                 <p className="text-gray-500">Price</p>
-                <p className="font-medium">${event.proposal.price}</p>
+                <p className="font-medium">ETB {event.proposal.price}</p>
               </div>
             </div>
             {event.proposal.terms && (

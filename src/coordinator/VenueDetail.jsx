@@ -93,8 +93,8 @@ export default function VenueDetail() {
             )}
             {venue?.hourlyRate && (
               <div>
-                <p className="text-gray-500">Hourly Rate</p>
-                <p className="font-medium">${venue.hourlyRate}/hour</p>
+                <p className="text-gray-500">Base Daily Rate</p>
+                <p className="font-medium">ETB {Number(venue.hourlyRate).toLocaleString()}/day</p>
               </div>
             )}
             <div>

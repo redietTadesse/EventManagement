@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 
 export default function VendorForm() {
   const { id } = useParams();
@@ -19,6 +19,7 @@ export default function VendorForm() {
     serviceCategory: 'av',
     phone: '',
     description: '',
+    insuranceExpiryDate: '',
     isActive: true
   });
 
@@ -62,7 +63,8 @@ export default function VendorForm() {
           fullName: form.fullName,
           companyName: form.companyName,
           serviceCategory: form.serviceCategory,
-          phone: form.phone
+          phone: form.phone,
+          insuranceExpiryDate: form.insuranceExpiryDate || null
         });
         navigate('/admin/vendors');
       }
@@ -184,6 +186,17 @@ export default function VendorForm() {
               type="text"
               name="phone"
               value={form.phone}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Insurance expiry date</label>
+            <input
+              type="date"
+              name="insuranceExpiryDate"
+              value={form.insuranceExpiryDate}
               onChange={handleChange}
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
             />

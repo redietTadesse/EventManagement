@@ -31,6 +31,7 @@ class ConcurrencyTest {
     @Autowired
     private EventRepository eventRepository;
 
+
     private Inquiry testInquiry;
 
     @BeforeEach
@@ -133,4 +134,5 @@ class ConcurrencyTest {
         // All reads should succeed
         assertThat(readCount.get()).isEqualTo(threadCount);
     }
+
 }

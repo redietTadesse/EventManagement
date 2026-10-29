@@ -133,6 +133,12 @@ export default function AssignmentDetail() {
                 {assignment?.assignedAt ? new Date(assignment.assignedAt).toLocaleString() : '—'}
               </p>
             </div>
+            {assignment?.serviceOrder && (
+              <div className="col-span-2">
+                <p className="text-gray-500">Service instructions</p>
+                <p className="font-medium whitespace-pre-wrap">{assignment.serviceOrder}</p>
+              </div>
+            )}
             {assignment?.respondedAt && (
               <div>
                 <p className="text-gray-500">Responded at</p>

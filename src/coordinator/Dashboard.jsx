@@ -186,14 +186,6 @@ export default function CoordinatorDashboard() {
           </Link>
         </div>
 
-        {/* Vendor Load Panel - Simple heatmap */}
-        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-6">
-          <h3 className="text-sm font-medium text-slate-700 mb-4">Vendor Load Overview</h3>
-          <div className="text-sm text-slate-500">
-            Vendor load heatmap coming soon - will show vendor assignment distribution by category
-          </div>
-        </div>
-
         {/* Recent Activity Feed */}
         <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
@@ -292,19 +284,23 @@ export default function CoordinatorDashboard() {
         </div>
 
         {/* Chart - moved to bottom as less important */}
-        {!statsLoading && chartData.length > 0 && (
+        {!statsLoading && chartData.length > 0 && chartData.some(d => Number(d.value) > 0) ? (
           <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-6">
             <h3 className="text-sm font-medium text-slate-700 mb-4">Event Status Distribution</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={chartData}>
                 <XAxis dataKey="name" />
-                <YAxis />
+                <YAxis allowDecimals={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#f1f5f9' }} />
                 <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-        )}
+        ) : !statsLoading ? (
+          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-6 flex flex-col items-center justify-center h-64 text-slate-400">
+            <p>No event data available to display</p>
+          </div>
+        ) : null}
       </div>
     </Layout>
   );

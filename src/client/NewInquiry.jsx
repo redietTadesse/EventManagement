@@ -2,20 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
+import { eventCategoryMap } from '../utils/constants';
 
 const ALL_CATEGORIES = ['av', 'catering', 'security', 'cleaning', 'photography', 'music'];
 
-const EVENT_TYPE_DEFAULTS = {
-  conference: ['av', 'catering', 'security'],
-  wedding: ['catering', 'photography', 'music'],
-  trade_show: ['av', 'security', 'cleaning'],
-  exhibition: ['av', 'security', 'cleaning'],
-  concert: ['av', 'security', 'music'],
-  gala: ['catering', 'photography', 'music', 'security'],
-  seminar: ['av', 'catering'],
-};
-
-const defaultCategories = (eventType) => EVENT_TYPE_DEFAULTS[eventType] || [];
+const defaultCategories = (eventType) => eventCategoryMap[eventType] || [];
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
@@ -24,6 +15,7 @@ export default function NewInquiry() {
   const [form, setForm] = useState({
     eventType: 'conference',
     eventDate: '',
+    endDate: '',
     expectedAttendees: '',
     requirements: '',
     requestedCategories: defaultCategories('conference'),
@@ -117,7 +109,7 @@ export default function NewInquiry() {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event Date
+              Event Start Date
             </label>
             <input
               type="date"
@@ -126,6 +118,19 @@ export default function NewInquiry() {
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Event End Date (Optional - for multi-day events)
+            </label>
+            <input
+              type="date"
+              name="endDate"
+              value={form.endDate || ''}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             />
           </div>
 

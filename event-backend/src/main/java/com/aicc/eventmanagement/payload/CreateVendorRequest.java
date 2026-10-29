@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
+
 @Getter
 @Setter
 public class CreateVendorRequest {
@@ -38,4 +40,6 @@ public class CreateVendorRequest {
     private String serviceCategory;
 
     private String description;
+
+    private LocalDate insuranceExpiryDate;
 }

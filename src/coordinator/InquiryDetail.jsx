@@ -137,10 +137,16 @@ export default function InquiryDetail() {
               <p className="text-sm text-gray-500">Expected Attendees</p>
               <p className="font-medium">{inquiry.expectedAttendees}</p>
             </div>
+            {inquiry.requestedCategories?.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-500">Requested Services</p>
+                <p className="font-medium capitalize">{inquiry.requestedCategories.join(', ')}</p>
+              </div>
+            )}
             {inquiry.requirements && (
               <div>
-                <p className="text-sm text-gray-500">Requirements</p>
-                <p className="text-gray-700">{inquiry.requirements}</p>
+                <p className="text-sm text-gray-500">Client Requirements</p>
+                <p className="text-gray-700 bg-slate-50 p-2 rounded-md border border-slate-100">{inquiry.requirements}</p>
               </div>
             )}
           </div>
