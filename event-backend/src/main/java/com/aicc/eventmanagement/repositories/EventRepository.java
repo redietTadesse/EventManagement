@@ -62,3 +62,12 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date,
                                     @Param("excludedStatuses") List<EventStatus> excludedStatuses);
 }
+@Query("""
+           SELECT e FROM Event e
+           WHERE e.venueId IS NOT NULL
+             AND e.inquiry.eventDate BETWEEN :start AND :end
+             AND e.status NOT IN :excludedStatuses
+           """)
+List<Event> findVenueBookedEventsInRange(@Param("start") LocalDate start,
+                                         @Param("end") LocalDate end,
+                                         @Param("excludedStatuses") List<EventStatus> excludedStatuses);
