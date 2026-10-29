@@ -1,6 +1,6 @@
 import { hasConflict } from './conflict';
 
-// eventCategoryMap: defined in mockData
+// Pass eventCategoryMap from utils/constants when calling this helper.
 // findBestVendor: picks active vendor with fewest assignments, no conflict
 export const findBestVendor = (category, eventDate, vendors, assignments, excludeVendorId) => {
   const candidates = vendors.filter(v =>

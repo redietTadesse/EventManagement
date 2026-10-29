@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
-import { useApp } from '../store/AppContext';
+import { useApp } from '../context/AppContext';
 
 export default function AdminDashboard() {
   const { state, dispatch } = useApp();
