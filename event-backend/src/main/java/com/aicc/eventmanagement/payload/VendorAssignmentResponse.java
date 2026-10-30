@@ -41,8 +41,13 @@ public class VendorAssignmentResponse {
     private String declineReason;
     private Double vendorRating;
     private String serviceOrder;
+    private String decisionSnapshot;
 
     public static VendorAssignmentResponse from(VendorAssignment assignment) {
+        return from(assignment, false);
+    }
+
+    public static VendorAssignmentResponse from(VendorAssignment assignment, boolean includeDecisionSnapshot) {
         Event event = assignment.getEvent();
         Inquiry inquiry = event != null ? event.getInquiry() : null;
 
@@ -68,6 +73,7 @@ public class VendorAssignmentResponse {
             .declineReason(assignment.getDeclineReason())
             .vendorRating(assignment.getVendorRating())
             .serviceOrder(inquiry != null ? inquiry.getRequirements() : null)
+            .decisionSnapshot(includeDecisionSnapshot ? assignment.getDecisionSnapshot() : null)
             .build();
     }
 }

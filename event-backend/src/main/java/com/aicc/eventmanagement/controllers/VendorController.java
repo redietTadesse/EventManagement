@@ -165,7 +165,10 @@ public class VendorController {
             throw new BusinessException("You can only view your own assignments", "ACCESS_DENIED");
         }
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(id);
-        return ResponseEntity.ok(assignments.stream().map(VendorAssignmentResponse::from).collect(Collectors.toList()));
+        boolean includeDecisionSnapshots = hasRole(principal, Role.COORDINATOR) || hasRole(principal, Role.ADMIN);
+        return ResponseEntity.ok(assignments.stream()
+                .map(assignment -> VendorAssignmentResponse.from(assignment, includeDecisionSnapshots))
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/pending")
