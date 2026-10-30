@@ -60,7 +60,7 @@ export default function OpenAssignments() {
           </p>
         </div>
 
-        {error && <div className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>}
+        {error && <div role="alert" className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>}
 
         {open.length === 0 ? (
           <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
@@ -69,8 +69,8 @@ export default function OpenAssignments() {
         ) : (
           <div className="grid gap-4">
             {open.map(a => (
-              <div key={a.id} className="bg-white rounded-xl shadow p-5 flex justify-between items-center">
-                <div>
+              <div key={a.id} className="bg-white rounded-xl shadow p-5 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <p className="font-semibold text-gray-800">{a?.eventName}</p>
                   <p className="text-sm text-gray-500">
                     {a?.serviceCategory?.toUpperCase()} · {a?.eventDate}
@@ -85,7 +85,7 @@ export default function OpenAssignments() {
                 <button
                   onClick={() => handleClaim(a.id)}
                   disabled={claiming === a.id}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-5 py-2 rounded-lg text-sm disabled:opacity-50"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-5 py-2 rounded-lg text-sm disabled:opacity-50 sm:w-auto"
                 >
                   {claiming === a.id ? 'Claiming…' : 'Claim'}
                 </button>

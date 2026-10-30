@@ -88,11 +88,11 @@ export default function AssignmentDetail() {
   return (
     <Layout title="Assignment">
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <Link to="/vendor/assignments" className="text-gray-500 hover:text-gray-700">
             ← Back
-          </button>
-          <h1 className="text-2xl font-bold text-gray-800">{assignment?.eventName}</h1>
+          </Link>
+          <h1 className="min-w-0 flex-1 text-2xl font-bold text-gray-800">{assignment?.eventName}</h1>
           <StatusBadge status={assignment.status} />
         </div>
 
@@ -100,7 +100,7 @@ export default function AssignmentDetail() {
 
         <div className="bg-white rounded-xl shadow p-6 space-y-4">
           <h3 className="font-semibold text-gray-800">Event details</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div>
               <p className="text-gray-500">Date</p>
               <p className="font-medium">{assignment?.eventDate}</p>
@@ -122,7 +122,7 @@ export default function AssignmentDetail() {
 
         <div className="bg-white rounded-xl shadow p-6 space-y-4">
           <h3 className="font-semibold text-gray-800">Your service</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div>
               <p className="text-gray-500">Category</p>
               <p className="font-medium">{assignment?.serviceCategory?.toUpperCase()}</p>
@@ -155,7 +155,7 @@ export default function AssignmentDetail() {
         </div>
 
         {isPending && !declineMode && (
-          <div className="bg-white rounded-xl shadow p-6 flex gap-3">
+          <div className="bg-white rounded-xl shadow p-6 flex flex-col gap-3 sm:flex-row">
             <button
               onClick={handleAccept}
               disabled={submitting}
@@ -185,7 +185,7 @@ export default function AssignmentDetail() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
               placeholder="Fully booked on this date, equipment unavailable, etc."
             />
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => { setDeclineMode(false); setDeclineReason(''); }}
                 disabled={submitting}

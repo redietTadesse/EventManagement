@@ -6,7 +6,7 @@ import Skeleton from '../components/Skeleton';
 import { TableSkeleton } from '../components/Skeleton';
 import { useApp } from '../context/AppContext';
 
-const FILTERS = ['ALL', 'PENDING', 'ACCEPTED', 'DECLINED', 'COMPLETED'];
+const FILTERS = ['ALL', 'PENDING', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'COMPLETED', 'CANCELLED'];
 
 export default function MyAssignments() {
   const { fetchMyAssignments } = useApp();
@@ -15,12 +15,15 @@ export default function MyAssignments() {
   const [error, setError] = useState('');
   const [params, setParams] = useSearchParams();
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   const status = params.get('status') || 'ALL';
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setLoading(true);
+      setError('');
       try {
         const list = await fetchMyAssignments();
         if (!cancelled) setAssignments(list || []);
@@ -31,7 +34,7 @@ export default function MyAssignments() {
       }
     })();
     return () => { cancelled = true; };
-  }, [fetchMyAssignments]);
+  }, [fetchMyAssignments, reloadKey]);
 
   const categories = [...new Set(assignments.map(a => a.serviceCategory).filter(Boolean))];
 
@@ -53,6 +56,23 @@ export default function MyAssignments() {
             <Skeleton className="h-9 w-20" />
           </div>
           <TableSkeleton rows={5} columns={6} />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout title="My Assignments">
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="mt-3 rounded-md bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100"
+          >
+            Try again
+          </button>
         </div>
       </Layout>
     );
@@ -85,7 +105,7 @@ export default function MyAssignments() {
           >
             <option value="">All Categories</option>
             {categories.map(cat => (
-              <option key={cat} value={cat}>{cat.toUpperCase()}</option>
+              <option key={cat} value={cat}>{cat.replace(/_/g, ' ').toUpperCase()}</option>
             ))}
           </select>
           {categoryFilter && (
@@ -98,15 +118,14 @@ export default function MyAssignments() {
           )}
         </div>
 
-        {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>}
-
         {categoryFiltered.length === 0 ? (
           <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
             No assignments in this view.
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <table className="w-full text-sm">
+          <>
+            <div className="hidden overflow-hidden rounded-xl bg-white shadow md:block">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
@@ -121,8 +140,8 @@ export default function MyAssignments() {
                 {categoryFiltered.map(a => (
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-800">{a.eventName}</td>
-                    <td className="px-4 py-3 text-gray-600">{a.eventDate}</td>
-                    <td className="px-4 py-3 text-gray-600">{a.serviceCategory?.toUpperCase()}</td>
+                    <td className="px-4 py-3 text-gray-600">{a.eventDate || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{a.serviceCategory?.replace(/_/g, ' ').toUpperCase()}</td>
                     <td className="px-4 py-3 text-gray-600">{a.eventVenue || '—'}</td>
                     <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                     <td className="px-4 py-3">
@@ -136,8 +155,38 @@ export default function MyAssignments() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            <ul className="space-y-3 md:hidden">
+              {categoryFiltered.map(a => (
+                <li key={a.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-gray-800">{a.eventName || 'Untitled event'}</p>
+                      <p className="mt-1 text-sm text-gray-600">{a.eventDate || 'Date not set'}</p>
+                    </div>
+                    <StatusBadge status={a.status} />
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Service</dt>
+                      <dd className="mt-0.5 text-gray-700">{a.serviceCategory?.replace(/_/g, ' ').toUpperCase() || '—'}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">Venue</dt>
+                      <dd className="mt-0.5 truncate text-gray-700">{a.eventVenue || '—'}</dd>
+                    </div>
+                  </dl>
+                  <Link
+                    to={`/vendor/assignments/${a.id}`}
+                    className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-indigo-50 px-4 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    View assignment
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </Layout>
