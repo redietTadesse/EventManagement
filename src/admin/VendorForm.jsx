@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
+import api from '../api/axios';
 
 export default function VendorForm() {
   const { id } = useParams();
@@ -25,6 +26,13 @@ export default function VendorForm() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    api.get('/vendors/service-categories')
+      .then((response) => setCategories(response.data || []))
+      .catch(() => setError('Could not load service categories.'));
+  }, []);
 
   useEffect(() => {
     if (isEdit) {
@@ -74,15 +82,6 @@ export default function VendorForm() {
       setLoading(false);
     }
   };
-
-  const categories = [
-    { value: 'av', label: 'AV Equipment' },
-    { value: 'catering', label: 'Catering' },
-    { value: 'security', label: 'Security' },
-    { value: 'cleaning', label: 'Cleaning' },
-    { value: 'photography', label: 'Photography' },
-    { value: 'music', label: 'Music' }
-  ];
 
   return (
     <Layout title={isEdit ? 'Edit Vendor' : 'Add Vendor'}>
@@ -174,8 +173,8 @@ export default function VendorForm() {
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
               required
             >
-              {categories.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+              {categories.map(category => (
+                <option key={category} value={category}>{category.replaceAll('_', ' ').toUpperCase()}</option>
               ))}
             </select>
           </div>

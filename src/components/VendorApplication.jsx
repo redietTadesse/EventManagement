@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { UserIcon, BuildingOfficeIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import api from '../api/axios';
@@ -7,6 +7,15 @@ export default function VendorApplication() {
   const [submitted, setSubmitted] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [serviceCategories, setServiceCategories] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/vendors/service-categories')
+      .then((response) => { if (active) setServiceCategories(response.data || []); })
+      .catch(() => { if (active) setError('Could not load service categories. Please refresh and try again.'); });
+    return () => { active = false; };
+  }, []);
 
   const [formData, setFormData] = useState({
     companyName: '',
@@ -19,18 +28,6 @@ export default function VendorApplication() {
     website: '',
     establishedYear: '',
   });
-
-  const serviceCategories = [
-    'CATERING',
-    'AUDIO_VISUAL',
-    'DECORATION',
-    'PHOTOGRAPHY',
-    'SECURITY',
-    'CLEANING',
-    'TRANSPORTATION',
-    'ENTERTAINMENT',
-    'OTHER',
-  ];
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

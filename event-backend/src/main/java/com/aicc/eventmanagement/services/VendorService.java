@@ -61,6 +61,7 @@ public class VendorService {
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
     private final VendorRankingService rankingService;
+    private final VendorEligibilityService eligibilityService;
     private final VendorRatingService ratingService;
     private final PasswordEncoder passwordEncoder;
 
@@ -85,7 +86,7 @@ public class VendorService {
         Vendor vendor = Vendor.builder()
                 .userId(user.getId())
                 .companyName(req.getCompanyName())
-                .serviceCategory(req.getServiceCategory())
+                .serviceCategory(requireKnownCategory(req.getServiceCategory()))
                 .description(req.getDescription())
                 .phone(req.getPhone())
                 .email(req.getEmail())
@@ -131,7 +132,7 @@ public class VendorService {
         Vendor vendor = Vendor.builder()
                 .userId(user.getId())
                 .companyName(req.getCompanyName())
-                .serviceCategory(req.getServiceCategory())
+                .serviceCategory(requireKnownCategory(req.getServiceCategory()))
                 .description(description.toString())
                 .phone(req.getPhone())
                 .email(req.getEmail())
@@ -159,12 +160,20 @@ public class VendorService {
         return username;
     }
 
+    private String requireKnownCategory(String category) {
+        String canonical = CategoryUtils.canonicalize(category);
+        if (!CategoryUtils.isKnownCategory(canonical)) {
+            throw new BusinessException("Unsupported vendor service category", "VENDOR_CATEGORY_MISMATCH");
+        }
+        return canonical;
+    }
+
     @Transactional
     public Vendor updateVendor(Long id, UpdateVendorRequest req) {
         Vendor vendor = getVendorById(id);
 
         if (req.getCompanyName() != null)      vendor.setCompanyName(req.getCompanyName());
-        if (req.getServiceCategory() != null)  vendor.setServiceCategory(req.getServiceCategory());
+        if (req.getServiceCategory() != null)  vendor.setServiceCategory(requireKnownCategory(req.getServiceCategory()));
         if (req.getDescription() != null)      vendor.setDescription(req.getDescription());
         if (req.getPhone() != null)            vendor.setPhone(req.getPhone());
         if (req.getEmail() != null)            vendor.setEmail(req.getEmail());
@@ -239,11 +248,10 @@ public class VendorService {
 
     private List<String> requiredCategoriesFor(Event event) {
         String stored = event.getRequiredCategories();
-        if (stored != null && !stored.isBlank()) {
-            return CategoryUtils.split(stored);
-        }
-        return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(
-                event.getInquiry().getEventType(), List.of());
+        List<String> selected = stored != null && !stored.isBlank()
+                ? CategoryUtils.split(stored)
+                : CategoryUtils.categoriesForEventType(event.getInquiry().getEventType());
+        return CategoryUtils.externalVendorCategories(event.getInquiry().getEventType(), selected);
     }
 
     // ============ VENDOR CRUD ============
@@ -276,35 +284,23 @@ public class VendorService {
     }
 
     public List<Vendor> findAvailableVendors(String category, LocalDate date, Long excludeVendorId) {
-        List<Vendor> activeVendors = vendorRepository.findActiveByCategory(category);
-
-        return activeVendors.stream()
+        return vendorRepository.findByServiceCategoryIn(CategoryUtils.categoryVariants(category)).stream()
+                .filter(Vendor::isActive)
                 .filter(v -> !v.getId().equals(excludeVendorId))
-                .filter(v -> isVendorAvailable(v.getId(), date))
+                .filter(v -> eligibilityService.evaluate(v, category, date, null, null, Set.of()).eligible())
                 .collect(Collectors.toList());
     }
 
     public boolean isVendorAvailable(Long vendorId, LocalDate date) {
-        boolean hasBookedDate = bookedDateRepository.existsByVendorIdAndBookedDate(vendorId, date);
-        if (hasBookedDate) {
-            log.debug("Vendor {} has booked date on {}", vendorId, date);
-            return false;
-        }
-
-        boolean hasActiveAssignment = assignmentRepository.hasActiveAssignmentOnDate(vendorId, date);
-        if (hasActiveAssignment) {
-            log.debug("Vendor {} has active assignment on {}", vendorId, date);
-            return false;
-        }
-
-        return true;
+        Vendor vendor = getVendorById(vendorId);
+        return eligibilityService.evaluate(vendor, vendor.getServiceCategory(), date, null, null, Set.of()).eligible();
     }
 
     public boolean isVendorAvailableForEvent(Long vendorId, LocalDate date, Long eventId) {
-        if (bookedDateRepository.existsByVendorIdAndBookedDate(vendorId, date)) {
-            return false;
-        }
-        return !assignmentRepository.hasActiveAssignmentOnDateExcludingEvent(vendorId, date, eventId);
+        Vendor vendor = getVendorById(vendorId);
+        Event event = eventRepository.findById(eventId).orElse(null);
+        String eventType = event == null ? null : event.getInquiry().getEventType();
+        return eligibilityService.evaluate(vendor, vendor.getServiceCategory(), date, eventId, eventType, Set.of()).eligible();
     }
 
 
@@ -352,6 +348,7 @@ public class VendorService {
     }
 
     public List<VendorAssignment> autoAssignForEvent(Event event) {
+        ensureEventAcceptsAssignments(event);
         String eventType = event.getInquiry().getEventType();
         LocalDate eventDate = event.getInquiry().getEventDate();
 
@@ -372,6 +369,8 @@ public class VendorService {
 
         for (String category : requiredCategories) {
             VendorAssignment assignment = null;
+            Set<Long> alreadyTried = Set.copyOf(
+                    assignmentRepository.findTriedVendorIds(event.getId(), category));
 
             // 1. Try client's preferred vendors first.
             //    No ranking runs on this path, so there is no score to record. The
@@ -384,9 +383,10 @@ public class VendorService {
                             ? Optional.empty()
                             : vendorRepository.findById(vendorId);
                     Vendor candidate = prefVendor.orElse(null);
-                    String exclusionReason = getPreferredVendorExclusionReason(candidate, category, eventDate);
-                    if (exclusionReason != null) {
-                        excludedPreferences.add(excludedPreference(vendorId, candidate, exclusionReason));
+                    VendorEligibilityService.EligibilityResult eligibility = eligibilityService.evaluate(
+                            candidate, category, eventDate, event.getId(), eventType, alreadyTried);
+                    if (!eligibility.eligible()) {
+                        excludedPreferences.add(excludedPreference(vendorId, candidate, eligibility.reason()));
                         continue;
                     }
 
@@ -414,7 +414,7 @@ public class VendorService {
             //    the same call that makes the decision; neither is recoverable later.
             if (assignment == null) {
                 Optional<VendorRankingService.Selection> selection =
-                        rankingService.select(category, eventDate, Set.of());
+                        rankingService.selectForEvent(event.getId(), eventType, category, eventDate);
 
                 if (selection.isPresent()) {
                     VendorRankingService.Selection s = selection.get();
@@ -461,39 +461,21 @@ public class VendorService {
         return saved;
     }
 
-    private String getPreferredVendorExclusionReason(Vendor vendor, String category, LocalDate eventDate) {
-        if (vendor == null) return "Vendor no longer exists";
-        if (vendor.getServiceCategory() == null
-                || !category.trim().equalsIgnoreCase(vendor.getServiceCategory().trim())) {
-            return "Vendor does not offer this service category";
+    private void requireEligible(Vendor vendor, Event event, String category, Set<Long> excludedVendorIds) {
+        ensureEventAcceptsAssignments(event);
+        VendorEligibilityService.EligibilityResult result = eligibilityService.evaluate(
+                vendor, category, event.getInquiry().getEventDate(), event.getId(),
+                event.getInquiry().getEventType(), excludedVendorIds);
+        if (!result.eligible()) {
+            throw new BusinessException(result.reason(), result.code());
         }
-        if (!vendor.isActive()) return "Vendor is inactive";
-        if (vendor.getInsuranceExpiryDate() == null) return "Insurance expiry date is not on file";
-        if (vendor.getInsuranceExpiryDate().isBefore(eventDate)) {
-            return "Insurance expires before the event date";
-        }
-        if (bookedDateRepository.existsByVendorIdAndBookedDate(vendor.getId(), eventDate)) {
-            return "Vendor has a booked date on the event date";
-        }
-        if (assignmentRepository.hasActiveAssignmentOnDate(vendor.getId(), eventDate)) {
-            return "Vendor has a conflicting assignment on the event date";
-        }
-        return null;
     }
 
-    private void validateVendorEligibility(Vendor vendor, String category, LocalDate eventDate) {
-        if (!vendor.isActive()) {
-            throw new BusinessException("Inactive vendors cannot be assigned", "VENDOR_INACTIVE");
-        }
-        if (vendor.getServiceCategory() == null || category == null
-                || !category.trim().equalsIgnoreCase(vendor.getServiceCategory().trim())) {
-            throw new BusinessException("Vendor does not offer the requested service category", "VENDOR_CATEGORY_MISMATCH");
-        }
-        if (vendor.getInsuranceExpiryDate() == null) {
-            throw new BusinessException("Vendor insurance expiry date is not on file", "VENDOR_INSURANCE_INVALID");
-        }
-        if (eventDate == null || vendor.getInsuranceExpiryDate().isBefore(eventDate)) {
-            throw new BusinessException("Vendor insurance is not valid for the event date", "VENDOR_INSURANCE_INVALID");
+    private void ensureEventAcceptsAssignments(Event event) {
+        EventStatus status = event.getStatus();
+        if (status == EventStatus.CONFIRMED || status == EventStatus.COMPLETED
+                || status == EventStatus.CANCELLED || status == EventStatus.CLOSED) {
+            throw new BusinessException("Cannot change vendor assignments for a confirmed or closed event", "EVENT_NOT_OPEN");
         }
     }
 
@@ -620,15 +602,9 @@ public class VendorService {
 
         Vendor vendor = getVendorById(vendorId);
         LocalDate eventDate = event.getInquiry().getEventDate();
-        validateVendorEligibility(vendor, category, eventDate);
+        requireEligible(vendor, event, category,
+                Set.copyOf(assignmentRepository.findTriedVendorIds(eventId, category)));
         String normalizedReason = requireCoordinatorReason(reason);
-
-        if (!isVendorAvailable(vendorId, eventDate)) {
-            throw new BusinessException(
-                    String.format("Vendor '%s' is not available on %s", vendor.getCompanyName(), eventDate),
-                    "VENDOR_UNAVAILABLE"
-            );
-        }
 
         CategoryEscalation escalation = escalationFor(event, category);
 
@@ -650,9 +626,7 @@ public class VendorService {
                 .filter(a -> a.getStatus() == VendorAssignmentStatus.OPEN)
                 .ifPresent(open -> {
                     workflowEngine.validateAssignmentTransition(
-                            VendorAssignmentStatus.OPEN,
-                            VendorAssignmentStatus.CANCELLED,
-                            Role.COORDINATOR);
+                            VendorAssignmentStatus.OPEN, VendorAssignmentStatus.CANCELLED, Role.COORDINATOR);
                     open.setStatus(VendorAssignmentStatus.CANCELLED);
                     assignmentRepository.save(open);
                     log.info("Cancelled open pool row {} superseded by manual assignment", open.getId());
@@ -716,16 +690,18 @@ public class VendorService {
         }
 
         if (accepted) {
-            if (!isVendorAvailable(assignment.getVendor().getId(), eventDate)) {
+            VendorEligibilityService.EligibilityResult eligibility = eligibilityService.evaluate(
+                    assignment.getVendor(), assignment.getServiceCategory(), eventDate,
+                    assignment.getEvent().getId(), assignment.getEvent().getInquiry().getEventType(),
+                    Set.copyOf(assignmentRepository.findDeclinedVendorIds(
+                            assignment.getEvent().getId(), assignment.getServiceCategory())));
+            if (!eligibility.eligible()) {
                 throw new BusinessException(
-                        "Vendor has a conflict on this date. Cannot accept.",
-                        "VENDOR_CONFLICT"
+                        eligibility.reason(), eligibility.code()
                 );
             }
             workflowEngine.validateAssignmentTransition(
-                    VendorAssignmentStatus.PENDING,
-                    VendorAssignmentStatus.ACCEPTED,
-                    Role.VENDOR);
+                    VendorAssignmentStatus.PENDING, VendorAssignmentStatus.ACCEPTED, Role.VENDOR);
             assignment.setStatus(VendorAssignmentStatus.ACCEPTED);
             assignment.setRespondedAt(LocalDateTime.now());
             VendorAssignment saved = assignmentRepository.save(assignment);
@@ -735,9 +711,7 @@ public class VendorService {
         }
 
         workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.PENDING,
-                VendorAssignmentStatus.DECLINED,
-                Role.VENDOR);
+                VendorAssignmentStatus.PENDING, VendorAssignmentStatus.DECLINED, Role.VENDOR);
         assignment.setStatus(VendorAssignmentStatus.DECLINED);
         assignment.setDeclineReason(declineReason);
         assignment.setRespondedAt(LocalDateTime.now());
@@ -774,7 +748,7 @@ public class VendorService {
                 category, event.getId(), failedAttempt.getId(), failedAttempt.getStatus());
 
         Optional<VendorRankingService.Selection> selection =
-                rankingService.selectForEvent(event.getId(), category, eventDate);
+                rankingService.selectForEvent(event.getId(), event.getInquiry().getEventType(), category, eventDate);
 
         if (selection.isEmpty()) {
             openCategoryToPool(event, category);
@@ -862,9 +836,7 @@ public class VendorService {
         for (VendorAssignment assignment : stale) {
             try {
                 workflowEngine.validateAssignmentTransition(
-                        VendorAssignmentStatus.PENDING,
-                        VendorAssignmentStatus.EXPIRED,
-                        Role.VENDOR);
+                        VendorAssignmentStatus.PENDING, VendorAssignmentStatus.EXPIRED, Role.VENDOR);
 
                 assignment.setStatus(VendorAssignmentStatus.EXPIRED);
                 assignmentRepository.save(assignment);
@@ -897,9 +869,7 @@ public class VendorService {
         for (VendorAssignment a : assignments) {
             if (a.getStatus() == VendorAssignmentStatus.ACCEPTED) {
                 workflowEngine.validateAssignmentTransition(
-                        VendorAssignmentStatus.ACCEPTED,
-                        VendorAssignmentStatus.COMPLETED,
-                        triggeringRole);
+                        VendorAssignmentStatus.ACCEPTED, VendorAssignmentStatus.COMPLETED, triggeringRole);
                 a.setStatus(VendorAssignmentStatus.COMPLETED);
                 assignmentRepository.save(a);
                 closed++;
@@ -917,8 +887,7 @@ public class VendorService {
             if (s == VendorAssignmentStatus.ACCEPTED
                     || s == VendorAssignmentStatus.PENDING
                     || s == VendorAssignmentStatus.OPEN) {
-                workflowEngine.validateAssignmentTransition(
-                        s, VendorAssignmentStatus.CANCELLED, triggeringRole);
+                workflowEngine.validateAssignmentTransition(s, VendorAssignmentStatus.CANCELLED, triggeringRole);
                 a.setStatus(VendorAssignmentStatus.CANCELLED);
                 assignmentRepository.save(a);
                 cancelled++;
@@ -965,13 +934,8 @@ public class VendorService {
         eventRepository.save(event);
 
         // Publish the rollup transition so the audit trail records it
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this,
-                current,
-                target,
-                "EVENT-" + event.getId(),
-                triggeringRole
-        ));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, current, target,
+                "EVENT-" + event.getId(), triggeringRole));
 
         log.info("Event {} rollup: {} -> {} (anyExhausted={}, allResolved={}, triggeringRole={})",
                 event.getId(), current, target, anyExhausted, allResolved, triggeringRole);
@@ -1001,15 +965,12 @@ public class VendorService {
 
         Vendor vendor = getVendorById(vendorId);
         LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
-        validateVendorEligibility(vendor, assignment.getServiceCategory(), eventDate);
-        if (!isVendorAvailableForEvent(vendorId, eventDate, assignment.getEvent().getId())) {
-            throw new BusinessException("Vendor is not available on the event date", "VENDOR_UNAVAILABLE");
-        }
+        requireEligible(vendor, assignment.getEvent(), assignment.getServiceCategory(),
+                Set.copyOf(assignmentRepository.findTriedVendorIds(
+                        assignment.getEvent().getId(), assignment.getServiceCategory())));
 
         workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.OPEN,
-                VendorAssignmentStatus.PENDING,
-                Role.VENDOR);
+                VendorAssignmentStatus.OPEN, VendorAssignmentStatus.PENDING, Role.VENDOR);
 
         int rowsUpdated = assignmentRepository.claimOpenAssignment(
                 assignmentId, vendorId, offerDeadline());
@@ -1020,7 +981,6 @@ public class VendorService {
         }
 
         assignment = assignmentRepository.findById(assignmentId).orElseThrow();
-
         log.info("Vendor {} claimed open assignment {}", vendorId, assignmentId);
         evaluateEventRollup(assignment.getEvent(), Role.VENDOR);
         return assignment;
@@ -1127,6 +1087,10 @@ public class VendorService {
                 continue;
             }
 
+            VendorAssignmentStatus oldStatus = assignment.getStatus();
+            if (oldStatus == VendorAssignmentStatus.ACCEPTED) {
+                workflowEngine.validateAssignmentTransition(oldStatus, VendorAssignmentStatus.PENDING, Role.COORDINATOR);
+            }
             assignment.setStatus(VendorAssignmentStatus.PENDING);
             assignment.setRespondedAt(null);
             assignment.setExpiresAt(newDeadline);
@@ -1140,7 +1104,7 @@ public class VendorService {
     // ============ HELPER METHODS ============
 
     public List<String> getCategoriesForEventType(String eventType) {
-        return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(eventType, List.of());
+        return CategoryUtils.externalVendorCategories(eventType, CategoryUtils.categoriesForEventType(eventType));
     }
 
     public List<String> getRequiredCategoriesFor(Event event) {
@@ -1175,6 +1139,24 @@ public class VendorService {
                 List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED));
     }
 
+    public List<VendorAssignment> getEligibleOpenAssignmentsForVendor(Long vendorId) {
+        Vendor vendor = getVendorById(vendorId);
+        return assignmentRepository.findOpenAssignmentsForCategories(
+                        CategoryUtils.categoryVariants(vendor.getServiceCategory()),
+                        List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED))
+                .stream()
+                .filter(assignment -> eligibilityService.evaluate(
+                        vendor,
+                        assignment.getServiceCategory(),
+                        assignment.getEvent().getInquiry().getEventDate(),
+                        assignment.getEvent().getId(),
+                        assignment.getEvent().getInquiry().getEventType(),
+                        Set.copyOf(assignmentRepository.findTriedVendorIds(
+                                assignment.getEvent().getId(), assignment.getServiceCategory())))
+                        .eligible())
+                .toList();
+    }
+
     public List<VendorAssignment> getOpenAssignmentsForCoordinator() {
         return assignmentRepository.findByStatus(VendorAssignmentStatus.OPEN);
     }
@@ -1206,19 +1188,21 @@ public class VendorService {
             throw new BusinessException("Requested category does not match the open assignment", "VENDOR_CATEGORY_MISMATCH");
         }
         LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
-        validateVendorEligibility(vendor, assignmentCategory, eventDate);
+        requireEligible(vendor, assignment.getEvent(), assignmentCategory,
+                Set.copyOf(assignmentRepository.findTriedVendorIds(
+                        assignment.getEvent().getId(), assignmentCategory)));
         String normalizedReason = requireCoordinatorReason(reason);
-        if (!isVendorAvailableForEvent(vendorId, eventDate, assignment.getEvent().getId())) {
-            throw new BusinessException("Vendor is not available on the event date", "VENDOR_UNAVAILABLE");
-        }
 
         workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.OPEN,
-                VendorAssignmentStatus.PENDING,
-                Role.COORDINATOR);
+                VendorAssignmentStatus.OPEN, VendorAssignmentStatus.PENDING, Role.COORDINATOR);
+        int rowsUpdated = assignmentRepository.claimOpenAssignment(
+                assignmentId, vendorId, offerDeadline());
+        if (rowsUpdated == 0) {
+            throw new BusinessException("Assignment is no longer open", "ASSIGNMENT_ALREADY_CLAIMED");
+        }
+        assignment = assignmentRepository.findById(assignmentId).orElseThrow();
         assignment.setVendor(vendor);
         assignment.setVendorName(vendor.getCompanyName());
-        assignment.setStatus(VendorAssignmentStatus.PENDING);
         assignment.setSelectionReason(SelectionReason.COORDINATOR_FORCED);
         assignment.setDecisionSnapshot(buildCoordinatorDecisionSnapshot(
                 assignmentCategory, eventDate, vendor, normalizedReason, actorId, actorUsername,

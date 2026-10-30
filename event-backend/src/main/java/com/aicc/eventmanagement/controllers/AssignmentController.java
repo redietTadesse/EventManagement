@@ -124,7 +124,7 @@ public class AssignmentController {
         }
 
         Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
-        List<VendorAssignment> openAssignments = vendorService.getOpenAssignmentsForCategory(vendor.getServiceCategory());
+        List<VendorAssignment> openAssignments = vendorService.getEligibleOpenAssignmentsForVendor(vendor.getId());
         return ResponseEntity.ok(openAssignments.stream()
             .map(VendorAssignmentResponse::from)
             .collect(Collectors.toList()));

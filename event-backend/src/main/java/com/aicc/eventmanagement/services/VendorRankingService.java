@@ -3,8 +3,8 @@ package com.aicc.eventmanagement.services;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.SelectionReason;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
-import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
+import com.aicc.eventmanagement.util.CategoryUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +27,9 @@ import java.util.stream.Collectors;
 public class VendorRankingService {
 
     private final VendorRepository vendorRepository;
-    private final VendorBookedDateRepository bookedDateRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRatingService ratingService;
+    private final VendorEligibilityService eligibilityService;
 
     private static final double W_RATING = 0.50;
     private static final double W_LOAD = 0.40;
@@ -68,25 +68,37 @@ public class VendorRankingService {
             LocalDate date,
             Set<Long> alreadyTried) {
 
-        return evaluate(category, date, alreadyTried).ranked();
+        return rank(category, date, alreadyTried, null);
     }
 
-    private RankResult evaluate(String category, LocalDate date, Set<Long> alreadyTried) {
+    public List<Ranked> rank(String category, LocalDate date,
+                             Set<Long> alreadyTried, String eventType) {
+
+        return evaluate(category, date, alreadyTried, null, eventType).ranked();
+    }
+
+    private RankResult evaluate(String category, LocalDate date, Set<Long> alreadyTried,
+                                Long eventId, String eventType) {
 
         if (alreadyTried == null) {
             alreadyTried = Set.of();
         }
 
         final Set<Long> excluded = alreadyTried;
+        List<String> categoryVariants = CategoryUtils.categoryVariants(category);
+        if (categoryVariants.isEmpty()) return new RankResult(List.of(), List.of());
 
         List<Vendor> candidates = new ArrayList<>();
         List<Map<String, Object>> excludedVendors = new ArrayList<>();
-        for (Vendor vendor : vendorRepository.findByServiceCategory(category)) {
-            String exclusionReason = getExclusionReason(vendor, date, excluded);
-            if (exclusionReason == null) {
+        Set<Long> seen = new java.util.HashSet<>();
+        for (Vendor vendor : vendorRepository.findByServiceCategoryIn(categoryVariants)) {
+            if (!seen.add(vendor.getId())) continue;
+            VendorEligibilityService.EligibilityResult result = eligibilityService.evaluate(
+                    vendor, category, date, eventId, eventType, excluded);
+            if (result.eligible()) {
                 candidates.add(vendor);
             } else {
-                excludedVendors.add(excludedCandidate(vendor, exclusionReason));
+                excludedVendors.add(excludedCandidate(vendor, result.reason()));
             }
         }
 
@@ -137,24 +149,6 @@ public class VendorRankingService {
         return new RankResult(ranked, excludedVendors);
     }
 
-    private String getExclusionReason(Vendor vendor, LocalDate date, Set<Long> alreadyTried) {
-        if (!vendor.isActive()) return "Vendor is inactive";
-        if (alreadyTried.contains(vendor.getId())) return "Already tried for this event";
-        if (vendor.getInsuranceExpiryDate() == null) {
-            return "Insurance expiry date is not on file";
-        }
-        if (vendor.getInsuranceExpiryDate().isBefore(date)) {
-            return "Insurance expires before the event date";
-        }
-        if (bookedDateRepository.existsByVendorIdAndBookedDate(vendor.getId(), date)) {
-            return "Vendor has a booked date on the event date";
-        }
-        if (assignmentRepository.hasActiveAssignmentOnDate(vendor.getId(), date)) {
-            return "Vendor has a conflicting assignment on the event date";
-        }
-        return null;
-    }
-
     private Map<String, Object> excludedCandidate(Vendor vendor, String reason) {
         Map<String, Object> candidate = new LinkedHashMap<>();
         candidate.put("vendorId", vendor.getId());
@@ -170,11 +164,16 @@ public class VendorRankingService {
             String category,
             LocalDate date) {
 
+        return rankForEvent(eventId, null, category, date);
+    }
+
+    public List<Ranked> rankForEvent(Long eventId, String eventType, String category, LocalDate date) {
+
         Set<Long> tried = Set.copyOf(
                 assignmentRepository.findTriedVendorIds(eventId, category)
         );
 
-        return rank(category, date, tried);
+        return evaluate(category, date, tried, eventId, eventType).ranked();
     }
 
     /**
@@ -188,7 +187,12 @@ public class VendorRankingService {
             LocalDate date,
             Set<Long> alreadyTried) {
 
-        RankResult result = evaluate(category, date, alreadyTried);
+        return select(category, date, alreadyTried, null, null);
+    }
+
+    private Optional<Selection> select(String category, LocalDate date, Set<Long> alreadyTried,
+                                       Long eventId, String eventType) {
+        RankResult result = evaluate(category, date, alreadyTried, eventId, eventType);
         List<Ranked> ranked = result.ranked();
 
         if (ranked.isEmpty()) {
@@ -248,11 +252,16 @@ public class VendorRankingService {
             String category,
             LocalDate date) {
 
+        return selectForEvent(eventId, null, category, date);
+    }
+
+    public Optional<Selection> selectForEvent(Long eventId, String eventType, String category, LocalDate date) {
+
         Set<Long> tried = Set.copyOf(
                 assignmentRepository.findTriedVendorIds(eventId, category)
         );
 
-        return select(category, date, tried);
+        return select(category, date, tried, eventId, eventType);
     }
 
     /**

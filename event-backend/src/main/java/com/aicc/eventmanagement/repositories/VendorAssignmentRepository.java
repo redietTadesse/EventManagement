@@ -60,6 +60,14 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("category") String category,
             @Param("deadStatuses") List<EventStatus> deadStatuses);
 
+    @Query("SELECT va FROM VendorAssignment va " +
+            "WHERE va.status = 'OPEN' AND va.serviceCategory IN :categories " +
+            "AND va.event.status NOT IN :deadStatuses " +
+            "ORDER BY va.createdAt ASC")
+    List<VendorAssignment> findOpenAssignmentsForCategories(
+            @Param("categories") List<String> categories,
+            @Param("deadStatuses") List<EventStatus> deadStatuses);
+
     /**
      * Atomic claim of an OPEN assignment.
      *
@@ -105,6 +113,28 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     boolean hasActiveAssignmentOnDate(
             @Param("vendorId") Long vendorId,
             @Param("date") LocalDate date
+    );
+
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "JOIN va.event e JOIN e.inquiry i " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status IN ('PENDING', 'ACCEPTED') " +
+            "AND i.eventDate = :date")
+    boolean hasConflictingAssignmentOnDate(
+            @Param("vendorId") Long vendorId,
+            @Param("date") LocalDate date
+    );
+
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "JOIN va.event e JOIN e.inquiry i " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status IN ('PENDING', 'ACCEPTED') " +
+            "AND i.eventDate = :date " +
+            "AND e.id <> :excludedEventId")
+    boolean hasConflictingAssignmentOnDateExcludingEvent(
+            @Param("vendorId") Long vendorId,
+            @Param("date") LocalDate date,
+            @Param("excludedEventId") Long excludedEventId
     );
 
     @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
@@ -182,6 +212,12 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "AND va.vendor.id IS NOT NULL")
     List<Long> findTriedVendorIds(@Param("eventId") Long eventId,
                                   @Param("category") String category);
+
+    @Query("SELECT DISTINCT va.vendor.id FROM VendorAssignment va " +
+            "WHERE va.event.id = :eventId AND va.serviceCategory = :category " +
+            "AND va.status = 'DECLINED' AND va.vendor.id IS NOT NULL")
+    List<Long> findDeclinedVendorIds(@Param("eventId") Long eventId,
+                                    @Param("category") String category);
 
     @Query("SELECT va FROM VendorAssignment va " +
             "JOIN va.event e " +

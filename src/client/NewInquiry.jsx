@@ -1,12 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
-import { eventCategoryMap } from '../utils/constants';
-
-const ALL_CATEGORIES = ['av', 'catering', 'security', 'cleaning', 'photography', 'music'];
-
-const defaultCategories = (eventType) => eventCategoryMap[eventType] || [];
+import api from '../api/axios';
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
@@ -18,19 +14,38 @@ export default function NewInquiry() {
     endDate: '',
     expectedAttendees: '',
     requirements: '',
-    requestedCategories: defaultCategories('conference'),
+    requestedCategories: [],
   });
+  const [availableCategories, setAvailableCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [touchedCategories, setTouchedCategories] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    const eventType = form.eventType;
+    api.get('/vendors/service-categories', { params: { eventType } })
+      .then((response) => {
+        if (!active) return;
+        const categories = response.data || [];
+        setAvailableCategories(categories);
+        if (!touchedCategories) {
+          setForm((previous) => previous.eventType === eventType
+            ? { ...previous, requestedCategories: categories }
+            : previous);
+        }
+      })
+      .catch(() => { if (active) setError('Could not load available event services.'); });
+    return () => { active = false; };
+  }, [form.eventType, touchedCategories]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'eventType') {
+      setTouchedCategories(false);
       setForm((prev) => ({
         ...prev,
         eventType: value,
-        requestedCategories: touchedCategories ? prev.requestedCategories : defaultCategories(value),
       }));
       return;
     }
@@ -58,7 +73,7 @@ export default function NewInquiry() {
         clientId: currentUser?.id,
         clientName: currentUser?.name || currentUser?.fullName,
         ...form,
-        requestedCategories: form.requestedCategories || defaultCategories(form.eventType),
+        requestedCategories: form.requestedCategories,
         expectedAttendees: Number(form.expectedAttendees),
       });
       navigate('/client/dashboard');
@@ -154,7 +169,7 @@ export default function NewInquiry() {
               Services needed
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {ALL_CATEGORIES.map((cat) => (
+              {availableCategories.map((cat) => (
                 <label key={cat} className="flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
