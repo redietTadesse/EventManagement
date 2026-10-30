@@ -7,6 +7,7 @@ import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.payload.ActionRequiredResponse;
 import com.aicc.eventmanagement.payload.DashboardStatsResponse;
+import com.aicc.eventmanagement.payload.DashboardUpcomingEvent;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
@@ -17,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +66,11 @@ public class DashboardService {
 
         return new DashboardStatsResponse(
                 0L, 0L, activeVendors, totalEvents, eventsByStatus);
+    }
+
+    public List<DashboardUpcomingEvent> getUpcomingEvents(LocalDate startDate, LocalDate endDate) {
+        return eventRepository.findDashboardUpcomingEvents(startDate, endDate,
+                List.of(EventStatus.CANCELLED, EventStatus.COMPLETED, EventStatus.CLOSED));
     }
 
     public ActionRequiredResponse getActionRequired() {
