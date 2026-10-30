@@ -138,6 +138,11 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
+  const downloadInquiryQuote = useCallback(async (id) => {
+    const res = await api.get(`/inquiries/${id}/quote-pdf`, { responseType: 'blob' });
+    return res.data;
+  }, []);
+
   const fetchMyInquiries = useCallback(async (clientId) => {
     if (clientId == null) return [];
     const res = await api.get(`/inquiries/client/${clientId}`);
@@ -457,7 +462,7 @@ export const AppProvider = ({ children }) => {
     dispatch,
     login, registerClient, logout,
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus, fetchMyVendorProfile,
-    fetchInquiries, fetchMyInquiries, fetchInquiryById, createInquiry, updateInquiry,
+    fetchInquiries, fetchMyInquiries, fetchInquiryById, downloadInquiryQuote, createInquiry, updateInquiry,
     sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion, convertInquiryToEvent,
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, fetchOpenAssignments,
     fetchMyAssignments, fetchMyAssignment, rateAssignment,

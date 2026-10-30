@@ -16,6 +16,7 @@ import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
 import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.services.InquiryService;
+import com.aicc.eventmanagement.services.QuotePdfService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -27,7 +28,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -45,6 +49,7 @@ import java.util.stream.Collectors;
 public class InquiryController {
 
     private final InquiryService inquiryService;
+    private final QuotePdfService quotePdfService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
@@ -81,6 +86,17 @@ public class InquiryController {
         log.info("Fetching inquiry with id: {}", id);
         Inquiry inquiry = inquiryService.getInquiryById(id);
         return ResponseEntity.ok(InquiryResponse.from(inquiry));
+    }
+
+    @GetMapping(value = "/{id}/quote-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Download an official PDF quote for an inquiry")
+    public ResponseEntity<byte[]> downloadQuotePdf(@PathVariable Long id) {
+        byte[] pdf = quotePdfService.generateQuotePdf(id);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.attachment().filename("quote.pdf").build());
+        return ResponseEntity.ok().headers(headers).body(pdf);
     }
 
     @GetMapping("/client/{clientId}")

@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext';
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, fetchInquiryById, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
+  const { state, fetchInquiryById, downloadInquiryQuote, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
   const { loading } = state;
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
@@ -20,6 +20,8 @@ export default function InquiryDetail() {
   const [venueWarning, setVenueWarning] = useState('');
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
 
   const loadInquiry = useCallback(async () => {
     const data = await fetchInquiryById(id);
@@ -46,6 +48,26 @@ export default function InquiryDetail() {
       setError(err.response?.data?.message || 'Failed to load preview');
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const handleDownloadQuote = async () => {
+    setQuoteLoading(true);
+    setQuoteError('');
+    try {
+      const pdf = await downloadInquiryQuote(id);
+      const url = window.URL.createObjectURL(pdf);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'quote.pdf';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setQuoteError(err.response?.data?.message || 'Failed to download the quote PDF. Please try again.');
+    } finally {
+      setQuoteLoading(false);
     }
   };
 
@@ -108,11 +130,27 @@ export default function InquiryDetail() {
 
   return (
     <Layout title="Inquiry Detail">
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button onClick={() => navigate('/coordinator/inquiries')} className="text-indigo-600 hover:text-indigo-700 text-sm">
           ← Back to Inquiries
         </button>
+        {inquiry.proposal && (
+          <button
+            type="button"
+            onClick={handleDownloadQuote}
+            disabled={quoteLoading}
+            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {quoteLoading ? 'Preparing PDF...' : 'Download Quote PDF'}
+          </button>
+        )}
       </div>
+
+      {quoteError && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {quoteError}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow p-6">
