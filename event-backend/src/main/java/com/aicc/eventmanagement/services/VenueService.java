@@ -8,6 +8,7 @@ import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.payload.CreateVenueRequest;
 import com.aicc.eventmanagement.payload.UpdateVenueRequest;
+import com.aicc.eventmanagement.payload.VenueBookingResponse;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.VenueBookingRepository;
 import com.aicc.eventmanagement.repositories.VenueRepository;
@@ -87,27 +88,23 @@ public class VenueService {
         venueRepository.delete(venue);
     }
 
-    // --- Availability (task 2) ---
+    // --- Availability ---
 
     public boolean isVenueAvailable(Long venueId, LocalDate date) {
         getById(venueId); // 404 if the venue doesn't exist
-        // Check venue_bookings first (single source of truth)
-        boolean isBooked = venueBookingRepository.existsByVenueIdAndBookingDateAndStatus(
-            venueId, date, VenueBooking.BookingStatus.CONFIRMED);
-        // Fallback: also check events for legacy data
-        if (!isBooked) {
-            isBooked = eventRepository.isVenueBookedOn(venueId, date, DEAD_STATUSES);
+        boolean blocked = !venueBookingRepository.findBookedVenueIdsOn(date).contains(venueId);
+        if (blocked) {
+            // Fallback: also check events for legacy data
+            blocked = eventRepository.isVenueBookedOn(venueId, date, DEAD_STATUSES);
         }
-        return !isBooked;
+        return !blocked;
     }
 
     public List<Venue> getAvailableVenues(LocalDate date) {
-        // Get booked venue IDs from venue_bookings (single source of truth)
-        List<Long> bookedIds = venueBookingRepository.findBookedVenueIdsOn(date);
-        // Also include legacy event-based bookings
+        List<Long> bookedIds = new ArrayList<>(venueBookingRepository.findBookedVenueIdsOn(date));
         bookedIds.addAll(eventRepository.findBookedVenueIdsOn(date, DEAD_STATUSES));
         return venueRepository.findAll().stream()
-                .filter(Venue::isActive)                       // inactive venues aren't offerable
+                .filter(Venue::isActive)
                 .filter(v -> !bookedIds.contains(v.getId()))
                 .toList();
     }
@@ -115,13 +112,12 @@ public class VenueService {
     /**
      * Books a venue for an event on a specific date range with setup/teardown buffers.
      * Uses database-level unique constraint (uq_venue_date) to prevent double-booking.
-     * @throws BusinessException with code VENUE_CONFLICT if the venue is already booked
      */
     @Transactional
     public List<VenueBooking> bookVenue(Long venueId, Long eventId, LocalDate startDate, LocalDate endDate) {
         Venue venue = getById(venueId);
         Event event = eventRepository.findById(eventId)
-            .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
+                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
 
         // 1. Validation: endDate cannot be before startDate
         LocalDate actualEndDate = (endDate != null) ? endDate : startDate;
@@ -166,7 +162,7 @@ public class VenueService {
     @Transactional
     public void cancelVenueBooking(Long bookingId) {
         VenueBooking booking = venueBookingRepository.findById(bookingId)
-            .orElseThrow(() -> new EntityNotFoundException("VenueBooking", bookingId));
+                .orElseThrow(() -> new EntityNotFoundException("VenueBooking", bookingId));
 
         booking.setStatus(VenueBooking.BookingStatus.CANCELLED);
         venueBookingRepository.save(booking);
@@ -183,11 +179,11 @@ public class VenueService {
         log.info("Cancelled {} venue bookings for event {}", bookings.size(), eventId);
     }
 
-    public List<com.aicc.eventmanagement.payload.VenueBookingResponse> getVenueBookings(Long venueId) {
+    public List<VenueBookingResponse> getVenueBookings(Long venueId) {
         getById(venueId); // 404 if the venue doesn't exist
         List<VenueBooking> bookings = venueBookingRepository.findByVenueId(venueId);
         return bookings.stream()
-            .map(com.aicc.eventmanagement.payload.VenueBookingResponse::from)
-            .toList();
+                .map(VenueBookingResponse::from)
+                .toList();
     }
 }

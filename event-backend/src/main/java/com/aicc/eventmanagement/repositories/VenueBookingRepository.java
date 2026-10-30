@@ -27,5 +27,18 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
 
     List<VenueBooking> findByVenueId(Long venueId);
-}
 
+    /**
+     * Every row that still blocks a date in the range, with venue and event fetched.
+     * open-in-view is false, so the fetch joins are required rather than optional.
+     */
+    @Query("""
+           SELECT vb FROM VenueBooking vb
+           JOIN FETCH vb.venue
+           LEFT JOIN FETCH vb.event
+           WHERE vb.bookingDate BETWEEN :start AND :end
+             AND vb.status = 'CONFIRMED'
+           """)
+    List<VenueBooking> findBlockingRowsInRange(@Param("start") LocalDate start,
+                                               @Param("end") LocalDate end);
+}
