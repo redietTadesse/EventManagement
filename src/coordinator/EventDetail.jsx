@@ -107,10 +107,12 @@ useEffect(() => {
     loadEvent();
   }, [id, fetchAssignmentsForEvent, fetchChecklist]);
 
-  const handleForceAssign = async (assignmentId, vendorId, category) => {
+  const handleForceAssign = async (assignmentId, vendorId, category, reason) => {
+    const overrideReason = reason?.trim() || window.prompt('Why are you choosing this vendor?')?.trim();
+    if (!overrideReason) return;
 
     try {
-      await forceAssign(assignmentId || selectedAssignment?.id, vendorId, category);
+      await forceAssign(assignmentId || selectedAssignment?.id, vendorId, category, overrideReason);
       setForceAssignModal(false);
       setSelectedAssignment(null);
       setSelectedVendor('');
@@ -396,8 +398,11 @@ useEffect(() => {
                 onSelectVendor={(vendor) => {
                   const assignment = assignmentsByCategory[selectedCategoryForSuggestions]?.find(a => a.status === 'OPEN') || assignmentsByCategory[selectedCategoryForSuggestions]?.[0];
                   if (assignment) {
-                    handleForceAssign(assignment.id, vendor.id, selectedCategoryForSuggestions);
-                    setShowSuggestions(false);
+                    const reason = window.prompt('Why are you choosing this vendor?');
+                    if (reason?.trim()) {
+                      handleForceAssign(assignment.id, vendor.id, selectedCategoryForSuggestions, reason.trim());
+                      setShowSuggestions(false);
+                    }
                   }
                 }}
               />
@@ -449,11 +454,12 @@ useEffect(() => {
           setForceAssignModal(false);
           setSelectedAssignment(null);
         }}
-        onAssign={async (vendorId) => {
+        onAssign={async (vendorId, reason) => {
           await handleForceAssign(
             selectedAssignment?.id,
             vendorId,
-            selectedAssignment?.serviceCategory
+            selectedAssignment?.serviceCategory,
+            reason
           );
         }}
         availableVendors={

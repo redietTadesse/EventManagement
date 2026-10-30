@@ -1,9 +1,7 @@
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.payload.CreateVenueRequest;
-import com.aicc.eventmanagement.payload.HoldVenueRequest;
 import com.aicc.eventmanagement.payload.UpdateVenueRequest;
-import com.aicc.eventmanagement.payload.VenueAvailabilityGridResponse;
 import com.aicc.eventmanagement.payload.VenueAvailabilityResponse;
 import com.aicc.eventmanagement.payload.VenueBookingResponse;
 import com.aicc.eventmanagement.payload.VenueResponse;
@@ -17,7 +15,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -27,7 +24,7 @@ import java.util.List;
 @RequestMapping("/api/v1/venues")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Venue Management", description = "CRUD, availability and hold endpoints for venues")
+@Tag(name = "Venue Management", description = "CRUD and availability endpoints for venues")
 public class VenueController {
 
     private final VenueService venueService;
@@ -45,16 +42,6 @@ public class VenueController {
     @Operation(summary = "Get a venue by id")
     public ResponseEntity<VenueResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(VenueResponse.from(venueService.getById(id)));
-    }
-
-    @GetMapping("/availability-grid")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Venue availability grid",
-            description = "Active venues as rows, the next N days as columns. "
-                    + "Each cell is FREE, HELD or BOOKED.")
-    public ResponseEntity<VenueAvailabilityGridResponse> availabilityGrid(
-            @RequestParam(defaultValue = "30") int daysAhead) {
-        return ResponseEntity.ok(venueService.getAvailabilityGrid(daysAhead));
     }
 
     @GetMapping("/{id}/availability")
@@ -77,41 +64,13 @@ public class VenueController {
 
     @GetMapping("/available")
     @Operation(summary = "List venues free on a date",
-            description = "Returns active venues with no booking or live hold on the given date.")
+            description = "Returns active venues with no booking on the given date.")
     public ResponseEntity<List<VenueResponse>> availableOn(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         List<VenueResponse> venues = venueService.getAvailableVenues(date).stream()
                 .map(VenueResponse::from)
                 .toList();
         return ResponseEntity.ok(venues);
-    }
-
-    @PostMapping("/{id}/hold")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Hold a venue",
-            description = "Reserves consecutive dates without an event. The hold expires "
-                    + "automatically after app.venue.hold-expiry-hours.")
-    public ResponseEntity<List<VenueBookingResponse>> hold(
-            @PathVariable Long id,
-            @Valid @RequestBody HoldVenueRequest request,
-            Authentication authentication) {
-
-        String heldBy = authentication != null ? authentication.getName() : "system";
-        List<VenueBookingResponse> holds = venueService
-                .holdVenue(id, request.getStartDate(), request.getDays(), heldBy)
-                .stream()
-                .map(VenueBookingResponse::from)
-                .toList();
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(holds);
-    }
-
-    @DeleteMapping("/holds/{bookingId}")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Release a held date")
-    public ResponseEntity<Void> releaseHold(@PathVariable Long bookingId) {
-        venueService.releaseHold(bookingId);
-        return ResponseEntity.noContent().build();
     }
 
     @PostMapping

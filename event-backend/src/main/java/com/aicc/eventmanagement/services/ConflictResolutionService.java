@@ -100,7 +100,7 @@ public class ConflictResolutionService {
                     v.getId(),
                     v.getCompanyName(),
                     v.getServiceCategory(),
-                    v.getRating() != null ? v.getRating().doubleValue() : 0.0,
+                    result.rating(),
                     activeCount,
                     score,
                     v.getPhone(),

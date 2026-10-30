@@ -13,6 +13,7 @@ export default function AvailabilityGrid() {
   // State for the click popup/modal
   const [selectedCell, setSelectedCell] = useState(null); 
   const [assignEventId, setAssignEventId] = useState('');
+  const [assignReason, setAssignReason] = useState('');
   const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
@@ -49,17 +50,20 @@ export default function AvailabilityGrid() {
   const closeModal = () => {
     setSelectedCell(null);
     setAssignEventId('');
+    setAssignReason('');
   };
 
   const handleAssign = async () => {
     if (!assignEventId) return alert("Please enter an Event ID");
+    if (!assignReason.trim()) return alert('Please enter a reason for this coordinator assignment');
     setAssigning(true);
     
     try {
       // Calls the manual assign endpoint
       await api.post(`/assignments/event/${assignEventId}/manual`, {
         category: category,
-        vendorId: selectedCell.vendor.vendorId
+        vendorId: selectedCell.vendor.vendorId,
+        reason: assignReason.trim()
       });
       alert(`Successfully assigned ${selectedCell.vendor.companyName} to Event #${assignEventId}`);
       closeModal();
@@ -193,12 +197,23 @@ export default function AvailabilityGrid() {
                   />
                   <button 
                     onClick={handleAssign}
-                    disabled={assigning}
+                    disabled={assigning || !assignReason.trim()}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition disabled:opacity-50"
                   >
                     {assigning ? 'Assigning...' : 'Assign'}
                   </button>
                 </div>
+                <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">
+                  Reason for manual assignment
+                </label>
+                <textarea
+                  value={assignReason}
+                  onChange={(e) => setAssignReason(e.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  placeholder="Why are you choosing this vendor?"
+                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
             )}
 

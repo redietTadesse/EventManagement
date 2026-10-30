@@ -90,7 +90,8 @@ class EventRollupTest {
         return vendorRepository.save(Vendor.builder()
                 .companyName(name)
                 .serviceCategory(category)
-                .rating(4)
+                .rating(4.0)
+                .insuranceExpiryDate(LocalDate.now().plusYears(1))
                 .isActive(true)
                 .build());
     }

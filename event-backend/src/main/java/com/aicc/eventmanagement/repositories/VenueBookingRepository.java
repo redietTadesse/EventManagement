@@ -22,16 +22,26 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
     @Query("SELECT COUNT(vb) FROM VenueBooking vb WHERE vb.venue.id = :venueId AND vb.bookingDate BETWEEN :startDate AND :endDate AND vb.status = 'CONFIRMED'")
     long countConfirmedBookingsInRange(@Param("venueId") Long venueId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
+    // ADDED THIS METHOD FOR THE CHANGE-IMPACT ANALYSIS
+    @Query("""
+           SELECT COUNT(vb) FROM VenueBooking vb 
+           WHERE vb.venue.id = :venueId 
+             AND vb.bookingDate BETWEEN :startDate AND :endDate 
+             AND vb.status = 'CONFIRMED'
+             AND (vb.event IS NULL OR vb.event.id <> :eventId)
+           """)
+    long countConfirmedBookingsInRangeExcludingEvent(
+            @Param("venueId") Long venueId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("eventId") Long eventId);
+
     List<VenueBooking> findByEventId(Long eventId);
 
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
 
     List<VenueBooking> findByVenueId(Long venueId);
 
-    /**
-     * Every row that still blocks a date in the range, with venue and event fetched.
-     * open-in-view is false, so the fetch joins are required rather than optional.
-     */
     @Query("""
            SELECT vb FROM VenueBooking vb
            JOIN FETCH vb.venue

@@ -92,8 +92,8 @@ public class VenueService {
 
     public boolean isVenueAvailable(Long venueId, LocalDate date) {
         getById(venueId); // 404 if the venue doesn't exist
-        boolean blocked = !venueBookingRepository.findBookedVenueIdsOn(date).contains(venueId);
-        if (blocked) {
+        boolean blocked = venueBookingRepository.findBookedVenueIdsOn(date).contains(venueId);
+        if (!blocked) {
             // Fallback: also check events for legacy data
             blocked = eventRepository.isVenueBookedOn(venueId, date, DEAD_STATUSES);
         }
