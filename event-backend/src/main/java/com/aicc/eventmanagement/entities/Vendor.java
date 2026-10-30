@@ -8,6 +8,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +41,9 @@ public class Vendor {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Transient
+    private LocalDate insuranceExpiryDate;
+
     @Size(max = 20, message = "Phone number must not exceed 20 characters")
     private String phone;
 
@@ -63,6 +67,40 @@ public class Vendor {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @PostLoad
+    private void loadInsuranceExpiryDate() {
+        String marker = "\n[insurance-expiry:";
+        if (description == null) return;
+        int markerIndex = description.lastIndexOf(marker);
+        if (markerIndex < 0 || !description.endsWith("]")) return;
+        try {
+            insuranceExpiryDate = LocalDate.parse(description.substring(markerIndex + marker.length(), description.length() - 1));
+            description = description.substring(0, markerIndex);
+        } catch (RuntimeException ignored) {
+            insuranceExpiryDate = null;
+        }
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void storeInsuranceExpiryDate() {
+        if (description == null) description = "";
+        String marker = "\n[insurance-expiry:";
+        int markerIndex = description.lastIndexOf(marker);
+        if (markerIndex >= 0) description = description.substring(0, markerIndex);
+        if (insuranceExpiryDate != null) description += marker + insuranceExpiryDate + "]";
+    }
+
+    @PostPersist
+    @PostUpdate
+    private void cleanDescriptionMetadata() {
+        String marker = "\n[insurance-expiry:";
+        if (description != null) {
+            int markerIndex = description.lastIndexOf(marker);
+            if (markerIndex >= 0) description = description.substring(0, markerIndex);
+        }
+    }
 
     // Helper method to add booked dates
     public void addBookedDate(VendorBookedDate bookedDate) {

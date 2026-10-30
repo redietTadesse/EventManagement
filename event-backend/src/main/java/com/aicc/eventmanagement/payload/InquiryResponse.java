@@ -21,6 +21,7 @@ public class InquiryResponse {
     private String clientName;
     private String eventType;
     private LocalDate eventDate;
+    private LocalDate endDate;
     private Integer expectedAttendees;
     private String requirements;
     private List<String> requestedCategories;
@@ -41,6 +42,7 @@ public class InquiryResponse {
         response.setClientName(inquiry.getClientName());
         response.setEventType(inquiry.getEventType());
         response.setEventDate(inquiry.getEventDate());
+        response.setEndDate(inquiry.getEndDate());
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
         response.setRequestedCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getRequestedCategories()));

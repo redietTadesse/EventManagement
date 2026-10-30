@@ -10,6 +10,7 @@ import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.InquiryResponse;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
+import com.aicc.eventmanagement.payload.TimelineResponse;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
 import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
@@ -371,6 +372,13 @@ public class InquiryController {
         Role userRole = extractRoleFromPrincipal(principal);
         Inquiry updated = inquiryService.recordVendorPreference(id, request, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
+    }
+
+    @GetMapping("/{id}/timeline")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get visual timeline status for an inquiry")
+    public ResponseEntity<TimelineResponse> getTimeline(@PathVariable Long id) {
+        return ResponseEntity.ok(inquiryService.getTimeline(id));
     }
 
     private Role extractRoleFromPrincipal(UserDetails principal) {

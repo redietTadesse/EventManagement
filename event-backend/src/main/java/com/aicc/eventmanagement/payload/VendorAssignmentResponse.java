@@ -40,6 +40,7 @@ public class VendorAssignmentResponse {
     private LocalDateTime respondedAt;
     private String declineReason;
     private Double vendorRating;
+    private String serviceOrder;
 
     public static VendorAssignmentResponse from(VendorAssignment assignment) {
         Event event = assignment.getEvent();
@@ -66,6 +67,7 @@ public class VendorAssignmentResponse {
             .respondedAt(assignment.getRespondedAt())
             .declineReason(assignment.getDeclineReason())
             .vendorRating(assignment.getVendorRating())
+            .serviceOrder(inquiry != null ? inquiry.getRequirements() : null)
             .build();
     }
 }

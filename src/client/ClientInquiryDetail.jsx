@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import EventTimeline from '../components/EventTimeline';
 import { useApp } from '../context/AppContext';
+import api from '../api/axios';
 
 export default function ClientInquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { fetchInquiryById, acceptProposal, rejectProposal } = useApp();
   const [inquiry, setInquiry] = useState(null);
+  const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -17,7 +20,12 @@ export default function ClientInquiryDetail() {
 
   const loadInquiry = useCallback(async () => {
     try {
-      setInquiry(await fetchInquiryById(id));
+      const data = await fetchInquiryById(id);
+      setInquiry(data);
+
+      const timelineRes = await api.get(`/inquiries/${id}/timeline`);
+      setTimeline(timelineRes.data);
+
       setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load inquiry details');
@@ -96,6 +104,8 @@ export default function ClientInquiryDetail() {
           <StatusBadge status={inquiry.status} />
         </div>
 
+        {timeline && <EventTimeline timeline={timeline} />}
+
         {error && <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
 
         <section className="space-y-4 rounded-xl bg-white p-6 shadow">
@@ -120,7 +130,7 @@ export default function ClientInquiryDetail() {
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><p className="text-gray-500">Venue</p><p className="font-medium text-gray-900">{parsedProposal.venue || '—'}</p></div>
-              <div><p className="text-gray-500">Price</p><p className="font-medium text-gray-900">{parsedProposal.price != null ? `$${Number(parsedProposal.price).toLocaleString()}` : '—'}</p></div>
+              <div><p className="text-gray-500">Price</p><p className="font-medium text-gray-900">{parsedProposal.price != null ? `ETB ${Number(parsedProposal.price).toLocaleString()}` : '—'}</p></div>
             </div>
             {parsedProposal.terms && <div className="text-sm"><p className="text-gray-500">Terms</p><p className="mt-1 whitespace-pre-wrap text-gray-800">{parsedProposal.terms}</p></div>}
             {parsedProposal.categories?.length > 0 && <div className="text-sm"><p className="text-gray-500">Included services</p><p className="mt-1 text-gray-800">{parsedProposal.categories.join(', ')}</p></div>}
@@ -155,7 +165,7 @@ export default function ClientInquiryDetail() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-500 mt-3">
-                  Accepting this proposal confirms these vendors.
+                  Accepting this proposal initiates the booking process. The system will automatically assign the requested vendors and escalate if they are unavailable.
                 </p>
               </div>
             )}

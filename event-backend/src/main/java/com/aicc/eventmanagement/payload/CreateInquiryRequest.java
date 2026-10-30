@@ -30,6 +30,8 @@ public class CreateInquiryRequest {
     @Future(message = "Event date must be in the future")
     private LocalDate eventDate;
 
+    private LocalDate endDate;
+
     @NotNull(message = "Expected attendees is required")
     @Min(value = 1, message = "At least 1 attendee required")
     private Integer expectedAttendees;

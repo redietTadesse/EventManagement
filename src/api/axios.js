@@ -3,9 +3,7 @@ import axios from 'axios';
 // Resource endpoints live under /api/v1.
 // Auth endpoints live outside the version prefix at /api/auth
 // (see AuthController @RequestMapping("/api/auth")).
-const API_ROOT =
-  import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-
+const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 // Auth base: /api/auth, not /api/v1/auth.
 // Derive it by stripping the trailing /v1 (optional trailing slash) from
 // API_ROOT. If VITE_AUTH_URL is set, it wins — use that for deployments

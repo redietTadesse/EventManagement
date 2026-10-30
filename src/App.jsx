@@ -22,7 +22,7 @@ import Events from './coordinator/Events';
 import EventDetail from './coordinator/EventDetail';
 import Venues from './coordinator/Venues';
 import VenueDetail from './coordinator/VenueDetail';
-import Calendar from './components/Calendar';
+import MasterCalendar from './components/MasterCalendar';
 import AvailabilityGrid from './coordinator/AvailabilityGrid';
 
 import VendorDashboard from './vendor/VendorDashboard';
@@ -60,7 +60,7 @@ function AppRoutes() {
         <Route path="/coordinator/events/:id" element={<EventDetail />} />
         <Route path="/coordinator/venues" element={<Venues />} />
         <Route path="/coordinator/venues/:id" element={<VenueDetail />} />
-        <Route path="/coordinator/calendar" element={<Calendar />} />
+        <Route path="/coordinator/calendar" element={<MasterCalendar />} />
         <Route path="/coordinator/availability" element={<AvailabilityGrid />} />
         {/* Uncomment only if the backend authorizes COORDINATOR on
             PATCH /vendors/{id}/toggle-active:

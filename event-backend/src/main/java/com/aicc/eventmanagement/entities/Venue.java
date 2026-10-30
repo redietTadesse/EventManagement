@@ -43,6 +43,14 @@ public class Venue {
     @Builder.Default
     private boolean active = true;
 
+    @Column(name = "setup_buffer_days")
+    @Builder.Default
+    private int setupBufferDays = 1;
+
+    @Column(name = "teardown_buffer_days")
+    @Builder.Default
+    private int teardownBufferDays = 1;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

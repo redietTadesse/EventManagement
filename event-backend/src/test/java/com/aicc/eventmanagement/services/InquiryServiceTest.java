@@ -58,6 +58,7 @@ class InquiryServiceTest {
         @Mock
         private VendorService vendorService;
 
+
     @InjectMocks
     private InquiryService inquiryService;
 

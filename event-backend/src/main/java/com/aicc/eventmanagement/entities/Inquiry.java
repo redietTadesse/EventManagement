@@ -44,6 +44,9 @@ public class Inquiry {
     @Column(name = "event_date", nullable = false)
     private LocalDate eventDate;
 
+    @Column(name = "end_date")
+    private LocalDate endDate;
+
     @NotNull(message = "Expected attendees is required")
     @Min(value = 1, message = "At least 1 attendee required")
     @Column(name = "expected_attendees", nullable = false)

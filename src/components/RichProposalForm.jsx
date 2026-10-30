@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { eventCategoryMap, pricingTiers } from '../data/mockData';
+import { eventCategoryMap, pricingTiers } from '../utils/constants';
 import { useApp } from '../context/AppContext';
 
 /**
@@ -109,12 +109,17 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 
-  // VenueResponse exposes hourlyRate (BigDecimal), not basePrice.
+  // The configured venue rate is treated as a daily base rate for proposals.
   const basePrice = Number(selectedVenue?.hourlyRate) || 0;
   const tierMultiplier = pricingTiers[formData.pricingTier]?.multiplier || 1;
+  const start = new Date(inquiry?.eventDate);
+  const end = new Date(inquiry?.endDate || inquiry?.eventDate);
+  const days = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
+    ? 1
+    : Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
   const calculatedPrice = formData.customPrice
     ? parseInt(formData.customPrice, 10)
-    : Math.round(basePrice * tierMultiplier);
+    : Math.round(basePrice * tierMultiplier * days);
 
   const vendorsForCategory = (category) =>
     vendors.filter(v => v.serviceCategory === category && v.isActive !== false);
@@ -216,7 +221,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                   <option key={v.id} value={v.id}>
                     {v.name}
                     {v.capacity ? ` (Capacity: ${v.capacity}` : ' ('}
-                    {v.hourlyRate ? `, Rate: ETB ${Number(v.hourlyRate).toLocaleString()})` : ')'}
+                    {v.hourlyRate ? `, Base Daily Rate: ETB ${Number(v.hourlyRate).toLocaleString()}/day)` : ')'}
                   </option>
                 ))}
               </select>
@@ -240,9 +245,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                   <p className="text-sm"><strong>Notes:</strong> {selectedVenue.description}</p>
                 )}
                 <p className="text-sm">
-                  <strong>Rate:</strong>{' '}
+                  <strong>Base Daily Rate:</strong>{' '}
                   {selectedVenue.hourlyRate
-                    ? `ETB ${Number(selectedVenue.hourlyRate).toLocaleString()}`
+                    ? `ETB ${Number(selectedVenue.hourlyRate).toLocaleString()}/day`
                     : 'Not set'}
                 </p>
               </div>

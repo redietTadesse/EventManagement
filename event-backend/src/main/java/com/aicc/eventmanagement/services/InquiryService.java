@@ -6,6 +6,7 @@ import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.EventCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryStatusChangedEvent;
@@ -16,6 +17,7 @@ import com.aicc.eventmanagement.payload.ConversionPreviewResponse;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
+import com.aicc.eventmanagement.payload.TimelineResponse;
 import com.aicc.eventmanagement.payload.UpdateInquiryRequest;
 import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
@@ -87,6 +89,7 @@ public class InquiryService {
                 .clientName(request.getClientName())
                 .eventType(request.getEventType())
                 .eventDate(request.getEventDate())
+                .endDate(request.getEndDate())
                 .expectedAttendees(request.getExpectedAttendees())
                 .requirements(request.getRequirements())
                 .requestedCategories(CategoryUtils.join(requestedCategories))
@@ -244,7 +247,8 @@ public class InquiryService {
             venueService.bookVenue(
                     request.getVenueId(),
                     savedEvent.getId(),
-                    inquiry.getEventDate()
+                    inquiry.getEventDate(),
+                    inquiry.getEndDate()
             );
             log.info("Venue {} booked for event {} on {}", request.getVenueId(), savedEvent.getId(), inquiry.getEventDate());
         }
@@ -592,5 +596,44 @@ public class InquiryService {
 
     private String getUserEmail(Long userId) {
         return userRepository.findById(userId).map(User::getEmail).orElse("client@example.com");
+    }
+
+    public TimelineResponse getTimeline(Long inquiryId) {
+        Inquiry inquiry = getInquiryById(inquiryId);
+
+        boolean hasProposal = inquiry.getProposal() != null;
+        boolean isAccepted = inquiry.getStatus() == EventStatus.PROPOSAL_ACCEPTED || inquiry.getEvent() != null;
+
+        boolean isConfirmed = false;
+        boolean allVendorsAccepted = false;
+        String venueName = null;
+
+        if (inquiry.getEvent() != null) {
+            Event event = inquiry.getEvent();
+            venueName = event.getVenue();
+
+            if (event.getStatus() == EventStatus.CONFIRMED || event.getStatus() == EventStatus.COMPLETED) {
+                isConfirmed = true;
+            }
+
+            List<com.aicc.eventmanagement.entities.VendorAssignment> assignments = assignmentRepository.findByEventId(event.getId());
+            List<String> requiredCats = CategoryUtils.split(event.getRequiredCategories());
+
+            if (!requiredCats.isEmpty()) {
+                allVendorsAccepted = requiredCats.stream().allMatch(cat ->
+                    assignments.stream().anyMatch(a -> a.getServiceCategory().equals(cat) &&
+                        (a.getStatus() == VendorAssignmentStatus.ACCEPTED || a.getStatus() == VendorAssignmentStatus.COMPLETED))
+                );
+            }
+        }
+
+        return TimelineResponse.builder()
+                .inquirySubmitted(true)
+                .proposalSent(hasProposal)
+                .venueHeld(isAccepted)
+                .vendorsConfirmed(allVendorsAccepted)
+                .eventConfirmed(isConfirmed)
+                .venueName(venueName)
+                .build();
     }
 }

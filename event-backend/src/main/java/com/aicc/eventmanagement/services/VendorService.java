@@ -83,6 +83,7 @@ public class VendorService {
                 .phone(req.getPhone())
                 .email(req.getEmail())
                 .rating(3)          // sensible default for new vendors
+                .insuranceExpiryDate(req.getInsuranceExpiryDate())
                 .isActive(true)
                 .build();
         return vendorRepository.save(vendor);
@@ -161,6 +162,7 @@ public class VendorService {
         if (req.getPhone() != null)            vendor.setPhone(req.getPhone());
         if (req.getEmail() != null)            vendor.setEmail(req.getEmail());
         if (req.getActive() != null)           vendor.setActive(req.getActive());
+        if (req.getInsuranceExpiryDate() != null) vendor.setInsuranceExpiryDate(req.getInsuranceExpiryDate());
 
         log.info("Updated vendor {}", id);
         return vendorRepository.save(vendor);
@@ -364,7 +366,7 @@ public class VendorService {
             if (!preferredVendorIds.isEmpty()) {
                 for (Long vendorId : preferredVendorIds) {
                     Optional<Vendor> prefVendor = vendorRepository.findById(vendorId);
-                    if (prefVendor.isPresent()
+                        if (prefVendor.isPresent()
                             && category.equals(prefVendor.get().getServiceCategory())
                             && prefVendor.get().isActive()
                             && isVendorAvailable(vendorId, eventDate)) {

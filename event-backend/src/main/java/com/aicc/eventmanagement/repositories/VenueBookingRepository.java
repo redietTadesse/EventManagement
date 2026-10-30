@@ -7,7 +7,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,17 +19,10 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
     @Query("SELECT vb.venue.id FROM VenueBooking vb WHERE vb.bookingDate = :date AND vb.status = 'CONFIRMED'")
     List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date);
 
-    /**
-     * Venues unavailable on a date: confirmed bookings plus holds that have not expired.
-     */
-    @Query("""
-           SELECT vb.venue.id FROM VenueBooking vb
-           WHERE vb.bookingDate = :date
-             AND (vb.status = 'CONFIRMED'
-                  OR (vb.status = 'HELD' AND vb.expiresAt > :now))
-           """)
-    List<Long> findUnavailableVenueIdsOn(@Param("date") LocalDate date,
-                                         @Param("now") LocalDateTime now);
+    @Query("SELECT COUNT(vb) FROM VenueBooking vb WHERE vb.venue.id = :venueId AND vb.bookingDate BETWEEN :startDate AND :endDate AND vb.status = 'CONFIRMED'")
+    long countConfirmedBookingsInRange(@Param("venueId") Long venueId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    List<VenueBooking> findByEventId(Long eventId);
 
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
 
@@ -45,10 +37,8 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
            JOIN FETCH vb.venue
            LEFT JOIN FETCH vb.event
            WHERE vb.bookingDate BETWEEN :start AND :end
-             AND (vb.status = 'CONFIRMED'
-                  OR (vb.status = 'HELD' AND vb.expiresAt > :now))
+             AND vb.status = 'CONFIRMED'
            """)
     List<VenueBooking> findBlockingRowsInRange(@Param("start") LocalDate start,
-                                               @Param("end") LocalDate end,
-                                               @Param("now") LocalDateTime now);
+                                               @Param("end") LocalDate end);
 }
