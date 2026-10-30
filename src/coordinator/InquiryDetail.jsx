@@ -224,14 +224,15 @@ export default function InquiryDetail() {
                   return null;
                 }
               })()}
-              {inquiry.requirements && inquiry.requirements.includes('Proposal rejected') && (() => {
+              {inquiry.requirements && (inquiry.requirements.includes('Proposal change requested') || inquiry.requirements.includes('Proposal rejected')) && (() => {
                 // Extract the latest change request from requirements
-                const lines = inquiry.requirements.split('\n').filter(line => line.includes('Proposal rejected'));
+                const lines = inquiry.requirements.split('\n').filter(line =>
+                  line.includes('Proposal change requested') || line.includes('Proposal rejected'));
                 const latestLine = lines[lines.length - 1] || '';
-                // Format: "Proposal rejected on <timestamp>: <reason>"
+                // Format: "Proposal change requested on <timestamp>: <feedback>"
                 const changeReason = latestLine.includes(':') ? latestLine.substring(latestLine.indexOf(': ') + 2) : latestLine;
                 return (
-                  <div className="text-left text-sm text-rose-600 mb-4 p-3 bg-rose-50 rounded-lg border border-rose-200">
+                    <div className="text-left text-sm text-amber-700 mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <p className="font-semibold">Client requested a change:</p>
                     <p className="mt-1">{changeReason}</p>
                   </div>

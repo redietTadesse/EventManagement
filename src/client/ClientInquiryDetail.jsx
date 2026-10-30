@@ -44,8 +44,14 @@ export default function ClientInquiryDetail() {
     try {
       const updated = decision === 'accept'
         ? await acceptProposal(id)
-        : await rejectProposal(id, changeReason || '');
+        : decision === 'changes'
+          ? await rejectProposal(id, changeReason)
+          : await rejectProposal(id);
       setInquiry(updated);
+      if (decision === 'changes') {
+        setChangeMode(false);
+        setChangeReason('');
+      }
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${decision} proposal`);
     } finally {
@@ -212,7 +218,7 @@ export default function ClientInquiryDetail() {
                     />
                     <div className="flex gap-3 mt-4">
                       <button
-                        onClick={() => decideProposal('reject')}
+                        onClick={() => decideProposal('changes')}
                         disabled={saving || !changeReason.trim()}
                         className="flex-1 bg-rose-600 text-white px-4 py-3 rounded-xl font-semibold disabled:opacity-50"
                       >

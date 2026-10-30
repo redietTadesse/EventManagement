@@ -6,6 +6,7 @@ import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.events.EventCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryStatusChangedEvent;
+import com.aicc.eventmanagement.events.ProposalChangeRequestedEvent;
 import com.aicc.eventmanagement.events.VendorAssignmentEvent;
 import com.aicc.eventmanagement.services.EmailService;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +61,12 @@ public class EmailNotificationListener {
             String coordinatorEmail = "coordinator@aicc.et";
             emailService.sendProposalAcceptedNotification(inquiry, coordinatorEmail);
         }
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleProposalChangeRequested(ProposalChangeRequestedEvent event) {
+        emailService.sendProposalChangeRequestedNotification(event.getInquiry(), "coordinator@aicc.et");
     }
 
     /**

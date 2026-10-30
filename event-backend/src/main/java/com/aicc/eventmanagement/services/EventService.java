@@ -162,8 +162,7 @@ public class EventService {
             venueService.cancelVenueBookingsForEvent(id);
         }
 
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this, oldStatus, status, "EVENT-" + id, userRole));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, oldStatus, status, "EVENT-" + id, userRole));
 
         return saved;
     }
@@ -299,9 +298,8 @@ public class EventService {
         if (reconfirmations > 0 && event.getStatus() == EventStatus.CONFIRMED) {
             workflowEngine.validateTransition(EventStatus.CONFIRMED, EventStatus.AWAITING_VENDORS, Role.COORDINATOR);
             event.setStatus(EventStatus.AWAITING_VENDORS);
-            eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                    this, EventStatus.CONFIRMED, EventStatus.AWAITING_VENDORS,
-                    "EVENT-" + eventId, Role.COORDINATOR));
+            eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.CONFIRMED,
+                    EventStatus.AWAITING_VENDORS, "EVENT-" + eventId, Role.COORDINATOR));
         }
         return eventRepository.save(event);
     }

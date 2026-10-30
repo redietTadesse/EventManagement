@@ -31,8 +31,7 @@ public class WorkflowEngine {
                 Set.of(EventStatus.PROPOSAL_ACCEPTED, EventStatus.PROPOSAL_REJECTED));
         transitionTable.put(EventStatus.PROPOSAL_ACCEPTED,
                 Set.of(EventStatus.EVENT_CREATED));
-        transitionTable.put(EventStatus.PROPOSAL_REJECTED,
-                Set.of(EventStatus.CLOSED));
+        transitionTable.put(EventStatus.PROPOSAL_REJECTED, Set.of());
         transitionTable.put(EventStatus.EVENT_CREATED,
                 Set.of(EventStatus.AWAITING_VENDORS, EventStatus.NEEDS_COORDINATOR, EventStatus.CLOSED));
         transitionTable.put(EventStatus.CLOSED, Set.of());
@@ -55,7 +54,6 @@ public class WorkflowEngine {
 
         transitionRoleMap.put("PROPOSAL_ACCEPTED_EVENT_CREATED", Set.of(Role.COORDINATOR));
 
-        transitionRoleMap.put("PROPOSAL_REJECTED_CLOSED", Set.of(Role.ADMIN));
         transitionRoleMap.put("EVENT_CREATED_AWAITING_VENDORS", Set.of(Role.COORDINATOR));
         transitionRoleMap.put("EVENT_CREATED_NEEDS_COORDINATOR", Set.of(Role.COORDINATOR));
         transitionRoleMap.put("EVENT_CREATED_CLOSED", Set.of(Role.ADMIN));
@@ -101,7 +99,8 @@ public class WorkflowEngine {
         // status changes to COMPLETED or CANCELLED.
         assignmentTransitionTable.put(VendorAssignmentStatus.ACCEPTED,
                 Set.of(VendorAssignmentStatus.COMPLETED,
-                        VendorAssignmentStatus.CANCELLED));
+                        VendorAssignmentStatus.CANCELLED,
+                        VendorAssignmentStatus.PENDING));
         assignmentTransitionTable.put(VendorAssignmentStatus.COMPLETED, Set.of());
         assignmentTransitionTable.put(VendorAssignmentStatus.CANCELLED, Set.of());
 
@@ -121,7 +120,8 @@ public class WorkflowEngine {
         // Role.VENDOR) or a coordinator forcing a vendor onto it
         // (forceAssignToOpenAssignment, Role.COORDINATOR).
         assignmentTransitionRoleMap.put("OPEN_PENDING", Set.of(Role.VENDOR, Role.COORDINATOR));
-        assignmentTransitionRoleMap.put("OPEN_CANCELLED", Set.of(Role.COORDINATOR));
+        assignmentTransitionRoleMap.put("ACCEPTED_PENDING", Set.of(Role.COORDINATOR, Role.ADMIN));
+        assignmentTransitionRoleMap.put("OPEN_CANCELLED", Set.of(Role.ADMIN, Role.COORDINATOR, Role.CLIENT));
 
         // CANCELLED from PENDING: admin/coordinator/client can cancel a pending assignment
         assignmentTransitionRoleMap.put("PENDING_CANCELLED", Set.of(Role.ADMIN, Role.COORDINATOR, Role.CLIENT));
@@ -254,4 +254,5 @@ public class WorkflowEngine {
             );
         }
     }
+
 }

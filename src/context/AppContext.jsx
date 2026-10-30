@@ -252,9 +252,10 @@ export const AppProvider = ({ children }) => {
 
   const rejectProposal = useCallback(async (inquiryId, reason) => {
     try {
-      const res = await api.patch(`/inquiries/${inquiryId}/reject`, null, { params: { reason } });
+      const res = await api.patch(`/inquiries/${inquiryId}/reject`, null,
+        reason ? { params: { reason } } : undefined);
       dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
-      showToast('Proposal rejected', 'warning');
+      showToast(reason ? 'Change request sent to the coordinator' : 'Proposal rejected', reason ? 'success' : 'warning');
       return res.data;
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to reject proposal';

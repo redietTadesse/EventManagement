@@ -89,7 +89,7 @@ public class ProposalController {
                 return "redirect:/login?error=unauthorized";
             }
 
-            inquiryService.rejectProposal(id, "Rejected via email link", Role.CLIENT);
+            inquiryService.rejectProposal(id, Role.CLIENT);
             return "redirect:/client/dashboard?rejected=true";
         } catch (EntityNotFoundException e) {
             log.error("Inquiry {} not found for rejection", id);

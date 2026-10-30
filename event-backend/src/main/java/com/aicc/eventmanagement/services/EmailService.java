@@ -205,6 +205,29 @@ public class EmailService {
         sendEmail(coordinatorEmail, subject, body);
     }
 
+    public void sendProposalChangeRequestedNotification(Inquiry inquiry, String coordinatorEmail) {
+        String subject = "✏️ Proposal change requested: " + inquiry.getEventType();
+        String body = String.format("""
+                Hello Coordinator,
+
+                The client requested changes to the proposal for inquiry %d.
+
+                Client: %s
+                Event type: %s
+                Date: %s
+                Requirements and feedback: %s
+
+                Review and revise the proposal: %s/coordinator/inquiries/%d
+
+                AICC Event Management System
+                """,
+                inquiry.getId(), inquiry.getClientName(), inquiry.getEventType(),
+                inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
+                inquiry.getRequirements() == null ? "None specified" : inquiry.getRequirements(),
+                baseUrl, inquiry.getId());
+        sendEmail(coordinatorEmail, subject, body);
+    }
+
     /**
      * 4. Event Created → Vendors get assignment notifications
      */

@@ -341,7 +341,7 @@ public class InquiryController {
     }
 
     @PatchMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @PreAuthorize("hasRole('CLIENT')")
     @Operation(summary = "Reject proposal", description = "Client rejects the proposal")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Proposal rejected successfully",
@@ -359,7 +359,9 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
 
-        Inquiry updated = inquiryService.rejectProposal(id, reason, userRole);
+        Inquiry updated = reason != null && !reason.isBlank()
+                ? inquiryService.requestProposalChanges(id, reason, userRole)
+                : inquiryService.rejectProposal(id, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 

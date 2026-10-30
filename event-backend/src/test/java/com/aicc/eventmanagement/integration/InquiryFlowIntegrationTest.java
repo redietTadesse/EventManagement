@@ -72,8 +72,8 @@ class InquiryFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should reject proposal and store reason")
-    void testRejectProposal() {
+    @DisplayName("Requesting changes keeps the proposal pending; rejection is terminal")
+    void testChangeRequestAndTerminalRejection() {
         // Create and send proposal
         Inquiry created = inquiryService.createInquiry(createRequest);
         SendProposalRequest proposalRequest = SendProposalRequest.builder()
@@ -83,10 +83,12 @@ class InquiryFlowIntegrationTest {
                 .build();
         Inquiry withProposal = inquiryService.sendProposal(created.getId(), proposalRequest, Role.COORDINATOR);
 
-        // Reject
-        String rejectionReason = "Price too high for our budget";
-        Inquiry rejected = inquiryService.rejectProposal(withProposal.getId(), rejectionReason, Role.CLIENT);
+        Inquiry changeRequested = inquiryService.requestProposalChanges(
+                withProposal.getId(), "Please revise the price", Role.CLIENT);
+        assertThat(changeRequested.getStatus()).isEqualTo(EventStatus.PROPOSAL_SENT);
+        assertThat(changeRequested.getRequirements()).contains("Please revise the price");
 
+        Inquiry rejected = inquiryService.rejectProposal(withProposal.getId(), Role.CLIENT);
         assertThat(rejected.getStatus()).isEqualTo(EventStatus.PROPOSAL_REJECTED);
     }
 
@@ -113,7 +115,7 @@ class InquiryFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("Event uses client-chosen categories, not event-type default")
+    @DisplayName("External event requirements use selected categories and omit in-house catering")
     void eventUsesClientChosenCategories() {
         CreateInquiryRequest inquiry = CreateInquiryRequest.builder()
                 .clientId(1L)
@@ -141,9 +143,11 @@ class InquiryFlowIntegrationTest {
         var event = inquiryService.convertToEvent(created.getId(), convert);
 
         assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getRequiredCategories()))
-                .containsExactlyInAnyOrder("av", "catering");
+                .containsExactly("av");
         assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getRequiredCategories()))
-                .doesNotContain("security");
+                .doesNotContain("security", "catering");
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getInquiry().getCategories()))
+                .containsExactlyInAnyOrder("av", "catering");
     }
 
     @Test
