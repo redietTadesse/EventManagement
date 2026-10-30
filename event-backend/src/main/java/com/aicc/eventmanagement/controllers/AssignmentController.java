@@ -181,7 +181,10 @@ public class AssignmentController {
     public ResponseEntity<List<VendorAssignmentResponse>> getMyAssignments(
             @AuthenticationPrincipal UserDetails principal) {
 
-        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
+        if (vendor == null) {
+            return ResponseEntity.notFound().build();
+        }
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(vendor.getId());
         return ResponseEntity.ok(assignments.stream()
             .map(VendorAssignmentResponse::from)
@@ -195,7 +198,10 @@ public class AssignmentController {
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
 
-        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
+        if (vendor == null) {
+            return ResponseEntity.notFound().build();
+        }
         VendorAssignment assignment = vendorService.getAssignmentById(id);
 
         if (assignment.getVendor() == null

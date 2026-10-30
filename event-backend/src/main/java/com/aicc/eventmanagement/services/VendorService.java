@@ -16,6 +16,8 @@ import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.payload.CreateVendorRequest;
 import com.aicc.eventmanagement.payload.UpdateVendorRequest;
+import com.aicc.eventmanagement.payload.VendorPerformanceResponse;
+import com.aicc.eventmanagement.payload.VendorReviewResponse;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
@@ -26,6 +28,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -403,6 +406,7 @@ public class VendorService {
                             .status(VendorAssignmentStatus.PENDING)
                             .rankingScore(s.score())
                             .selectionReason(s.reason())
+                            .decisionSnapshot(s.reasoning())
                             .assignedAt(LocalDateTime.now())
                             .expiresAt(offerDeadline())
                             .build();
@@ -874,7 +878,42 @@ public class VendorService {
     }
 
     public List<VendorAssignment> getAssignmentsByVendor(Long vendorId) {
-        return assignmentRepository.findByVendorId(vendorId);
+        return assignmentRepository.findDetailedByVendorId(vendorId);
+    }
+
+    @Transactional(readOnly = true)
+    public VendorPerformanceResponse getVendorPerformance(Long vendorId) {
+        Vendor vendor = getVendorById(vendorId);
+        List<VendorAssignment> assignments = assignmentRepository.findDetailedByVendorId(vendorId);
+
+        long completed = assignments.stream()
+                .filter(a -> a.getStatus() == VendorAssignmentStatus.COMPLETED)
+                .count();
+        long declined = assignments.stream()
+                .filter(a -> a.getStatus() == VendorAssignmentStatus.DECLINED)
+                .count();
+        long accepted = assignments.stream()
+                .filter(a -> a.getStatus() == VendorAssignmentStatus.ACCEPTED)
+                .count();
+
+        List<VendorReviewResponse> reviews = assignments.stream()
+                .filter(a -> a.getStatus() == VendorAssignmentStatus.COMPLETED && a.getVendorRating() != null)
+                .sorted(Comparator.comparing(
+                        VendorAssignment::getUpdatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(VendorReviewResponse::from)
+                .toList();
+
+        return VendorPerformanceResponse.builder()
+                .vendorId(vendor.getId())
+                .companyName(vendor.getCompanyName())
+                .averageRating(vendor.getRating() != null ? vendor.getRating().doubleValue() : 0.0)
+                .totalReviews(reviews.size())
+                .completedAssignments(completed)
+                .declinedAssignments(declined)
+                .acceptedAssignments(accepted)
+                .recentReviews(reviews.stream().limit(5).toList())
+                .build();
     }
 
     public VendorAssignment getAssignmentById(Long id) {
@@ -938,6 +977,14 @@ public class VendorService {
                 .orElseThrow(() -> new EntityNotFoundException("User", -1L));
         return vendorRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new EntityNotFoundException("Vendor", -1L));
+    }
+
+    // NEW: Safe version that returns null instead of throwing (for endpoints that need graceful handling)
+    @Nullable
+    public Vendor getVendorByUserOptional(String username) {
+        return userRepository.findByUsername(username)
+                .flatMap(user -> vendorRepository.findByUserId(user.getId()))
+                .orElse(null);
     }
 
     public List<VendorAssignment> getOpenAssignmentsForCategory(String category) {

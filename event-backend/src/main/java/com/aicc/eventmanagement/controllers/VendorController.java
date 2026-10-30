@@ -11,6 +11,7 @@ import com.aicc.eventmanagement.payload.UpdateVendorRequest;
 import com.aicc.eventmanagement.payload.VendorApplyRequest;
 import com.aicc.eventmanagement.payload.VendorApplyResponse;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
+import com.aicc.eventmanagement.payload.VendorPerformanceResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.AvailabilityService;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
@@ -77,7 +78,10 @@ public class VendorController {
     @PreAuthorize("hasRole('VENDOR')")
     @Operation(summary = "Get the authenticated vendor's profile")
     public ResponseEntity<Vendor> getMyProfile(@AuthenticationPrincipal UserDetails principal) {
-        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+        Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
+        if (vendor == null) {
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.ok(vendor);
     }
 
@@ -218,6 +222,13 @@ public class VendorController {
         return ResponseEntity.ok(ratingService.getVendorRatingStats(id));
     }
 
+    @GetMapping("/{id}/performance")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get a vendor's performance profile and recent reviews")
+    public ResponseEntity<VendorPerformanceResponse> getVendorPerformance(@PathVariable Long id) {
+        return ResponseEntity.ok(vendorService.getVendorPerformance(id));
+    }
+
     @GetMapping("/{id}/conflicts")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get conflicts for a vendor on a date")
@@ -273,8 +284,11 @@ public class VendorController {
         try {
             User user = userRepository.findByUsername(principal.getUsername()).orElse(null);
             if (user != null) {
-                Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
-                return vendor != null && vendor.getId().equals(vendorId);
+                Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
+                if (vendor == null) {
+                    return false;
+                }
+                return vendor.getId().equals(vendorId);
             }
         } catch (Exception e) {
             log.debug("Failed to resolve vendor for user: {}", principal.getUsername());

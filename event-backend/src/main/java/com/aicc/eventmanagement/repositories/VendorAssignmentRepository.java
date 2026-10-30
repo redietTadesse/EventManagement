@@ -20,6 +20,12 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
 
     List<VendorAssignment> findByVendorId(Long vendorId);
 
+    @Query("SELECT DISTINCT va FROM VendorAssignment va " +
+            "JOIN FETCH va.event event " +
+            "JOIN FETCH event.inquiry inquiry " +
+            "WHERE va.vendor.id = :vendorId")
+    List<VendorAssignment> findDetailedByVendorId(@Param("vendorId") Long vendorId);
+
     List<VendorAssignment> findByStatus(VendorAssignmentStatus status);
 
     @Query("SELECT va FROM VendorAssignment va WHERE va.event.id = :eventId AND va.serviceCategory = :category")

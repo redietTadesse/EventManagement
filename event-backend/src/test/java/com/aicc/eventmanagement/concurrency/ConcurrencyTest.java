@@ -2,9 +2,16 @@ package com.aicc.eventmanagement.concurrency;
 
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
+import com.aicc.eventmanagement.entities.Vendor;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
+import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
+import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
+import com.aicc.eventmanagement.repositories.VendorRepository;
+import com.aicc.eventmanagement.services.VendorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +39,15 @@ class ConcurrencyTest {
     @Autowired
     private EventRepository eventRepository;
 
+    @Autowired
+    private VendorRepository vendorRepository;
+
+    @Autowired
+    private VendorAssignmentRepository assignmentRepository;
+
+    @Autowired
+    private VendorService vendorService;
+
 
     private Inquiry testInquiry;
 
@@ -42,10 +59,42 @@ class ConcurrencyTest {
                 .eventType("conference")
                 .eventDate(LocalDate.now().plusDays(30))
                 .expectedAttendees(100)
+                .requirements("Two microphones and stage lighting")
                 .status(EventStatus.PROPOSAL_ACCEPTED)
                 .build();
         inquiryRepository.save(testInquiry);
     }
+
+            @Test
+            @DisplayName("Vendor assignments load event and inquiry data for response mapping")
+            void testVendorAssignmentsCanBeMappedAfterFetch() {
+            Vendor vendor = vendorRepository.save(Vendor.builder()
+                .companyName("Assignment Read Vendor")
+                .serviceCategory("av")
+                .build());
+            Event event = eventRepository.save(Event.builder()
+                .inquiry(testInquiry)
+                .name("Assignment Read Event")
+                .status(EventStatus.EVENT_CREATED)
+                .build());
+            assignmentRepository.save(VendorAssignment.builder()
+                .event(event)
+                .vendor(vendor)
+                .vendorName(vendor.getCompanyName())
+                .serviceCategory("av")
+                .status(VendorAssignmentStatus.PENDING)
+                .build());
+
+            List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(vendor.getId());
+            List<VendorAssignmentResponse> responses = assignments.stream()
+                .map(VendorAssignmentResponse::from)
+                .toList();
+
+            assertThat(responses).hasSize(1);
+            assertThat(responses.get(0).getEventName()).isEqualTo("Assignment Read Event");
+            assertThat(responses.get(0).getEventDate()).isEqualTo(testInquiry.getEventDate());
+            assertThat(responses.get(0).getServiceOrder()).isEqualTo("Two microphones and stage lighting");
+            }
 
     @Test
     @DisplayName("Should handle concurrent event creation safely - only one succeeds")

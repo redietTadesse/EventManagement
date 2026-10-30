@@ -63,6 +63,10 @@ public class VendorAssignment {
     @Column(name = "selection_reason", length = 40)
     private SelectionReason selectionReason;
 
+    /** JSON snapshot of the candidates and exclusions at the time of auto-selection. */
+    @Column(name = "decision_snapshot", columnDefinition = "TEXT")
+    private String decisionSnapshot;
+
     /** When this offer stops being valid. Null means it never expires. */
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
