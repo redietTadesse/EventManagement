@@ -12,6 +12,7 @@ import com.aicc.eventmanagement.payload.VendorApplyRequest;
 import com.aicc.eventmanagement.payload.VendorApplyResponse;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.payload.VendorPerformanceResponse;
+import com.aicc.eventmanagement.payload.VendorReviewResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.AvailabilityService;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -226,10 +228,17 @@ public class VendorController {
     }
 
     @GetMapping("/{id}/performance")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
     @Operation(summary = "Get a vendor's performance profile and recent reviews")
     public ResponseEntity<VendorPerformanceResponse> getVendorPerformance(@PathVariable Long id) {
         return ResponseEntity.ok(vendorService.getVendorPerformance(id));
+    }
+
+    @GetMapping("/{id}/reviews")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Get completed assignment reviews for a vendor")
+    public ResponseEntity<List<VendorReviewResponse>> getVendorReviews(@PathVariable Long id) {
+        return ResponseEntity.ok(vendorService.getVendorReviews(id));
     }
 
     @GetMapping("/{id}/conflicts")
@@ -272,9 +281,12 @@ public class VendorController {
     @PostMapping("/recalculate-ratings")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Recalculate ratings for all vendors")
-    public ResponseEntity<Void> recalculateAllRatings() {
-        ratingService.recalculateAllVendorRatings();
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Map<String, Object>> recalculateAllRatings() {
+        int updated = ratingService.recalculateAllVendorRatings();
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "updatedCount", updated,
+                "message", "Vendor ratings recalculated successfully. " + updated + " vendors updated."));
     }
 
     private boolean hasRole(UserDetails principal, Role role) {

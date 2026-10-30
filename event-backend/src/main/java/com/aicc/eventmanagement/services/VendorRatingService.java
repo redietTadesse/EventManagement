@@ -26,11 +26,7 @@ public class VendorRatingService {
 
     // ============ RATING CALCULATION ============
 
-    /**
-     * Calculate rating for a single vendor based on completed assignments
-     * Rating = average rating from all COMPLETED assignments
-     * If no completed assignments, rating stays as-is or defaults to 0
-     */
+    /** Calculate the rounded average of completed client reviews for one vendor. */
     public Double calculateVendorRating(Long vendorId) {
         Vendor vendor = vendorRepository.findById(vendorId)
             .orElseThrow(() -> new EntityNotFoundException("Vendor", vendorId));
@@ -39,23 +35,34 @@ public class VendorRatingService {
     }
 
     public Double calculateVendorRating(Vendor vendor) {
-        List<VendorAssignment> completed = assignmentRepository
-            .findByVendorIdAndStatus(vendor.getId(), VendorAssignmentStatus.COMPLETED);
+        return calculateVendorRatings(List.of(vendor)).getOrDefault(vendor.getId(), 0.0);
+    }
 
-        List<VendorAssignment> rated = completed.stream()
-            .filter(a -> a.getVendorRating() != null)
-            .toList();
+    /**
+     * The client review average is the single rating source used across ranking,
+     * suggestions, profiles and reporting. Vendors with no reviews are represented
+     * as 0.0 rather than a fabricated default score.
+     */
+    public Map<Long, Double> calculateVendorRatings(List<Vendor> vendors) {
+        if (vendors.isEmpty()) return Map.of();
 
-        if (rated.isEmpty()) {
-            return vendor.getRating() != null ? vendor.getRating().doubleValue() : 0.0;
-        }
+        List<Long> vendorIds = vendors.stream().map(Vendor::getId).distinct().toList();
+        Map<Long, Double> averages = assignmentRepository.averageCompletedRatingsByVendors(vendorIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> roundToOneDecimal(((Number) row[1]).doubleValue())
+                ));
 
-        double total = rated.stream()
-            .mapToDouble(VendorAssignment::getVendorRating)
-            .sum();
+        return vendors.stream().collect(Collectors.toMap(
+                Vendor::getId,
+                vendor -> averages.getOrDefault(vendor.getId(), 0.0),
+                (first, ignored) -> first
+        ));
+    }
 
-        double average = total / rated.size();
-        return Math.round(average * 10) / 10.0; // Round to 1 decimal place
+    public static double roundToOneDecimal(double rating) {
+        return Math.round(rating * 10.0) / 10.0;
     }
 
     // ============ UPDATE ALL VENDORS ============
@@ -64,28 +71,26 @@ public class VendorRatingService {
      * Recalculate ratings for all vendors
      * Called by scheduled job or after event completion
      */
-    public void recalculateAllVendorRatings() {
+    public int recalculateAllVendorRatings() {
         List<Vendor> vendors = vendorRepository.findAll();
         log.info("Recalculating ratings for {} vendors", vendors.size());
 
+        Map<Long, Double> ratings = calculateVendorRatings(vendors);
         for (Vendor vendor : vendors) {
-            Double newRating = calculateVendorRating(vendor);
-            vendor.setRating((int) Math.round(newRating)); // Vendor.rating is Integer (1-5)
+            Double newRating = ratings.getOrDefault(vendor.getId(), 0.0);
+            vendor.setRating(newRating);
             vendorRepository.save(vendor);
         }
 
         log.info("Rating recalculation complete");
+        return vendors.size();
     }
 
     // ============ GET RATING BREAKDOWN ============
 
     public Map<Long, Double> getRatingsForVendors(List<Long> vendorIds) {
         List<Vendor> vendors = vendorRepository.findAllById(vendorIds);
-        return vendors.stream()
-            .collect(Collectors.toMap(
-                Vendor::getId,
-                this::calculateVendorRating
-            ));
+        return calculateVendorRatings(vendors);
     }
 
     public RatingStats getVendorRatingStats(Long vendorId) {
@@ -109,7 +114,7 @@ public class VendorRatingService {
         double max = ratings.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
 
         return new RatingStats(
-            Math.round(avg * 10) / 10.0,
+            roundToOneDecimal(avg),
             ratings.size(),
             min,
             max

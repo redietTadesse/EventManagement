@@ -33,7 +33,7 @@ public class VendorRecommendationResponse {
         private String companyName;
         private String serviceCategory;
         private String description;
-        private Integer rating;
+        private Double rating;
         private boolean availableOnEventDate;
         private double score;
         private String reason;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function ForceAssignModal({ 
   isOpen, 
@@ -9,6 +9,14 @@ export default function ForceAssignModal({
   loading = false 
 }) {
   const [selectedVendorId, setSelectedVendorId] = useState('');
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedVendorId('');
+      setReason('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -17,7 +25,11 @@ export default function ForceAssignModal({
       alert('Please select a vendor');
       return;
     }
-    onForceAssign(selectedVendorId);
+    if (!reason.trim()) {
+      alert('Please enter a reason for this coordinator assignment');
+      return;
+    }
+    onForceAssign(selectedVendorId, reason.trim());
   };
 
   return (
@@ -63,6 +75,21 @@ export default function ForceAssignModal({
             </select>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Reason for coordinator override
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="Why are you choosing this vendor?"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              disabled={loading}
+            />
+          </div>
+
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
             <p className="text-xs text-yellow-800">
               <strong>Note:</strong> This will override the automatic vendor assignment process and force the selected vendor to this assignment.
@@ -79,7 +106,7 @@ export default function ForceAssignModal({
             </button>
             <button
               onClick={handleForceAssign}
-              disabled={loading || !selectedVendorId}
+              disabled={loading || !selectedVendorId || !reason.trim()}
               className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 rounded-lg disabled:opacity-50"
             >
               {loading ? 'Force Assigning...' : 'Force Assign'}

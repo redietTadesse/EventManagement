@@ -1,9 +1,15 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
+import com.aicc.eventmanagement.entities.Checklist;
+import com.aicc.eventmanagement.entities.Inquiry;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
+import com.aicc.eventmanagement.exceptions.BusinessException;
+import com.aicc.eventmanagement.payload.EventReadinessResponse;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
@@ -15,6 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -28,6 +38,7 @@ public class EventService {
     private final WorkflowEngine workflowEngine;
     private final ApplicationEventPublisher eventPublisher;
     private final VenueService venueService;
+    private final ChecklistService checklistService;
 
     @Transactional
     public Event createEvent(Event event) {
@@ -167,5 +178,138 @@ public class EventService {
     public List<Event> getUpcomingEvents() {
         log.info("Fetching upcoming events");
         return eventRepository.findAllActiveEvents(List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED));
+    }
+
+    @Transactional(readOnly = true)
+    public EventReadinessResponse getEventReadiness(Long eventId) {
+        Event event = getEventById(eventId);
+        boolean venueConfirmed = event.getVenueId() != null && event.getStatus() != EventStatus.CANCELLED;
+
+        List<String> requiredCategories = vendorService.getRequiredCategoriesFor(event);
+        List<VendorAssignment> assignments = vendorService.getAssignmentsByEvent(eventId);
+        int confirmed = 0;
+        int pending = 0;
+        for (String category : requiredCategories) {
+            Optional<VendorAssignment> latest = assignments.stream()
+                    .filter(a -> category.equals(a.getServiceCategory()))
+                    .max(Comparator.comparing(VendorAssignment::getId,
+                            Comparator.nullsFirst(Comparator.naturalOrder())));
+            if (latest.isEmpty()) continue;
+
+            VendorAssignmentStatus status = latest.get().getStatus();
+            if (status == VendorAssignmentStatus.ACCEPTED || status == VendorAssignmentStatus.COMPLETED) {
+                confirmed++;
+            } else if (status == VendorAssignmentStatus.PENDING) {
+                pending++;
+            }
+        }
+
+        List<Checklist> checklist = checklistService.getChecklistByEvent(eventId);
+        int totalChecklistItems = checklist.size();
+        int completedChecklistItems = (int) checklist.stream().filter(Checklist::isComplete).count();
+
+        int readiness = venueConfirmed ? 30 : 0;
+        if (!requiredCategories.isEmpty()) {
+            readiness += (int) ((double) confirmed / requiredCategories.size() * 50);
+        }
+        if (totalChecklistItems > 0) {
+            readiness += (int) ((double) completedChecklistItems / totalChecklistItems * 20);
+        }
+
+        return EventReadinessResponse.builder()
+                .readinessPercentage(readiness)
+                .venueConfirmed(venueConfirmed)
+                .totalRequiredVendors(requiredCategories.size())
+                .confirmedVendors(confirmed)
+                .pendingVendors(pending)
+                .completedChecklistItems(completedChecklistItems)
+                .totalChecklistItems(totalChecklistItems)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> analyzeDateChangeImpact(Long eventId, java.time.LocalDate newDate) {
+        Event event = getEventById(eventId);
+        if (newDate == null) throw new BusinessException("New event date is required", "INVALID_DATE");
+
+        java.time.LocalDate newEndDate = shiftedEndDate(event, newDate);
+        List<String> conflicts = new ArrayList<>();
+        List<String> reconfirmations = new ArrayList<>();
+
+        for (VendorAssignment assignment : vendorService.getAssignmentsByEvent(eventId)) {
+            VendorAssignmentStatus status = assignment.getStatus();
+            if (status != VendorAssignmentStatus.ACCEPTED && status != VendorAssignmentStatus.PENDING) continue;
+            if (assignment.getVendor() == null) continue;
+
+            boolean available = vendorService.isVendorAvailableForEvent(
+                    assignment.getVendor().getId(), newDate, eventId);
+            String vendorName = assignment.getVendorName() != null
+                    ? assignment.getVendorName()
+                    : assignment.getVendor().getCompanyName();
+            if (!available) {
+                conflicts.add(vendorName + " is booked on the new date.");
+            } else {
+                reconfirmations.add(vendorName + " is available but must reconfirm.");
+            }
+        }
+
+        boolean venueAvailable = event.getVenueId() == null || venueService.isVenueAvailableForEvent(
+                event.getVenueId(), newDate, newEndDate, eventId);
+        if (!venueAvailable) {
+            conflicts.add("The venue is already booked on the new date.");
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("newDate", newDate.toString());
+        response.put("venueAvailable", venueAvailable);
+        response.put("vendorConflicts", conflicts);
+        response.put("needsReconfirmation", reconfirmations);
+        return response;
+    }
+
+    @Transactional
+    public Event changeEventDate(Long eventId, java.time.LocalDate newDate) {
+        Event event = getEventById(eventId);
+        if (event.getStatus() == EventStatus.CANCELLED || event.getStatus() == EventStatus.COMPLETED
+                || event.getStatus() == EventStatus.CLOSED) {
+            throw new BusinessException("A completed or cancelled event cannot be rescheduled", "INVALID_STATE");
+        }
+        if (newDate == null || newDate.isBefore(java.time.LocalDate.now())) {
+            throw new BusinessException("New event date must be today or later", "INVALID_DATE");
+        }
+        Inquiry inquiry = event.getInquiry();
+        if (newDate.equals(inquiry.getEventDate())) return event;
+
+        Map<String, Object> impact = analyzeDateChangeImpact(eventId, newDate);
+        List<?> vendorConflicts = (List<?>) impact.get("vendorConflicts");
+        if (!vendorConflicts.isEmpty() || Boolean.FALSE.equals(impact.get("venueAvailable"))) {
+            throw new BusinessException("Resolve date conflicts before changing the event date", "DATE_CONFLICT");
+        }
+
+        java.time.LocalDate shiftedEndDate = shiftedEndDate(event, newDate);
+        inquiry.setEventDate(newDate);
+        if (inquiry.getEndDate() != null) inquiry.setEndDate(shiftedEndDate);
+        inquiryRepository.save(inquiry);
+
+        if (event.getVenueId() != null) {
+            venueService.rescheduleVenueBookingsForEvent(
+                    event.getVenueId(), eventId, newDate, shiftedEndDate);
+        }
+        int reconfirmations = vendorService.requestVendorReconfirmationForEventDateChange(eventId);
+        if (reconfirmations > 0 && event.getStatus() == EventStatus.CONFIRMED) {
+            workflowEngine.validateTransition(EventStatus.CONFIRMED, EventStatus.AWAITING_VENDORS, Role.COORDINATOR);
+            event.setStatus(EventStatus.AWAITING_VENDORS);
+            eventPublisher.publishEvent(new WorkflowTransitionEvent(
+                    this, EventStatus.CONFIRMED, EventStatus.AWAITING_VENDORS,
+                    "EVENT-" + eventId, Role.COORDINATOR));
+        }
+        return eventRepository.save(event);
+    }
+
+    private java.time.LocalDate shiftedEndDate(Event event, java.time.LocalDate newStartDate) {
+        if (event.getInquiry().getEndDate() == null) return null;
+        long durationDays = java.time.temporal.ChronoUnit.DAYS.between(
+                event.getInquiry().getEventDate(), event.getInquiry().getEndDate());
+        return newStartDate.plusDays(Math.max(0, durationDays));
     }
 }

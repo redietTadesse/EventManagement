@@ -307,11 +307,11 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  const forceAssign = useCallback(async (assignmentId, vendorId, category) => {
+  const forceAssign = useCallback(async (assignmentId, vendorId, category, reason) => {
     try {
       const res = await api.post(
         `/assignments/${assignmentId}/force-assign`,
-        { vendorId, category: category || 'unspecified' }
+        { vendorId, category: category || 'unspecified', reason }
       );
       showToast('Vendor force-assigned successfully', 'success');
       return res.data;

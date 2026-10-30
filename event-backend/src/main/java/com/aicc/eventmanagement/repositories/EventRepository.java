@@ -2,6 +2,7 @@ package com.aicc.eventmanagement.repositories;
 
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.payload.DashboardUpcomingEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,19 @@ import java.util.Optional;
 public interface EventRepository extends JpaRepository<Event, Long> {
 
     List<Event> findByStatus(EventStatus status);
+
+    @Query("""
+           SELECT new com.aicc.eventmanagement.payload.DashboardUpcomingEvent(
+               e.id, e.name, e.status, i.eventDate, i.clientName, e.venue, i.expectedAttendees)
+           FROM Event e JOIN e.inquiry i
+           WHERE i.eventDate BETWEEN :start AND :end
+             AND e.status NOT IN :excludedStatuses
+           ORDER BY i.eventDate ASC
+           """)
+    List<DashboardUpcomingEvent> findDashboardUpcomingEvents(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end,
+            @Param("excludedStatuses") List<EventStatus> excludedStatuses);
 
     Optional<Event> findByInquiryId(Long inquiryId);
 
@@ -44,6 +58,18 @@ public interface EventRepository extends JpaRepository<Event, Long> {
                             @Param("date") LocalDate date,
                             @Param("excludedStatuses") List<EventStatus> excludedStatuses);
 
+    @Query("SELECT COUNT(e) FROM Event e " +
+            "WHERE e.venueId = :venueId " +
+            "AND e.inquiry.eventDate BETWEEN :startDate AND :endDate " +
+            "AND e.status NOT IN :excludedStatuses " +
+            "AND e.id <> :excludedEventId")
+    long countVenueEventsInRangeExcludingEvent(
+            @Param("venueId") Long venueId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("excludedStatuses") List<EventStatus> excludedStatuses,
+            @Param("excludedEventId") Long excludedEventId);
+
     @Query("""
            SELECT e FROM Event e
            WHERE e.status = :status
@@ -61,13 +87,14 @@ public interface EventRepository extends JpaRepository<Event, Long> {
            """)
     List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date,
                                     @Param("excludedStatuses") List<EventStatus> excludedStatuses);
-}
-@Query("""
+
+    @Query("""
            SELECT e FROM Event e
            WHERE e.venueId IS NOT NULL
              AND e.inquiry.eventDate BETWEEN :start AND :end
              AND e.status NOT IN :excludedStatuses
            """)
-List<Event> findVenueBookedEventsInRange(@Param("start") LocalDate start,
-                                         @Param("end") LocalDate end,
-                                         @Param("excludedStatuses") List<EventStatus> excludedStatuses);
+    List<Event> findVenueBookedEventsInRange(@Param("start") LocalDate start,
+                                             @Param("end") LocalDate end,
+                                             @Param("excludedStatuses") List<EventStatus> excludedStatuses);
+}

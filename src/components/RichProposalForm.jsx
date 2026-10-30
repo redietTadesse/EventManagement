@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { eventCategoryMap, pricingTiers } from '../utils/constants';
 import { useApp } from '../context/AppContext';
+import VendorSuggestions from './VendorSuggestions';
 
 /**
  * Coordinator proposal composer.
@@ -19,11 +20,10 @@ import { useApp } from '../context/AppContext';
  *   pricingTier      String
  */
 const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = false }) => {
-  const { sendProposal, updateProposal, fetchAvailableVenues, fetchVendors } = useApp();
+  const { sendProposal, updateProposal, fetchAvailableVenues } = useApp();
 
   const [step, setStep] = useState(1);
   const [venues, setVenues] = useState([]);
-  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -86,26 +86,25 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     );
   }, [inquiry]);
 
-  // Load venues available on the event date, plus the vendor list for shortlisting.
+  // Load venues available on the event date. Vendor suggestions are loaded per category.
   useEffect(() => {
     if (!inquiry?.eventDate) return;
     let cancelled = false;
     setLoading(true);
     setError('');
 
-    Promise.all([
-      fetchAvailableVenues(inquiry.eventDate).catch(() => []),
-      fetchVendors().catch(() => []),
-    ])
-      .then(([venueList, vendorList]) => {
+    fetchAvailableVenues(inquiry.eventDate)
+      .then((venueList) => {
         if (cancelled) return;
         setVenues(venueList || []);
-        setVendors(vendorList || []);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load venues for this event date.');
       })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [inquiry?.eventDate, fetchAvailableVenues, fetchVendors]);
+  }, [inquiry?.eventDate, fetchAvailableVenues]);
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 
@@ -120,9 +119,6 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
   const calculatedPrice = formData.customPrice
     ? parseInt(formData.customPrice, 10)
     : Math.round(basePrice * tierMultiplier * days);
-
-  const vendorsForCategory = (category) =>
-    vendors.filter(v => v.serviceCategory === category && v.isActive !== false);
 
   const toggleVendorForCategory = (category, vendorId) => {
     setFormData((prev) => {
@@ -350,7 +346,6 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
               </p>
             )}
             {categories.map(cat => {
-              const vendorsForCat = vendorsForCategory(cat);
               const chosenIds = formData.vendorShortlist[cat] || [];
 
               return (
@@ -358,38 +353,12 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                   <label className="block text-sm font-medium text-slate-700 mb-3 capitalize">
                     {cat.replace('_', ' ')}
                   </label>
-                  {vendorsForCat.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">No registered vendors for this category.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {vendorsForCat.map(v => (
-                        <label
-                          key={v.id}
-                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
-                            chosenIds.includes(v.id)
-                              ? 'bg-brand-50 border-brand-500'
-                              : 'bg-white border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={chosenIds.includes(v.id)}
-                              onChange={() => toggleVendorForCategory(cat, v.id)}
-                              className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500"
-                            />
-                            <div>
-                              <p className="text-sm font-medium text-slate-900">{v.companyName}</p>
-                              <p className="text-xs text-slate-500">
-                                {v.rating ? `★ ${v.rating}` : '★ N/A'}
-                                {v.phone ? ` · ${v.phone}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  )}
+                  <VendorSuggestions
+                    category={cat}
+                    eventDate={inquiry?.eventDate}
+                    selectedVendorIds={chosenIds}
+                    onSelectVendor={(vendor) => toggleVendorForCategory(cat, Number(vendor.id))}
+                  />
                 </div>
               );
             })}

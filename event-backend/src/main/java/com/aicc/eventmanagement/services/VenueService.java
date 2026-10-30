@@ -100,6 +100,27 @@ public class VenueService {
         return !blocked;
     }
 
+    public boolean isVenueAvailableForEvent(Long venueId, LocalDate startDate, LocalDate endDate, Long eventId) {
+        Venue venue = getById(venueId);
+        LocalDate actualEndDate = endDate != null ? endDate : startDate;
+        LocalDate blockStart = startDate.minusDays(venue.getSetupBufferDays());
+        LocalDate blockEnd = actualEndDate.plusDays(venue.getTeardownBufferDays());
+
+        long confirmedBookings = venueBookingRepository.countConfirmedBookingsInRangeExcludingEvent(
+                venueId, blockStart, blockEnd, eventId);
+        if (confirmedBookings > 0) return false;
+
+        return eventRepository.countVenueEventsInRangeExcludingEvent(
+                venueId, blockStart, blockEnd, DEAD_STATUSES, eventId) == 0;
+    }
+
+    @Transactional
+    public List<VenueBooking> rescheduleVenueBookingsForEvent(
+            Long venueId, Long eventId, LocalDate startDate, LocalDate endDate) {
+        cancelVenueBookingsForEvent(eventId);
+        return bookVenue(venueId, eventId, startDate, endDate);
+    }
+
     public List<Venue> getAvailableVenues(LocalDate date) {
         List<Long> bookedIds = new ArrayList<>(venueBookingRepository.findBookedVenueIdsOn(date));
         bookedIds.addAll(eventRepository.findBookedVenueIdsOn(date, DEAD_STATUSES));
@@ -142,12 +163,22 @@ public class VenueService {
         List<VenueBooking> bookings = new ArrayList<>();
         LocalDate insertDate = blockStart;
         while (!insertDate.isAfter(blockEnd)) {
-            VenueBooking booking = VenueBooking.builder()
-                .venue(venue)
-                .event(event)
-                .bookingDate(insertDate)
-                .status(VenueBooking.BookingStatus.CONFIRMED)
-                .build();
+            LocalDate bookingDate = insertDate;
+            VenueBooking booking = venueBookingRepository.findByVenueAndDate(venueId, bookingDate)
+                    .map(existing -> {
+                        if (existing.getStatus() == VenueBooking.BookingStatus.CONFIRMED) {
+                            throw new BusinessException("Venue is already booked on " + bookingDate, "VENUE_CONFLICT");
+                        }
+                        existing.setEvent(event);
+                        existing.setStatus(VenueBooking.BookingStatus.CONFIRMED);
+                        return existing;
+                    })
+                    .orElseGet(() -> VenueBooking.builder()
+                            .venue(venue)
+                            .event(event)
+                            .bookingDate(bookingDate)
+                            .status(VenueBooking.BookingStatus.CONFIRMED)
+                            .build());
             bookings.add(booking);
             insertDate = insertDate.plusDays(1);
         }

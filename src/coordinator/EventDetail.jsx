@@ -7,6 +7,8 @@ import AuditTimeline from '../components/AuditTimeline';
 import VendorTrailDrawer from '../components/VendorTrailDrawer';
 import ManualAssignModal from '../components/ManualAssignModal';
 import VendorSuggestions from '../components/VendorSuggestions';
+import EventReadinessWidget from '../components/EventReadinessWidget';
+import ChangeDateModal from '../components/ChangeDateModal';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -31,6 +33,8 @@ export default function EventDetail() {
   const [alternativesByCategory, setAlternativesByCategory] = useState({});
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedCategoryForSuggestions, setSelectedCategoryForSuggestions] = useState(null);
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [readinessRefresh, setReadinessRefresh] = useState(0);
 
   useEffect(() => {
   api.get('/vendors').then(res => setVendors(res.data)).catch(() => {});
@@ -60,26 +64,31 @@ useEffect(() => {
     const loadEvent = async () => {
       setLoading(true);
       try {
-        const assignmentsData = await fetchAssignmentsForEvent(id);
-        setAssignments(assignmentsData || []);
-
-        // Extract event info from first assignment if available
-
-        if (assignmentsData.length > 0) {
-          setEvent({
-            id: assignmentsData[0].eventId,
-            name: assignmentsData[0].eventName,
-            status: assignmentsData[0].eventStatus,
-            date: assignmentsData[0].eventDate,
-            venue: assignmentsData[0].eventVenue,
-            clientName: assignmentsData[0].eventClientName,
-            expectedAttendees: assignmentsData[0].expectedAttendees
-          });
-        }
+        const eventResponse = await api.get(`/events/${id}`);
+        const eventRecord = eventResponse.data;
+        const [assignmentsData, inquiryResponse] = await Promise.all([
+          fetchAssignmentsForEvent(id),
+          eventRecord.inquiryId ? api.get(`/inquiries/${eventRecord.inquiryId}`) : Promise.resolve({ data: {} }),
+        ]);
+        const currentAssignments = assignmentsData || [];
+        const inquiry = inquiryResponse.data || {};
+        setAssignments(currentAssignments);
+        setEvent({
+          id: eventRecord.id,
+          inquiryId: eventRecord.inquiryId,
+          name: eventRecord.name,
+          status: eventRecord.status,
+          date: inquiry.eventDate || currentAssignments[0]?.eventDate,
+          endDate: inquiry.endDate,
+          venue: eventRecord.venue,
+          venueId: eventRecord.venueId,
+          clientName: inquiry.clientName || currentAssignments[0]?.eventClientName,
+          expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees,
+        });
 
         // Load checklist
         try {
-          const checklistData = await fetchChecklist(assignmentsData[0]?.eventId || id);
+          const checklistData = await fetchChecklist(eventRecord.id || id);
           setChecklist(checklistData || []);
         } catch (err) {
           // Checklist might not exist, that's ok
@@ -151,19 +160,27 @@ useEffect(() => {
   }
 
   const reloadAll = async () => {
-    const assignmentsData = await fetchAssignmentsForEvent(id);
-    setAssignments(assignmentsData || []);
-    if (assignmentsData.length > 0) {
-      setEvent({
-        id: assignmentsData[0].eventId,
-        name: assignmentsData[0].eventName,
-        status: assignmentsData[0].eventStatus,
-        date: assignmentsData[0].eventDate,
-        venue: assignmentsData[0].eventVenue,
-        clientName: assignmentsData[0].eventClientName,
-        expectedAttendees: assignmentsData[0].expectedAttendees,
-      });
-    }
+    const [eventResponse, assignmentsData] = await Promise.all([
+      api.get(`/events/${id}`),
+      fetchAssignmentsForEvent(id),
+    ]);
+    const eventRecord = eventResponse.data;
+    const inquiryResponse = eventRecord.inquiryId ? await api.get(`/inquiries/${eventRecord.inquiryId}`) : { data: {} };
+    const currentAssignments = assignmentsData || [];
+    const inquiry = inquiryResponse.data || {};
+    setAssignments(currentAssignments);
+    setEvent({
+      id: eventRecord.id,
+      inquiryId: eventRecord.inquiryId,
+      name: eventRecord.name,
+      status: eventRecord.status,
+      date: inquiry.eventDate || currentAssignments[0]?.eventDate,
+      endDate: inquiry.endDate,
+      venue: eventRecord.venue,
+      venueId: eventRecord.venueId,
+      clientName: inquiry.clientName || currentAssignments[0]?.eventClientName,
+      expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees,
+    });
     const checklistData = await fetchChecklist(id);
     setChecklist(checklistData || []);
   };
@@ -173,6 +190,7 @@ useEffect(() => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          <EventReadinessWidget eventId={event?.id || id} refreshKey={readinessRefresh} />
           {/* Event Header Card */}
           <div className="bg-white rounded-xl shadow p-4 md:p-6">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -189,6 +207,14 @@ useEffect(() => {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {!['CANCELLED', 'COMPLETED', 'CLOSED'].includes(event?.status) && (
+                <button
+                  onClick={() => setShowDateModal(true)}
+                  className="text-sm text-indigo-700 hover:text-indigo-800 px-3 py-2 border border-indigo-300 rounded-lg"
+                >
+                  Change date
+                </button>
+                )}
 <button
                           onClick={async () => {
                             if (!confirm('Cancel this event? This cannot be undone.')) return;
@@ -438,6 +464,17 @@ useEffect(() => {
             : []
         }
         serviceCategory={selectedAssignment?.serviceCategory}
+      />
+
+      <ChangeDateModal
+        isOpen={showDateModal}
+        onClose={() => setShowDateModal(false)}
+        eventId={event?.id || id}
+        currentDate={event?.date}
+        onDateChanged={async () => {
+          await reloadAll();
+          setReadinessRefresh(value => value + 1);
+        }}
       />
     </Layout>
   );

@@ -40,7 +40,7 @@ public class WorkflowEngine {
         transitionTable.put(EventStatus.AWAITING_VENDORS,
                 Set.of(EventStatus.CONFIRMED, EventStatus.NEEDS_COORDINATOR, EventStatus.CANCELLED));
         transitionTable.put(EventStatus.CONFIRMED,
-                Set.of(EventStatus.COMPLETED, EventStatus.CANCELLED));
+                Set.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.AWAITING_VENDORS));
         transitionTable.put(EventStatus.NEEDS_COORDINATOR,
                 Set.of(EventStatus.AWAITING_VENDORS, EventStatus.CONFIRMED, EventStatus.CANCELLED));
         transitionTable.put(EventStatus.COMPLETED, Set.of());
@@ -66,6 +66,7 @@ public class WorkflowEngine {
 
         transitionRoleMap.put("CONFIRMED_COMPLETED", Set.of(Role.ADMIN, Role.COORDINATOR));
         transitionRoleMap.put("CONFIRMED_CANCELLED", Set.of(Role.CLIENT, Role.COORDINATOR));
+        transitionRoleMap.put("CONFIRMED_AWAITING_VENDORS", Set.of(Role.COORDINATOR));
 
         // NEEDS_COORDINATOR → AWAITING_VENDORS is produced by the event rollup.
         // COORDINATOR triggers it via manualAssign/autoAssign; VENDOR triggers it

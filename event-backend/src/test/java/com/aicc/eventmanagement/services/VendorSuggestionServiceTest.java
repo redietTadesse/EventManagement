@@ -41,6 +41,9 @@ class VendorSuggestionServiceTest {
         @Mock
         private VendorRankingService rankingService;
 
+    @Mock
+    private VendorRatingService ratingService;
+
     @InjectMocks
     private VendorSuggestionService suggestionService;
 
@@ -56,21 +59,21 @@ class VendorSuggestionServiceTest {
                         .id(1L)
                         .companyName("AV Solutions")
                         .serviceCategory("av")
-                        .rating(5)
+                        .rating(5.0)
                         .isActive(true)
                         .build(),
                 Vendor.builder()
                         .id(2L)
                         .companyName("Sound & Light Co.")
                         .serviceCategory("av")
-                        .rating(4)
+                        .rating(4.0)
                         .isActive(true)
                         .build(),
                 Vendor.builder()
                         .id(3L)
                         .companyName("ProStage AV")
                         .serviceCategory("av")
-                        .rating(3)
+                        .rating(3.0)
                         .isActive(true)
                         .build()
         );
@@ -80,7 +83,10 @@ class VendorSuggestionServiceTest {
                         Set<Long> excluded = argumentExcluded == null ? Set.of() : argumentExcluded;
             return mockVendors.stream()
                     .filter(v -> !excluded.contains(v.getId()))
-                    .map(v -> { double ratingTerm = v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0); })
+                    .map(v -> {
+                        double ratingTerm = 0.5 * v.getRating() / 5.0;
+                        return new VendorRankingService.Ranked(v, ratingTerm + 0.5, ratingTerm, 0.4, 0.1);
+                    })
                     .toList();
         });
         when(assignmentRepository.countActiveAndPendingByVendor(anyLong())).thenReturn(0L);
@@ -101,6 +107,7 @@ class VendorSuggestionServiceTest {
 
         assertThat(suggestions).isNotEmpty();
         assertThat(suggestions.get(0).companyName()).isEqualTo("AV Solutions");
+        assertThat(suggestions.get(0).rating()).isEqualTo(5.0);
         assertThat(suggestions.get(0).score()).isGreaterThan(suggestions.get(1).score());
     }
 
@@ -153,7 +160,7 @@ class VendorSuggestionServiceTest {
     @DisplayName("Should filter out unavailable vendors (booked dates)")
     void testFilterUnavailableVendors() {
         when(rankingService.rank(any(), any(), any())).thenReturn(mockVendors.subList(1, 3).stream()
-                .map(v -> { double ratingTerm = v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0); })
+                .map(v -> { double ratingTerm = 0.5 * v.getRating() / 5.0; return new VendorRankingService.Ranked(v, ratingTerm, ratingTerm, 0.0, 0.0); })
                 .toList());
         when(vendorRepository.findActiveByCategory("av")).thenReturn(mockVendors);
         when(bookedDateRepository.existsByVendorIdAndBookedDate(1L, testDate)).thenReturn(true);

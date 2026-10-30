@@ -60,6 +60,7 @@ public class InquiryService {
     private final VenueService venueService;
     private final VendorService vendorService;
     private final VendorRankingService rankingService;
+    private final VendorRatingService ratingService;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRepository vendorRepository;
 
@@ -303,7 +304,7 @@ public class InquiryService {
                 candidates.add(ConversionPreviewResponse.VendorCandidate.builder()
                         .vendorId(v.getId())
                         .companyName(v.getCompanyName())
-                        .rating(v.getRating())
+                        .rating(r.rating())
                         .currentLoad(load)
                         .score(r.score())
                         .rank(i + 1)
@@ -497,7 +498,7 @@ public class InquiryService {
                             .companyName(r.vendor().getCompanyName())
                             .serviceCategory(r.vendor().getServiceCategory())
                             .description(r.vendor().getDescription())
-                            .rating(r.vendor().getRating())
+                            .rating(r.rating())
                             .availableOnEventDate(true)
                             .score(r.score())
                             .reason(buildReason(r))
@@ -511,7 +512,7 @@ public class InquiryService {
     }
 
     private String buildReason(VendorRankingService.Ranked ranked) {
-        if (ranked.vendor().getRating() != null && ranked.vendor().getRating() >= 4) return "Highly rated";
+        if (ranked.rating() >= 4) return "Highly rated";
         if (ranked.score() > 100) return "Currently available and top-ranked";
         return "Available on your event date";
     }
@@ -572,7 +573,7 @@ public class InquiryService {
                             Map<String, Object> vMap = new LinkedHashMap<>();
                             vMap.put("id", v.getId());
                             vMap.put("companyName", v.getCompanyName());
-                            vMap.put("rating", v.getRating());
+                            vMap.put("rating", ratingService.calculateVendorRating(v));
                             vMap.put("description", v.getDescription());
                             vendorsForCat.add(vMap);
                         });

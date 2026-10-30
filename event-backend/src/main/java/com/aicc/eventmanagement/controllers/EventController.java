@@ -4,6 +4,7 @@ import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.EventResponse;
+import com.aicc.eventmanagement.payload.EventReadinessResponse;
 import com.aicc.eventmanagement.services.VendorService;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.services.EventService;
@@ -19,12 +20,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.time.LocalDate;
 import java.util.stream.Collectors;
 
 @RestController
@@ -73,6 +77,31 @@ public class EventController {
         log.info("Fetching event with id: {}", id);
         Event event = eventService.getEventById(id);
         return ResponseEntity.ok(EventResponse.from(event));
+    }
+
+    @GetMapping("/{id}/readiness")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
+    @Operation(summary = "Get event readiness")
+    public ResponseEntity<EventReadinessResponse> getReadiness(@PathVariable Long id) {
+        return ResponseEntity.ok(eventService.getEventReadiness(id));
+    }
+
+    @GetMapping("/{id}/impact")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Analyze the impact of changing an event date")
+    public ResponseEntity<Map<String, Object>> analyzeDateChangeImpact(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate newDate) {
+        return ResponseEntity.ok(eventService.analyzeDateChangeImpact(id, newDate));
+    }
+
+    @PutMapping("/{id}/date")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Reschedule an event after validating date impact")
+    public ResponseEntity<EventResponse> changeEventDate(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate newDate) {
+        return ResponseEntity.ok(EventResponse.from(eventService.changeEventDate(id, newDate)));
     }
 
     @GetMapping("/status/{status}")

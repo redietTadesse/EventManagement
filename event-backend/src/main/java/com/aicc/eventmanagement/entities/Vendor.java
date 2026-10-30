@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -51,9 +53,11 @@ public class Vendor {
     @Size(max = 100, message = "Email must not exceed 100 characters")
     private String email;
 
-    @Min(value = 1, message = "Rating must be at least 1")
-    @Max(value = 5, message = "Rating must not exceed 5")
-    private Integer rating;
+    @DecimalMin(value = "0.0", message = "Rating must not be below 0")
+    @DecimalMax(value = "5.0", message = "Rating must not exceed 5")
+    @JdbcTypeCode(SqlTypes.DECIMAL)
+    @Column(precision = 3, scale = 1)
+    private Double rating;
 
     @Column(name = "is_active")
     @Builder.Default

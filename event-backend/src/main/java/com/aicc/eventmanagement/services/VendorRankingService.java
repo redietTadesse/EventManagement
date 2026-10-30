@@ -29,29 +29,32 @@ public class VendorRankingService {
     private final VendorRepository vendorRepository;
     private final VendorBookedDateRepository bookedDateRepository;
     private final VendorAssignmentRepository assignmentRepository;
+    private final VendorRatingService ratingService;
 
     private static final double W_RATING = 0.50;
     private static final double W_LOAD = 0.40;
+    private static final double W_ROTATION = 0.10;
 
     /**
-     * The weights are normalized by their own sum so a score lands in [0, 1].
-     *
-     * Previously the raw sum of 0.90 was returned, so a flawless vendor scored 0.9
-     * and never 1.0. Dividing by the weight total is strictly monotonic, so vendor
-     * ORDERING is unchanged and no assignment decision differs. Only the number the
-     * coordinator sees changes, and it now means what it looks like it means.
+     * Quality, current workload, and assignment rotation contribute 50%, 40%, and
+     * 10% respectively. Each component is normalized to [0, 1], so the total score
+     * also stays in [0, 1].
      */
-    private static final double W_TOTAL = W_RATING + W_LOAD;
+    private static final double W_TOTAL = W_RATING + W_LOAD + W_ROTATION;
 
     private static final int LOAD_CAP = 10;
     private static final double RATING_SCALE = 5.0;
 
     /**
-     * One scored candidate. ratingTerm and loadTerm are the weighted contributions
-     * that produced the score; they are kept so the selection reason can be explained
-     * from the same numbers rather than guessed at afterwards.
+     * Weighted score contributions and their normalized component scores. Keeping
+     * the component values here lets the API explain the same ranking it returns.
      */
-    public record Ranked(Vendor vendor, double score, double ratingTerm, double loadTerm) {}
+    public record Ranked(Vendor vendor, double score, double ratingTerm, double loadTerm, double rotationTerm) {
+        public double qualityScore() { return ratingTerm / W_RATING; }
+        public double workloadScore() { return loadTerm / W_LOAD; }
+        public double rotationScore() { return rotationTerm / W_ROTATION; }
+        public double rating() { return qualityScore() * RATING_SCALE; }
+    }
 
     /** The winning candidate plus the decision snapshot captured at selection time. */
     public record Selection(Vendor vendor, double score, SelectionReason reason, String reasoning) {}
@@ -104,14 +107,24 @@ public class VendorRankingService {
                                 row -> (Long) row[1]
                         ));
 
+        Map<Long, Long> assignmentHistory = assignmentRepository.countAllAssignmentsByVendors(ids)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (Long) row[1]
+                ));
+
+        Map<Long, Double> ratings = ratingService.calculateVendorRatings(candidates);
+
         List<Ranked> ranked = new ArrayList<>();
 
         for (Vendor vendor : candidates) {
             long load = loads.getOrDefault(vendor.getId(), 0L);
-            double ratingTerm = ratingTerm(vendor);
+            double ratingTerm = ratingTerm(ratings.getOrDefault(vendor.getId(), 0.0));
             double loadTerm = loadTerm(load);
-            double score = (ratingTerm + loadTerm) / W_TOTAL;
-            ranked.add(new Ranked(vendor, score, ratingTerm, loadTerm));
+            double rotationTerm = rotationTerm(assignmentHistory.getOrDefault(vendor.getId(), 0L));
+            double score = (ratingTerm + loadTerm + rotationTerm) / W_TOTAL;
+            ranked.add(new Ranked(vendor, score, ratingTerm, loadTerm, rotationTerm));
         }
 
         // Highest score first; vendor ID provides a stable tie-breaker.
@@ -127,8 +140,10 @@ public class VendorRankingService {
     private String getExclusionReason(Vendor vendor, LocalDate date, Set<Long> alreadyTried) {
         if (!vendor.isActive()) return "Vendor is inactive";
         if (alreadyTried.contains(vendor.getId())) return "Already tried for this event";
-        if (vendor.getInsuranceExpiryDate() != null
-                && vendor.getInsuranceExpiryDate().isBefore(date)) {
+        if (vendor.getInsuranceExpiryDate() == null) {
+            return "Insurance expiry date is not on file";
+        }
+        if (vendor.getInsuranceExpiryDate().isBefore(date)) {
             return "Insurance expires before the event date";
         }
         if (bookedDateRepository.existsByVendorIdAndBookedDate(vendor.getId(), date)) {
@@ -202,6 +217,10 @@ public class VendorRankingService {
             entry.put("normalizedScore", candidate.score());
             entry.put("qualityContribution", Math.round(candidate.ratingTerm() / W_TOTAL * 1000.0) / 10.0);
             entry.put("workloadContribution", Math.round(candidate.loadTerm() / W_TOTAL * 1000.0) / 10.0);
+            entry.put("rotationContribution", Math.round(candidate.rotationTerm() / W_TOTAL * 1000.0) / 10.0);
+            entry.put("qualityScore", Math.round(candidate.qualityScore() * 1000.0) / 10.0);
+            entry.put("workloadScore", Math.round(candidate.workloadScore() * 1000.0) / 10.0);
+            entry.put("rotationScore", Math.round(candidate.rotationScore() * 1000.0) / 10.0);
             entry.put("rank", index + 1);
             entry.put("status", index == 0 ? "Selected" : "Ranked");
             considered.add(entry);
@@ -237,7 +256,7 @@ public class VendorRankingService {
     }
 
     /**
-     * Explain the winner by comparing it to the runner-up on the two score components.
+     * Explain the winner by comparing it to the runner-up on all three score components.
      *
      * Whichever component gave the winner its margin is the reason it won. This is
      * derived from the same numbers that produced the ranking, so the stored reason
@@ -256,25 +275,29 @@ public class VendorRankingService {
 
         double ratingEdge = winner.ratingTerm() - runnerUp.ratingTerm();
         double loadEdge = winner.loadTerm() - runnerUp.loadTerm();
+        double rotationEdge = winner.rotationTerm() - runnerUp.rotationTerm();
 
-        // Equal on both components: the sort fell through to the vendor-id tie-break.
-        if (ratingEdge == 0.0 && loadEdge == 0.0) {
+        // Equal on every component: the sort fell through to the vendor-id tie-break.
+        if (ratingEdge == 0.0 && loadEdge == 0.0 && rotationEdge == 0.0) {
             return SelectionReason.TIE_BREAK;
         }
 
-        return loadEdge > ratingEdge
-                ? SelectionReason.LEAST_LOADED
-                : SelectionReason.TOP_RATED;
+        if (rotationEdge > ratingEdge && rotationEdge > loadEdge) {
+            return SelectionReason.ROTATION_REFRESHED;
+        }
+        return loadEdge > ratingEdge ? SelectionReason.LEAST_LOADED : SelectionReason.TOP_RATED;
     }
 
-    private double ratingTerm(Vendor vendor) {
-        double normalized = vendor.getRating() != null
-                ? vendor.getRating() / RATING_SCALE
-                : 0.0;
+    private double ratingTerm(double rating) {
+        double normalized = rating / RATING_SCALE;
         return W_RATING * normalized;
     }
 
     private double loadTerm(long load) {
         return W_LOAD * (1.0 - (double) Math.min(load, LOAD_CAP) / LOAD_CAP);
+    }
+
+    private double rotationTerm(long historicalAssignments) {
+        return W_ROTATION * (1.0 - (double) Math.min(historicalAssignments, LOAD_CAP) / LOAD_CAP);
     }
 }

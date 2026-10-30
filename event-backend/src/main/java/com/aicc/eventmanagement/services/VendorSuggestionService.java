@@ -21,6 +21,7 @@ public class VendorSuggestionService {
     private final VendorRepository vendorRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRankingService rankingService;
+    private final VendorRatingService ratingService;
 
     /**
      * Get ranked suggestions for a vendor category on a given date.
@@ -44,14 +45,17 @@ public class VendorSuggestionService {
                             v.getId(),
                             v.getCompanyName(),
                             v.getServiceCategory(),
-                            v.getRating() != null ? v.getRating().doubleValue() : 0.0,
+                            result.rating(),
                             activeCount,
                             v.getPhone(),
                             v.getEmail(),
                             v.getDescription(),
                             score,
                             isRecommended,
-                            getReasoning(v, activeCount)
+                            result.qualityScore() * 100.0,
+                            result.workloadScore() * 100.0,
+                            result.rotationScore() * 100.0,
+                            getReasoning(result.rating(), activeCount)
                     );
                 })
                 .sorted(Comparator.comparingDouble(VendorSuggestion::score).reversed())
@@ -67,12 +71,12 @@ public class VendorSuggestionService {
     /**
      * Generate human-readable reasoning for why this vendor is suggested.
      */
-    private String getReasoning(Vendor vendor, long activeCount) {
+    private String getReasoning(double rating, long activeCount) {
         List<String> reasons = new ArrayList<>();
 
-        if (vendor.getRating() != null && vendor.getRating() >= 4.5) {
+        if (rating >= 4.5) {
             reasons.add("Top rated vendor");
-        } else if (vendor.getRating() != null && vendor.getRating() >= 4.0) {
+        } else if (rating >= 4.0) {
             reasons.add("Highly rated");
         }
 
@@ -136,7 +140,7 @@ public class VendorSuggestionService {
                 vendor.getId(),
                 vendor.getCompanyName(),
                 vendor.getServiceCategory(),
-                vendor.getRating() != null ? vendor.getRating().doubleValue() : 0.0,
+                ratingService.calculateVendorRating(vendor),
                 vendor.getPhone(),
                 vendor.getEmail(),
                 vendor.getDescription(),
@@ -164,6 +168,9 @@ public class VendorSuggestionService {
             String notes,
             double score,
             boolean recommended,
+            double qualityScore,
+            double workloadScore,
+            double rotationScore,
             String reasoning
     ) {}
 

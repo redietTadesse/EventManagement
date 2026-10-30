@@ -18,4 +18,8 @@ public class ManualAssignRequest {
 
     @NotNull(message = "Vendor ID is required")
     private Long vendorId;
+
+    @NotBlank(message = "A reason is required for coordinator assignment")
+    @jakarta.validation.constraints.Size(max = 500, message = "Reason cannot exceed 500 characters")
+    private String reason;
 }

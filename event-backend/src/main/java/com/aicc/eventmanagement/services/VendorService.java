@@ -24,6 +24,7 @@ import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
 import com.aicc.eventmanagement.util.CategoryUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +40,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -58,6 +61,7 @@ public class VendorService {
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
     private final VendorRankingService rankingService;
+    private final VendorRatingService ratingService;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
@@ -85,7 +89,7 @@ public class VendorService {
                 .description(req.getDescription())
                 .phone(req.getPhone())
                 .email(req.getEmail())
-                .rating(3)          // sensible default for new vendors
+                .rating(0.0)
                 .insuranceExpiryDate(req.getInsuranceExpiryDate())
                 .isActive(true)
                 .build();
@@ -131,7 +135,7 @@ public class VendorService {
                 .description(description.toString())
                 .phone(req.getPhone())
                 .email(req.getEmail())
-                .rating(3)
+                .rating(0.0)
                 .isActive(false)
                 .build();
         log.info("Vendor application received for company={} username={}", req.getCompanyName(), username);
@@ -296,6 +300,13 @@ public class VendorService {
         return true;
     }
 
+    public boolean isVendorAvailableForEvent(Long vendorId, LocalDate date, Long eventId) {
+        if (bookedDateRepository.existsByVendorIdAndBookedDate(vendorId, date)) {
+            return false;
+        }
+        return !assignmentRepository.hasActiveAssignmentOnDateExcludingEvent(vendorId, date, eventId);
+    }
+
 
 
     @Transactional
@@ -367,24 +378,33 @@ public class VendorService {
             //    reason carries the whole explanation instead, which is exactly what
             //    a coordinator needs to see: this vendor was not chosen by the system.
             if (!preferredVendorIds.isEmpty()) {
+                List<Map<String, Object>> excludedPreferences = new ArrayList<>();
                 for (Long vendorId : preferredVendorIds) {
-                    Optional<Vendor> prefVendor = vendorRepository.findById(vendorId);
-                        if (prefVendor.isPresent()
-                            && category.equals(prefVendor.get().getServiceCategory())
-                            && prefVendor.get().isActive()
-                            && isVendorAvailable(vendorId, eventDate)) {
+                    Optional<Vendor> prefVendor = vendorId == null
+                            ? Optional.empty()
+                            : vendorRepository.findById(vendorId);
+                    Vendor candidate = prefVendor.orElse(null);
+                    String exclusionReason = getPreferredVendorExclusionReason(candidate, category, eventDate);
+                    if (exclusionReason != null) {
+                        excludedPreferences.add(excludedPreference(vendorId, candidate, exclusionReason));
+                        continue;
+                    }
+
+                    if (candidate != null) {
                         assignment = VendorAssignment.builder()
                                 .event(event)
-                                .vendor(prefVendor.get())
-                                .vendorName(prefVendor.get().getCompanyName())
+                                .vendor(candidate)
+                                .vendorName(candidate.getCompanyName())
                                 .serviceCategory(category)
                                 .status(VendorAssignmentStatus.PENDING)
                                 .selectionReason(SelectionReason.CLIENT_PREFERRED)
+                                .decisionSnapshot(buildClientPreferredSnapshot(
+                                        category, eventDate, candidate, excludedPreferences))
                                 .assignedAt(LocalDateTime.now())
                                 .expiresAt(offerDeadline())
                                 .build();
                         log.info("Using CLIENT-PREFERRED vendor {} for category {} on event {}",
-                                prefVendor.get().getCompanyName(), category, event.getId());
+                                candidate.getCompanyName(), category, event.getId());
                         break;
                     }
                 }
@@ -441,6 +461,123 @@ public class VendorService {
         return saved;
     }
 
+    private String getPreferredVendorExclusionReason(Vendor vendor, String category, LocalDate eventDate) {
+        if (vendor == null) return "Vendor no longer exists";
+        if (vendor.getServiceCategory() == null
+                || !category.trim().equalsIgnoreCase(vendor.getServiceCategory().trim())) {
+            return "Vendor does not offer this service category";
+        }
+        if (!vendor.isActive()) return "Vendor is inactive";
+        if (vendor.getInsuranceExpiryDate() == null) return "Insurance expiry date is not on file";
+        if (vendor.getInsuranceExpiryDate().isBefore(eventDate)) {
+            return "Insurance expires before the event date";
+        }
+        if (bookedDateRepository.existsByVendorIdAndBookedDate(vendor.getId(), eventDate)) {
+            return "Vendor has a booked date on the event date";
+        }
+        if (assignmentRepository.hasActiveAssignmentOnDate(vendor.getId(), eventDate)) {
+            return "Vendor has a conflicting assignment on the event date";
+        }
+        return null;
+    }
+
+    private void validateVendorEligibility(Vendor vendor, String category, LocalDate eventDate) {
+        if (!vendor.isActive()) {
+            throw new BusinessException("Inactive vendors cannot be assigned", "VENDOR_INACTIVE");
+        }
+        if (vendor.getServiceCategory() == null || category == null
+                || !category.trim().equalsIgnoreCase(vendor.getServiceCategory().trim())) {
+            throw new BusinessException("Vendor does not offer the requested service category", "VENDOR_CATEGORY_MISMATCH");
+        }
+        if (vendor.getInsuranceExpiryDate() == null) {
+            throw new BusinessException("Vendor insurance expiry date is not on file", "VENDOR_INSURANCE_INVALID");
+        }
+        if (eventDate == null || vendor.getInsuranceExpiryDate().isBefore(eventDate)) {
+            throw new BusinessException("Vendor insurance is not valid for the event date", "VENDOR_INSURANCE_INVALID");
+        }
+    }
+
+    private String requireCoordinatorReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException("A reason is required for coordinator assignments", "COORDINATOR_REASON_REQUIRED");
+        }
+        String normalized = reason.trim();
+        if (normalized.length() > 500) {
+            throw new BusinessException("Coordinator assignment reason cannot exceed 500 characters", "INVALID_REASON");
+        }
+        return normalized;
+    }
+
+    private String buildCoordinatorDecisionSnapshot(String category, LocalDate eventDate, Vendor vendor,
+                                                    String reason, Long actorId, String actorUsername,
+                                                    SelectionReason selectionReason) {
+        Map<String, Object> selected = new LinkedHashMap<>();
+        selected.put("vendorId", vendor.getId());
+        selected.put("vendorName", vendor.getCompanyName());
+        selected.put("score", null);
+        selected.put("rank", null);
+        selected.put("status", "Selected");
+        selected.put("reason", reason);
+
+        Map<String, Object> actor = new LinkedHashMap<>();
+        actor.put("userId", actorId);
+        actor.put("username", actorUsername);
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("category", category);
+        snapshot.put("eventDate", eventDate == null ? null : eventDate.toString());
+        snapshot.put("selectedVendorId", vendor.getId());
+        snapshot.put("selectedVendorName", vendor.getCompanyName());
+        snapshot.put("selectionReason", selectionReason.name());
+        snapshot.put("reasoning", reason);
+        snapshot.put("actor", actor);
+        snapshot.put("considered", List.of(selected));
+        snapshot.put("excluded", List.of());
+
+        try {
+            return objectMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize coordinator assignment snapshot", e);
+        }
+    }
+
+    private Map<String, Object> excludedPreference(Long vendorId, Vendor vendor, String reason) {
+        Map<String, Object> excluded = new LinkedHashMap<>();
+        excluded.put("vendorId", vendorId);
+        excluded.put("vendorName", vendor != null ? vendor.getCompanyName() : null);
+        excluded.put("score", null);
+        excluded.put("status", "Unavailable");
+        excluded.put("reason", reason);
+        return excluded;
+    }
+
+    private String buildClientPreferredSnapshot(String category, LocalDate eventDate, Vendor selected,
+                                                List<Map<String, Object>> excluded) {
+        Map<String, Object> selectedCandidate = new LinkedHashMap<>();
+        selectedCandidate.put("vendorId", selected.getId());
+        selectedCandidate.put("vendorName", selected.getCompanyName());
+        selectedCandidate.put("score", null);
+        selectedCandidate.put("rank", null);
+        selectedCandidate.put("status", "Selected");
+        selectedCandidate.put("reason", "Selected from the client's preferred vendor list");
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("category", category);
+        snapshot.put("eventDate", eventDate.toString());
+        snapshot.put("selectedVendorId", selected.getId());
+        snapshot.put("selectedVendorName", selected.getCompanyName());
+        snapshot.put("selectionReason", SelectionReason.CLIENT_PREFERRED.name());
+        snapshot.put("reasoning", "Selected from the client's preferred vendor list");
+        snapshot.put("considered", List.of(selectedCandidate));
+        snapshot.put("excluded", excluded);
+
+        try {
+            return objectMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize preferred vendor decision snapshot", e);
+        }
+    }
+
     private List<Long> parsePreferredVendors(Inquiry inquiry) {
         if (inquiry.getPreferredVendorIds() == null || inquiry.getPreferredVendorIds().isBlank()) {
             return List.of();
@@ -473,11 +610,18 @@ public class VendorService {
      */
     @Transactional
     public VendorAssignment manualAssign(Long eventId, String category, Long vendorId) {
+        return manualAssign(eventId, category, vendorId, "Coordinator manual assignment", null, null);
+    }
+
+    public VendorAssignment manualAssign(Long eventId, String category, Long vendorId,
+                                         String reason, Long coordinatorId, String coordinatorUsername) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
 
         Vendor vendor = getVendorById(vendorId);
         LocalDate eventDate = event.getInquiry().getEventDate();
+        validateVendorEligibility(vendor, category, eventDate);
+        String normalizedReason = requireCoordinatorReason(reason);
 
         if (!isVendorAvailable(vendorId, eventDate)) {
             throw new BusinessException(
@@ -521,6 +665,9 @@ public class VendorService {
                 .serviceCategory(category)
                 .status(VendorAssignmentStatus.PENDING)
                 .selectionReason(SelectionReason.COORDINATOR_MANUAL)
+                .decisionSnapshot(buildCoordinatorDecisionSnapshot(
+                        category, eventDate, vendor, normalizedReason, coordinatorId, coordinatorUsername,
+                        SelectionReason.COORDINATOR_MANUAL))
                 .assignedAt(LocalDateTime.now())
                 .expiresAt(offerDeadline())
                 .build();
@@ -644,6 +791,7 @@ public class VendorService {
                 .status(VendorAssignmentStatus.PENDING)
                 .rankingScore(s.score())
                 .selectionReason(s.reason())
+                .decisionSnapshot(s.reasoning())
                 .assignedAt(LocalDateTime.now())
                 .expiresAt(offerDeadline())
                 .build();
@@ -851,6 +999,13 @@ public class VendorService {
                     "EVENT_NOT_OPEN");
         }
 
+        Vendor vendor = getVendorById(vendorId);
+        LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
+        validateVendorEligibility(vendor, assignment.getServiceCategory(), eventDate);
+        if (!isVendorAvailableForEvent(vendorId, eventDate, assignment.getEvent().getId())) {
+            throw new BusinessException("Vendor is not available on the event date", "VENDOR_UNAVAILABLE");
+        }
+
         workflowEngine.validateAssignmentTransition(
                 VendorAssignmentStatus.OPEN,
                 VendorAssignmentStatus.PENDING,
@@ -903,17 +1058,30 @@ public class VendorService {
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(VendorReviewResponse::from)
                 .toList();
+        double averageRating = ratingService.calculateVendorRating(vendor);
 
         return VendorPerformanceResponse.builder()
                 .vendorId(vendor.getId())
                 .companyName(vendor.getCompanyName())
-                .averageRating(vendor.getRating() != null ? vendor.getRating().doubleValue() : 0.0)
+                .averageRating(averageRating)
                 .totalReviews(reviews.size())
                 .completedAssignments(completed)
                 .declinedAssignments(declined)
                 .acceptedAssignments(accepted)
                 .recentReviews(reviews.stream().limit(5).toList())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<VendorReviewResponse> getVendorReviews(Long vendorId) {
+        getVendorById(vendorId);
+        return assignmentRepository.findDetailedByVendorId(vendorId).stream()
+                .filter(a -> a.getStatus() == VendorAssignmentStatus.COMPLETED && a.getVendorRating() != null)
+                .sorted(Comparator.comparing(
+                        VendorAssignment::getUpdatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(VendorReviewResponse::from)
+                .toList();
     }
 
     public VendorAssignment getAssignmentById(Long id) {
@@ -937,21 +1105,36 @@ public class VendorService {
         VendorAssignment saved = assignmentRepository.save(assignment);
 
         Vendor vendor = assignment.getVendor();
-        List<VendorAssignment> ratedAssignments = assignmentRepository
-                .findByVendorIdAndStatus(vendor.getId(), VendorAssignmentStatus.COMPLETED).stream()
-                .filter(a -> a.getVendorRating() != null)
-                .toList();
-        double average = ratedAssignments.stream()
-                .mapToDouble(VendorAssignment::getVendorRating)
-                .average()
-                .orElse(vendor.getRating() == null ? 0.0 : vendor.getRating());
-        vendor.setRating((int) Math.round(average));
+        double average = ratingService.calculateVendorRating(vendor);
+        vendor.setRating(average);
         vendorRepository.save(vendor);
         return saved;
     }
 
     public List<VendorAssignment> getPendingAssignmentsForVendor(Long vendorId) {
         return assignmentRepository.findByVendorIdAndStatus(vendorId, VendorAssignmentStatus.PENDING);
+    }
+
+    @Transactional
+    public int requestVendorReconfirmationForEventDateChange(Long eventId) {
+        List<VendorAssignment> assignments = assignmentRepository.findByEventId(eventId);
+        LocalDateTime newDeadline = offerDeadline();
+        int reconfirmations = 0;
+        for (VendorAssignment assignment : assignments) {
+            if (assignment.getVendor() == null ||
+                    (assignment.getStatus() != VendorAssignmentStatus.ACCEPTED &&
+                            assignment.getStatus() != VendorAssignmentStatus.PENDING)) {
+                continue;
+            }
+
+            assignment.setStatus(VendorAssignmentStatus.PENDING);
+            assignment.setRespondedAt(null);
+            assignment.setExpiresAt(newDeadline);
+            VendorAssignment saved = assignmentRepository.save(assignment);
+            eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
+            reconfirmations++;
+        }
+        return reconfirmations;
     }
 
     // ============ HELPER METHODS ============
@@ -1000,6 +1183,12 @@ public class VendorService {
 
     @Transactional
     public VendorAssignment forceAssignToOpenAssignment(Long assignmentId, Long vendorId) {
+        return forceAssignToOpenAssignment(
+                assignmentId, vendorId, null, "Coordinator force assignment", null, null);
+    }
+
+    public VendorAssignment forceAssignToOpenAssignment(Long assignmentId, Long vendorId, String category,
+                                                        String reason, Long actorId, String actorUsername) {
         VendorAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment", assignmentId));
 
@@ -1011,6 +1200,17 @@ public class VendorService {
 
         Vendor vendor = vendorRepository.findById(vendorId)
                 .orElseThrow(() -> new EntityNotFoundException("Vendor", vendorId));
+        String assignmentCategory = assignment.getServiceCategory();
+        if (category != null && (assignmentCategory == null
+                || !category.trim().equalsIgnoreCase(assignmentCategory.trim()))) {
+            throw new BusinessException("Requested category does not match the open assignment", "VENDOR_CATEGORY_MISMATCH");
+        }
+        LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
+        validateVendorEligibility(vendor, assignmentCategory, eventDate);
+        String normalizedReason = requireCoordinatorReason(reason);
+        if (!isVendorAvailableForEvent(vendorId, eventDate, assignment.getEvent().getId())) {
+            throw new BusinessException("Vendor is not available on the event date", "VENDOR_UNAVAILABLE");
+        }
 
         workflowEngine.validateAssignmentTransition(
                 VendorAssignmentStatus.OPEN,
@@ -1020,6 +1220,9 @@ public class VendorService {
         assignment.setVendorName(vendor.getCompanyName());
         assignment.setStatus(VendorAssignmentStatus.PENDING);
         assignment.setSelectionReason(SelectionReason.COORDINATOR_FORCED);
+        assignment.setDecisionSnapshot(buildCoordinatorDecisionSnapshot(
+                assignmentCategory, eventDate, vendor, normalizedReason, actorId, actorUsername,
+                SelectionReason.COORDINATOR_FORCED));
         assignment.setAssignedAt(LocalDateTime.now());
         assignment.setExpiresAt(offerDeadline());
         assignment.setRespondedAt(null);
@@ -1109,7 +1312,8 @@ public class VendorService {
                 a.getRespondedAt(),
                 a.getExpiresAt(),
                 a.getDeclineReason(),
-                describeOutcome(a, next)
+                describeOutcome(a, next),
+                a.getDecisionSnapshot()
         );
     }
 

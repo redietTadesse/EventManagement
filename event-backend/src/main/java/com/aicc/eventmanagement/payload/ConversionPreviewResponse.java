@@ -51,7 +51,7 @@ public class ConversionPreviewResponse {
     public static class VendorCandidate {
         private Long vendorId;
         private String companyName;
-        private Integer rating;
+        private Double rating;
         private long currentLoad;
         private double score;
         private int rank;

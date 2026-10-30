@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function ManualAssignModal({ 
   isOpen, 
@@ -9,6 +9,14 @@ export default function ManualAssignModal({
   loading = false 
 }) {
   const [selectedVendorId, setSelectedVendorId] = useState('');
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedVendorId('');
+      setReason('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -17,7 +25,11 @@ export default function ManualAssignModal({
       alert('Please select a vendor');
       return;
     }
-    onAssign(selectedVendorId);
+    if (!reason.trim()) {
+      alert('Please enter a reason for this coordinator assignment');
+      return;
+    }
+    onAssign(selectedVendorId, reason.trim());
   };
 
   return (
@@ -62,6 +74,21 @@ export default function ManualAssignModal({
             </select>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Reason for coordinator override
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="Why are you choosing this vendor?"
+              className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-100 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              disabled={loading}
+            />
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button
               onClick={onClose}
@@ -72,7 +99,7 @@ export default function ManualAssignModal({
             </button>
             <button
               onClick={handleAssign}
-              disabled={loading || !selectedVendorId}
+              disabled={loading || !selectedVendorId || !reason.trim()}
               className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg disabled:opacity-50"
             >
               {loading ? 'Assigning...' : 'Assign Vendor'}

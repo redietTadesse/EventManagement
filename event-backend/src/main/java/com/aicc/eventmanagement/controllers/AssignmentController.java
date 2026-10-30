@@ -69,11 +69,17 @@ public class AssignmentController {
     @Operation(summary = "Manually assign a vendor to an event")
     public ResponseEntity<VendorAssignmentResponse> manualAssign(
             @PathVariable Long eventId,
-            @Valid @RequestBody ManualAssignRequest request) {
+            @Valid @RequestBody ManualAssignRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        var actor = userRepository.findByUsername(principal.getUsername())
+            .orElseThrow(() -> new BusinessException("Coordinator account not found", "ACCESS_DENIED"));
         VendorAssignment assignment = vendorService.manualAssign(
             eventId,
             request.getCategory(),
-            request.getVendorId()
+            request.getVendorId(),
+            request.getReason(),
+            actor.getId(),
+            actor.getUsername()
         );
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
@@ -165,10 +171,17 @@ public class AssignmentController {
     @Operation(summary = "Coordinator force-assigns a vendor to an open/unclaimed assignment")
     public ResponseEntity<VendorAssignmentResponse> forceAssign(
             @PathVariable Long id,
-            @Valid @RequestBody ManualAssignRequest request) {
+            @Valid @RequestBody ManualAssignRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        var actor = userRepository.findByUsername(principal.getUsername())
+            .orElseThrow(() -> new BusinessException("Coordinator account not found", "ACCESS_DENIED"));
         VendorAssignment assignment = vendorService.forceAssignToOpenAssignment(
             id,
-            request.getVendorId()
+            request.getVendorId(),
+            request.getCategory(),
+            request.getReason(),
+            actor.getId(),
+            actor.getUsername()
         );
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }

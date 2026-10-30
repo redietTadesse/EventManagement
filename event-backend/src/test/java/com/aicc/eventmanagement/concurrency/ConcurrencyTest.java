@@ -184,4 +184,61 @@ class ConcurrencyTest {
         assertThat(readCount.get()).isEqualTo(threadCount);
     }
 
+    @Test
+    @DisplayName("Only one vendor can claim an open assignment")
+    void onlyOneVendorWinsAnOpenAssignmentClaim() throws InterruptedException {
+        LocalDate eventDate = testInquiry.getEventDate();
+        Event event = eventRepository.save(Event.builder()
+                .inquiry(testInquiry)
+                .name("Open pool claim event")
+                .status(EventStatus.AWAITING_VENDORS)
+                .requiredCategories("av")
+                .build());
+        Vendor first = vendorRepository.save(Vendor.builder()
+                .companyName("First claim vendor")
+                .serviceCategory("av")
+                .insuranceExpiryDate(eventDate.plusYears(1))
+                .isActive(true)
+                .build());
+        Vendor second = vendorRepository.save(Vendor.builder()
+                .companyName("Second claim vendor")
+                .serviceCategory("av")
+                .insuranceExpiryDate(eventDate.plusYears(1))
+                .isActive(true)
+                .build());
+        VendorAssignment open = assignmentRepository.save(VendorAssignment.builder()
+                .event(event)
+                .serviceCategory("av")
+                .status(VendorAssignmentStatus.OPEN)
+                .build());
+
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        AtomicInteger successfulClaims = new AtomicInteger();
+
+        for (Vendor candidate : List.of(first, second)) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    vendorService.claimOpenAssignment(open.getId(), candidate.getId());
+                    successfulClaims.incrementAndGet();
+                } catch (Exception ignored) {
+                    // The losing claim is expected to receive ASSIGNMENT_ALREADY_CLAIMED.
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await();
+        executor.shutdown();
+
+        VendorAssignment claimed = assignmentRepository.findById(open.getId()).orElseThrow();
+        assertThat(successfulClaims.get()).isEqualTo(1);
+        assertThat(claimed.getStatus()).isEqualTo(VendorAssignmentStatus.PENDING);
+        assertThat(List.of(first.getId(), second.getId())).contains(claimed.getVendor().getId());
+    }
+
 }

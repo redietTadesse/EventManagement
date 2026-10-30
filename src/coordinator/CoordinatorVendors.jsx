@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import api from '../api/axios';
+import VendorPerformanceModal from '../components/VendorPerformanceModal';
 
 export default function CoordinatorVendors() {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({ category: '', search: '', active: '' });
+  const [selectedVendor, setSelectedVendor] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -117,9 +119,21 @@ export default function CoordinatorVendors() {
                 <span>📞 {vendor.phone || 'N/A'}</span>
                 <span>✉️ {vendor.email || 'N/A'}</span>
               </div>
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVendor(vendor.id)}
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                >
+                  View Profile
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      )}
+      {selectedVendor && (
+        <VendorPerformanceModal vendorId={selectedVendor} onClose={() => setSelectedVendor(null)} />
       )}
     </Layout>
   );

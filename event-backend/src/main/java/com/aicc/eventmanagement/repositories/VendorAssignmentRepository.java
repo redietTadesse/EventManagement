@@ -107,6 +107,18 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("date") LocalDate date
     );
 
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "JOIN va.event e JOIN e.inquiry i " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status IN ('PENDING', 'ACCEPTED') " +
+            "AND i.eventDate = :date " +
+            "AND e.id <> :excludedEventId")
+    boolean hasActiveAssignmentOnDateExcludingEvent(
+            @Param("vendorId") Long vendorId,
+            @Param("date") LocalDate date,
+            @Param("excludedEventId") Long excludedEventId
+    );
+
     /**
      * Workload per vendor, used by the ranking service for load balancing.
      * Counts PENDING as well as ACCEPTED: a vendor already holding a pending offer is
@@ -117,6 +129,18 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "AND va.status IN ('ACCEPTED', 'PENDING') " +
             "GROUP BY va.vendor.id")
     List<Object[]> countActiveAssignmentsByVendors(@Param("vendorIds") List<Long> vendorIds);
+
+    @Query("SELECT va.vendor.id, COUNT(va) FROM VendorAssignment va " +
+            "WHERE va.vendor.id IN :vendorIds " +
+            "GROUP BY va.vendor.id")
+    List<Object[]> countAllAssignmentsByVendors(@Param("vendorIds") List<Long> vendorIds);
+
+    @Query("SELECT va.vendor.id, AVG(va.vendorRating) FROM VendorAssignment va " +
+            "WHERE va.vendor.id IN :vendorIds " +
+            "AND va.status = 'COMPLETED' " +
+            "AND va.vendorRating IS NOT NULL " +
+            "GROUP BY va.vendor.id")
+    List<Object[]> averageCompletedRatingsByVendors(@Param("vendorIds") List<Long> vendorIds);
 
     @Query("SELECT COUNT(va) FROM VendorAssignment va " +
             "WHERE va.vendor.id = :vendorId " +

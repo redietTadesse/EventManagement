@@ -47,6 +47,7 @@ public record VendorTrailResponse(
             LocalDateTime respondedAt,
             LocalDateTime expiresAt,
             String declineReason,
-            String outcome
+            String outcome,
+            String decisionSnapshot
     ) {}
 }

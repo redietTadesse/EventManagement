@@ -8,6 +8,8 @@ export default function VendorManagement() {
     const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [toast, setToast] = useState('');
+    const [recalculating, setRecalculating] = useState(false);
     const [filters, setFilters] = useState({
         category: '',
         search: '',
@@ -52,6 +54,22 @@ export default function VendorManagement() {
         }
     };
 
+    const handleRecalculateRatings = async () => {
+        if (!window.confirm('Recalculate ratings for all vendors?')) return;
+        setRecalculating(true);
+        setToast('');
+        setError('');
+        try {
+            const response = await api.post('/vendors/recalculate-ratings');
+            await fetchVendors();
+            setToast(response.data?.message || 'Vendor ratings recalculated successfully.');
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to recalculate vendor ratings.');
+        } finally {
+            setRecalculating(false);
+        }
+    };
+
     return (
         <Layout title="Vendor Management">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -59,13 +77,28 @@ export default function VendorManagement() {
                     <h1 className="text-2xl font-bold text-gray-800">Vendors</h1>
                     <p className="text-sm text-gray-500">Manage all service providers</p>
                 </div>
-                <Link
-                    to="/admin/vendors/new"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                    + Add Vendor
-                </Link>
+                <div className="flex flex-wrap items-end gap-3">
+                    <section aria-label="Maintenance" className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Maintenance</p>
+                        <button
+                            type="button"
+                            onClick={handleRecalculateRatings}
+                            disabled={recalculating}
+                            className="text-sm font-medium text-indigo-700 hover:text-indigo-800 disabled:opacity-50"
+                        >
+                            {recalculating ? 'Recalculating…' : 'Recalculate Ratings'}
+                        </button>
+                    </section>
+                    <Link
+                        to="/admin/vendors/new"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                    >
+                        + Add Vendor
+                    </Link>
+                </div>
             </div>
+
+            {toast && <div role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{toast}</div>}
 
             {/* Filters */}
             <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-4 mb-6 flex flex-wrap gap-3">

@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import api from '../api/axios';
 
+function parseDecisionSnapshot(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 export default function VendorTrailDrawer({ isOpen, onClose, eventId }) {
   const [trail, setTrail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,8 +58,14 @@ export default function VendorTrailDrawer({ isOpen, onClose, eventId }) {
               </div>
               
               <div className="space-y-2">
-                {cat.attempts.map(attempt => (
-                  <div key={attempt.id} className="bg-slate-900/30 border border-slate-800 rounded-lg p-3">
+                {cat.attempts.map(attempt => {
+                  const snapshot = parseDecisionSnapshot(attempt.decisionSnapshot);
+                  const candidates = [
+                    ...(snapshot?.considered || []),
+                    ...(snapshot?.excluded || [])
+                  ];
+                  return (
+                  <div key={attempt.assignmentId || attempt.attemptNumber} className="bg-slate-900/30 border border-slate-800 rounded-lg p-3">
                     <div className="flex justify-between items-start mb-2">
                       <span className="font-medium text-sm text-slate-100">{attempt.vendorName || 'Vendor Pool'}</span>
                       <span className="text-xs font-semibold text-slate-400">{attempt.status}</span>
@@ -63,8 +78,52 @@ export default function VendorTrailDrawer({ isOpen, onClose, eventId }) {
                     {attempt.declineReason && (
                       <p className="text-xs text-rose-400 mt-2 italic">"{attempt.declineReason}"</p>
                     )}
+                    {snapshot && (
+                      <details className="mt-3 border-t border-slate-800 pt-2">
+                        <summary className="cursor-pointer text-xs font-semibold text-indigo-300">
+                          Why this vendor was selected
+                        </summary>
+                        {snapshot.reasoning && (
+                          <p className="text-xs text-slate-300 mt-2">{snapshot.reasoning}</p>
+                        )}
+                        {snapshot.actor?.username && (
+                          <p className="text-xs text-slate-400 mt-1">
+                            Assigned by {snapshot.actor.username}
+                            {snapshot.actor.userId ? ` (user ${snapshot.actor.userId})` : ''}
+                          </p>
+                        )}
+                        {candidates.length > 0 && (
+                          <div className="overflow-x-auto mt-2">
+                            <table className="w-full text-xs text-left">
+                              <thead className="text-slate-500">
+                                <tr>
+                                  <th className="py-1 pr-2">Vendor</th>
+                                  <th className="py-1 pr-2">Score</th>
+                                  <th className="py-1">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {candidates.map((candidate, index) => (
+                                  <tr key={`${candidate.vendorId || candidate.vendorName}-${index}`} className="border-t border-slate-800">
+                                    <td className="py-1 pr-2 text-slate-200">{candidate.vendorName || 'Unknown vendor'}</td>
+                                    <td className="py-1 pr-2 text-slate-300">
+                                      {candidate.score == null ? '—' : `${candidate.score}/100`}
+                                    </td>
+                                    <td className="py-1 text-slate-300">
+                                      {candidate.status || 'Unavailable'}
+                                      {candidate.reason ? ` · ${candidate.reason}` : ''}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </details>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
