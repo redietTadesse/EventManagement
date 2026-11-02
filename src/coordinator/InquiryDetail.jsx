@@ -9,8 +9,8 @@ import { useApp } from '../context/AppContext';
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, fetchInquiryById, downloadInquiryQuote, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
-  const { loading } = state;
+  const { fetchInquiryById, downloadInquiryQuote, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
+  const [loading, setLoading] = useState(true);
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -24,13 +24,15 @@ export default function InquiryDetail() {
   const [quoteError, setQuoteError] = useState('');
 
   const loadInquiry = useCallback(async () => {
-    const data = await fetchInquiryById(id);
-    if (data) {
+    setLoading(true);
+    try {
+      const data = await fetchInquiryById(id);
       setInquiry(data);
       setError('');
-    } else {
-      setError('Failed to load inquiry');
-    }
+    } catch (err) {
+      setInquiry(null);
+      setError(err.response?.data?.message || 'Could not load inquiry.');
+    } finally { setLoading(false); }
   }, [id, fetchInquiryById]);
 
   useEffect(() => {
@@ -91,13 +93,13 @@ export default function InquiryDetail() {
         );
       }
 
-      await convertInquiryToEvent(id, {
+      const createdEvent = await convertInquiryToEvent(id, {
         name: defaultName,
         venue: venueTaken ? null : (preview?.venue?.venueName || null),
         venueId: venueTaken ? null : (preview?.venue?.venueId || null),
       });
       setShowPreview(false);
-      navigate('/coordinator/dashboard');
+      navigate(`/coordinator/events/${createdEvent.id}`);
     } catch (err) {
       console.error('Convert error:', err);
       console.error('Error response:', err.response?.data);
@@ -108,7 +110,7 @@ export default function InquiryDetail() {
     }
   };
 
-  if (loading || !inquiry) {
+  if (loading) {
     return (
       <Layout title="Inquiry Detail">
         <div className="text-center py-10">Loading...</div>
@@ -116,10 +118,12 @@ export default function InquiryDetail() {
     );
   }
 
-  if (error && !inquiry) {
+  if (!inquiry) {
     return (
       <Layout title="Inquiry Detail">
         <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>
+        <button onClick={loadInquiry} className="mt-4 text-indigo-700 underline">Retry</button>
+        <button onClick={() => navigate('/coordinator/inquiries')} className="ml-4 text-indigo-700 underline">Back to inquiries</button>
       </Layout>
     );
   }

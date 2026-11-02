@@ -11,12 +11,12 @@ export default function OpenAssignments() {
   const [error, setError] = useState('');
   const [claiming, setClaiming] = useState(null); // assignment id being claimed
 
-  const load = async () => {
+  const load = async (keepError = false) => {
     setLoading(true);
     try {
       const list = await fetchOpenAssignments();
       setOpen(list || []);
-      setError('');
+      if (!keepError) setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load open assignments');
     } finally {
@@ -38,7 +38,7 @@ export default function OpenAssignments() {
       setError((raw && (raw.message || raw.code)) || 'Could not claim assignment');
       setClaiming(null);
       // Refresh in case it was claimed by another vendor
-      load();
+      load(true);
     }
   };
 
@@ -60,9 +60,9 @@ export default function OpenAssignments() {
           </p>
         </div>
 
-        {error && <div role="alert" className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>}
+        {error && <div role="alert" className="bg-red-100 text-red-700 p-3 rounded-lg">{error} <button onClick={() => load()} className="underline">Retry</button></div>}
 
-        {open.length === 0 ? (
+        {error && open.length === 0 ? null : open.length === 0 ? (
           <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
             No open assignments in your category right now.
           </div>

@@ -10,44 +10,45 @@ function parseDecisionSnapshot(value) {
   }
 }
 
-export default function VendorDecisionHistory({ eventId }) {
+export default function VendorDecisionHistory({ eventId, refreshKey = 0, expandedCategory = null }) {
   const [trail, setTrail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!eventId) return;
     let active = true;
     setLoading(true);
     setError('');
-    setTrail(null);
     api.get(`/events/${eventId}/vendor-trail`)
       .then(res => { if (active) setTrail(res.data); })
       .catch(err => { if (active) setError(err.response?.data?.message || 'Failed to load decision history'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [eventId]);
+  }, [eventId, refreshKey, retryCount]);
 
   if (!eventId) return null;
 
   return (
     <section id="vendor-decision-history" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 text-slate-100 shadow-lg">
       <div className="border-b border-slate-800 bg-slate-900/50 px-4 py-4 sm:px-6">
-        <h2 className="text-lg font-bold text-slate-100">Decision history</h2>
+        <h2 className="text-lg font-bold text-slate-100">Vendor assignment history</h2>
         <p className="text-xs text-slate-400">Recorded vendor offers, rankings, exclusions, and outcomes</p>
       </div>
 
         <div className="space-y-6 p-4 sm:p-6">
           {loading && <div className="text-center text-gray-500">Loading trail...</div>}
-          {error && <div className="text-rose-500">{error}</div>}
+          {error && <div role="alert" className="text-sm text-rose-300">{error} <button type="button" onClick={() => setRetryCount(value => value + 1)} className="underline">Retry</button></div>}
           
           {trail && trail.categories.length === 0 && !loading && (
             <p className="text-sm text-slate-400">No required vendor categories or assignment attempts are recorded for this event.</p>
           )}
           {trail && trail.categories.map(cat => (
-            <div key={cat.category} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-100 uppercase text-sm">{cat.category}</h3>
+            <details key={`${cat.category}-${expandedCategory || 'all'}`} open={expandedCategory === cat.category} className="space-y-3">
+              <summary className="cursor-pointer rounded-lg border border-slate-700 p-3 text-sm font-bold text-slate-100">
+                <span className="mr-3 uppercase">{cat.category}</span>
+                <span className="mr-3 font-normal text-slate-400">{cat.attempts.length} {cat.attempts.length === 1 ? 'attempt' : 'attempts'}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                   cat.state === 'RESOLVED' ? 'bg-emerald-500/20 text-emerald-400' :
                   cat.state === 'PENDING' ? 'bg-amber-500/20 text-amber-400' :
@@ -55,7 +56,7 @@ export default function VendorDecisionHistory({ eventId }) {
                 }`}>
                   {cat.state}
                 </span>
-              </div>
+              </summary>
               
               <div className="space-y-2">
                 {cat.attempts.map(attempt => {
@@ -78,7 +79,7 @@ export default function VendorDecisionHistory({ eventId }) {
                       <p className="text-xs text-indigo-300 mt-2">Decision: {attempt.reason}</p>
                     )}
                     {snapshot && (
-                      <details open className="mt-3 border-t border-slate-800 pt-2">
+                      <details className="mt-3 border-t border-slate-800 pt-2">
                         <summary className="cursor-pointer text-xs font-semibold text-indigo-300">
                           Review the recorded decision
                         </summary>
@@ -135,7 +136,7 @@ export default function VendorDecisionHistory({ eventId }) {
                   );
                 })}
               </div>
-            </div>
+            </details>
           ))}
         </div>
     </section>

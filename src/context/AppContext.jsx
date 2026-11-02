@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import api, { authApi } from '../api/axios';
 import { useToast } from './ToastContext';
+import { normalizeVendor } from '../utils/vendors';
 
 /**
  * Single source of truth for application state.
@@ -41,7 +42,11 @@ const reducer = (state, action) => {
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, initial => ({
+    ...initial,
+    // Keep protected deep links in place until the stored session is restored.
+    loading: Boolean(localStorage.getItem('token')),
+  }));
   const { showToast } = useToast();
 
   // Restore session from stored token on mount
@@ -105,8 +110,9 @@ export const AppProvider = ({ children }) => {
 
   const fetchVendors = useCallback(async () => {
     const res = await api.get('/vendors');
-    dispatch({ type: 'SET_VENDORS', payload: res.data });
-    return res.data;
+    const vendors = res.data.map(normalizeVendor);
+    dispatch({ type: 'SET_VENDORS', payload: vendors });
+    return vendors;
   }, []);
 
   const toggleUserStatus = useCallback(async (userId) => {
@@ -272,7 +278,9 @@ export const AppProvider = ({ children }) => {
   const convertInquiryToEvent = useCallback(async (inquiryId, eventData) => {
     try {
       const res = await api.post(`/inquiries/${inquiryId}/convert`, eventData);
-      await fetchInquiries();
+      fetchInquiries().catch((refreshError) => {
+        console.warn('Event was created, but inquiries could not be refreshed.', refreshError);
+      });
       showToast('Event created successfully', 'success');
       return res.data;
     } catch (err) {

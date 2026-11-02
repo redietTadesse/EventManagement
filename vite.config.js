@@ -7,6 +7,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  optimizeDeps: {
+    // Prebundle the calendar adapter and plugins together after version changes.
+    include: ['@fullcalendar/react', '@fullcalendar/daygrid', '@fullcalendar/interaction'],
+  },
   server: {
     port: 5173,
     proxy: {

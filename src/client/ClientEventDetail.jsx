@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
+import api from '../api/axios';
 
 export default function ClientEventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { fetchInquiryById, fetchAssignmentsForEvent } = useApp();
+  const { fetchAssignmentsForEvent } = useApp();
 
   const [event, setEvent] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -17,16 +18,13 @@ export default function ClientEventDetail() {
   useEffect(() => {
     const loadEvent = async () => {
       setLoading(true);
+      setEvent(null);
+      setAssignments([]);
       try {
-        // Load inquiry first to get event info
-        const inquiryData = await fetchInquiryById(id);
-        setEvent(inquiryData);
-        
-        // If event exists, load assignments
-        if (inquiryData.event) {
-          const assignmentsData = await fetchAssignmentsForEvent(inquiryData.event.id);
-          setAssignments(assignmentsData || []);
-        }
+        const { data } = await api.get(`/events/${id}`);
+        setEvent(data);
+        const assignmentsData = await fetchAssignmentsForEvent(data.id);
+        setAssignments(assignmentsData || []);
         
         setError('');
       } catch (err) {
@@ -37,7 +35,7 @@ export default function ClientEventDetail() {
     };
     
     loadEvent();
-  }, [id, fetchInquiryById, fetchAssignmentsForEvent]);
+  }, [id, fetchAssignmentsForEvent]);
 
   if (loading) {
     return (
@@ -58,7 +56,7 @@ export default function ClientEventDetail() {
     );
   }
 
-  const eventData = event?.event || {};
+  const eventData = event || {};
   const assignmentsByCategory = assignments.reduce((acc, assignment) => {
     const category = assignment.serviceCategory || 'Unknown';
     if (!acc[category]) {

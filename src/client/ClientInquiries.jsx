@@ -3,14 +3,11 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
+import useApiResource from '../hooks/useApiResource';
 
 export default function ClientInquiries() {
-  const { state, fetchMyInquiries } = useApp();
-  const { currentUser, inquiries, loading } = state;
-
-  useEffect(() => {
-    if (currentUser?.id != null) fetchMyInquiries(currentUser.id).catch(() => {});
-  }, [fetchMyInquiries, currentUser?.id]);
+  const { state: { currentUser } } = useApp();
+  const { data: inquiries, loading, error, reload } = useApiResource(currentUser?.id ? `/inquiries/client/${currentUser.id}` : null);
 
   const myInquiries = inquiries.filter(i => i.clientId === currentUser?.id);
 
@@ -30,7 +27,7 @@ export default function ClientInquiries() {
           </Link>
         </div>
 
-        {loading ? (
+        {error ? <div role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{error} <button onClick={reload} className="underline">Retry</button></div> : loading ? (
           <div className="text-center py-10 text-gray-500">Loading…</div>
         ) : myInquiries.length === 0 ? (
           <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">

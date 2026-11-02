@@ -34,12 +34,13 @@ const Navbar = () => {
       { to: '/coordinator/venues', label: 'Venues' },
     ],
     ADMIN: [
+      { to: '/admin/dashboard', label: 'Dashboard' },
       { to: '/admin/vendors', label: 'Vendors' },
       { to: '/admin/venues', label: 'Venues' },
     ],
   }[currentUser.role] || [];
 
-  const initials = currentUser.fullName.split(' ').map((w) => w[0]).join('');
+  const initials = (currentUser.fullName || currentUser.username || 'User').split(' ').map((w) => w[0]).join('');
 
   const handleLogout = () => {
     logout();

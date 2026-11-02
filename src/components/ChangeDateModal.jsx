@@ -48,8 +48,8 @@ export default function ChangeDateModal({ isOpen, onClose, eventId, currentDate,
     setSaving(true);
     setError('');
     try {
-      await api.put(`/events/${eventId}/date`, null, { params: { newDate } });
-      await onDateChanged?.(newDate);
+      const response = await api.put(`/events/${eventId}/date`, null, { params: { newDate } });
+      await onDateChanged?.(newDate, response.data);
       onClose();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to update the event date.');

@@ -4,24 +4,14 @@ import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
 import { useApp } from '../context/AppContext';
+import useApiResource from '../hooks/useApiResource';
 
 export default function ClientDashboard() {
-  const { state, fetchMyInquiries } = useApp();
-  const { currentUser, inquiries, loading } = state;
-  const [events, setEvents] = useState([]);
-
-  useEffect(() => {
-    if (currentUser?.id != null) fetchMyInquiries(currentUser.id).catch(() => {});
-  }, [fetchMyInquiries, currentUser?.id]);
-
-  useEffect(() => {
-    // Filter inquiries that have been converted to events
-    const myEvents = inquiries.filter(i => 
-      i.clientId === currentUser?.id && 
-      (i.event || i.status === 'EVENT_CREATED' || i.status === 'CONFIRMED' || i.status === 'COMPLETED')
-    );
-    setEvents(myEvents);
-  }, [inquiries, currentUser?.id]);
+  const { state: { currentUser } } = useApp();
+  const inquiryResource = useApiResource(currentUser?.id ? `/inquiries/client/${currentUser.id}` : null);
+  const eventResource = useApiResource('/events');
+  const { data: inquiries, loading } = inquiryResource;
+  const { data: events } = eventResource;
 
   const myInquiries = inquiries.filter(i => i.clientId === currentUser?.id);
   
@@ -49,30 +39,31 @@ export default function ClientDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Total Inquiries</p>
-            <p className="text-2xl font-bold text-gray-800">{stats.totalInquiries}</p>
+            <p className="text-2xl font-bold text-gray-800">{loading || inquiryResource.error ? '—' : stats.totalInquiries}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pendingInquiries}</p>
+            <p className="text-2xl font-bold text-yellow-600">{loading || inquiryResource.error ? '—' : stats.pendingInquiries}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Proposals</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.proposals}</p>
+            <p className="text-2xl font-bold text-blue-600">{loading || inquiryResource.error ? '—' : stats.proposals}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Events</p>
-            <p className="text-2xl font-bold text-indigo-600">{stats.events}</p>
+            <p className="text-2xl font-bold text-indigo-600">{eventResource.loading || eventResource.error ? '—' : stats.events}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Confirmed</p>
-            <p className="text-2xl font-bold text-green-600">{stats.confirmedEvents}</p>
+            <p className="text-2xl font-bold text-green-600">{eventResource.loading || eventResource.error ? '—' : stats.confirmedEvents}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Completed</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.completedEvents}</p>
+            <p className="text-2xl font-bold text-purple-600">{eventResource.loading || eventResource.error ? '—' : stats.completedEvents}</p>
           </div>
         </div>
 
+        {(inquiryResource.error || eventResource.error) && <div role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{inquiryResource.error || eventResource.error} <button onClick={() => { inquiryResource.reload(); eventResource.reload(); }} className="underline">Retry</button></div>}
         {/* Quick Actions */}
         <div className="flex flex-wrap gap-4">
           <Link
@@ -101,7 +92,7 @@ export default function ClientDashboard() {
           </div>
           {loading ? (
             <div className="p-6 text-center text-slate-500">Loading...</div>
-          ) : myInquiries.length === 0 ? (
+          ) : inquiryResource.error ? <p className="p-6 text-rose-700">Inquiries are temporarily unavailable.</p> : myInquiries.length === 0 ? (
             <EmptyState
               icon="📋"
               title="No inquiries yet"
@@ -156,12 +147,12 @@ export default function ClientDashboard() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
                         <h3 className="font-semibold text-gray-800">
-                          {event.event?.name || event.eventType}
+                          {event.name}
                         </h3>
-                        <StatusBadge status={event.event?.status || event.status} />
+                        <StatusBadge status={event.status} />
                       </div>
                       <p className="text-sm text-gray-500 mt-1">
-                        {event.eventDate} · {event.event?.venue || 'Venue TBD'}
+                        {event.eventDate} · {event.venue || 'Venue TBD'}
                       </p>
                     </div>
                     <Link 

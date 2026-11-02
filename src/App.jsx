@@ -5,6 +5,7 @@ import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
 import PortalSelect from './components/PortalSelect';
+import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
 import VendorApplication from './components/VendorApplication';
 
@@ -24,6 +25,7 @@ import Venues from './coordinator/Venues';
 import VenueDetail from './coordinator/VenueDetail';
 import MasterCalendar from './components/MasterCalendar';
 import AvailabilityGrid from './coordinator/AvailabilityGrid';
+import CoordinatorVendors from './coordinator/CoordinatorVendors';
 
 import VendorDashboard from './vendor/VendorDashboard';
 import MyAssignments from './vendor/MyAssignments';
@@ -63,10 +65,7 @@ function AppRoutes() {
         <Route path="/coordinator/venues/:id" element={<VenueDetail />} />
         <Route path="/coordinator/calendar" element={<MasterCalendar />} />
         <Route path="/coordinator/availability" element={<AvailabilityGrid />} />
-        {/* Uncomment only if the backend authorizes COORDINATOR on
-            PATCH /vendors/{id}/toggle-active:
-        <Route path="/coordinator/vendors" element={<VendorManagement />} />
-        */}
+        <Route path="/coordinator/vendors" element={<CoordinatorVendors />} />
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
@@ -95,7 +94,7 @@ function App() {
     <ToastProvider>
       <AppProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <PageErrorBoundary><AppRoutes /></PageErrorBoundary>
         </BrowserRouter>
       </AppProvider>
     </ToastProvider>

@@ -3,13 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
+import { vendorUpdate } from '../utils/vendors';
 
 export default function VendorForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = !!id;
-  const { state, fetchUsers, createVendor } = useApp();
-  const { users } = state;
+  const { createVendor } = useApp();
 
   const [form, setForm] = useState({
     username: '',
@@ -25,6 +25,8 @@ export default function VendorForm() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(isEdit);
+  const [loaded, setLoaded] = useState(!isEdit);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
 
@@ -35,20 +37,20 @@ export default function VendorForm() {
   }, []);
 
   useEffect(() => {
-    if (isEdit) {
-      const vendor = users.find(u => u.id === parseInt(id));
-      if (vendor) {
-        setForm({
-          ...form,
-          username: vendor.username || '',
-          email: vendor.email || '',
-          fullName: vendor.fullName || '',
-          companyName: vendor.fullName || '',
-          isActive: vendor.isActive !== undefined ? vendor.isActive : true
-        });
+    if (!isEdit) return;
+    let cancelled = false;
+    setFetching(true);
+    setLoaded(false);
+    api.get(`/vendors/${id}`).then(({ data }) => {
+      if (!cancelled) {
+        setForm(previous => ({ ...previous, ...data, insuranceExpiryDate: data.insuranceExpiryDate || '', description: data.description || '', phone: data.phone || '', email: data.email || '' }));
+        setLoaded(true);
       }
-    }
-  }, [id, users]);
+    }).catch(err => {
+      if (!cancelled) setError(err.response?.data?.message || 'Could not load vendor.');
+    }).finally(() => { if (!cancelled) setFetching(false); });
+    return () => { cancelled = true; };
+  }, [id, isEdit]);
 
   const handleChange = (e) => {
     setForm({...form, [e.target.name]: e.target.value});
@@ -61,8 +63,8 @@ export default function VendorForm() {
 
     try {
       if (isEdit) {
-        // Update logic would go here
-        navigate('/admin/vendors');
+        await api.put(`/vendors/${id}`, vendorUpdate(form));
+        navigate(`/admin/vendors/${id}`);
       } else {
         await createVendor({
           username: form.username,
@@ -72,6 +74,7 @@ export default function VendorForm() {
           companyName: form.companyName,
           serviceCategory: form.serviceCategory,
           phone: form.phone,
+          description: form.description,
           insuranceExpiryDate: form.insuranceExpiryDate || null
         });
         navigate('/admin/vendors');
@@ -98,6 +101,7 @@ export default function VendorForm() {
           </h1>
         </div>
 
+        {fetching && <p role="status">Loading vendor…</p>}
         <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-4">
           {error && (
             <div className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>
@@ -152,6 +156,10 @@ export default function VendorForm() {
               </div>
             </>
           )}
+          {isEdit && <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="vendor-email">Email *</label>
+            <input id="vendor-email" type="email" name="email" value={form.email} onChange={handleChange} required className="w-full px-4 py-2 border rounded-lg" />
+          </div>}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
             <input
@@ -216,7 +224,7 @@ export default function VendorForm() {
           <div className="flex items-center gap-4 pt-4 border-t">
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || fetching || !loaded || !categories.length}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50"
             >
               {loading ? 'Saving...' : isEdit ? 'Update Vendor' : 'Create Vendor'}

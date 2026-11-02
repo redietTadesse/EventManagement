@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
 const ToastContext = createContext();
+let nextToastId = 0;
 
 export const useToast = () => {
   const context = useContext(ToastContext);
@@ -14,8 +15,10 @@ export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
 
   const showToast = useCallback((message, type = 'success', duration = 3000, persistent = false) => {
-    const id = Date.now();
-    const toast = { id, message, type, persistent };
+    const id = ++nextToastId;
+    const text = typeof message === 'string' ? message :
+      typeof message?.message === 'string' ? message.message : 'The action could not be completed.';
+    const toast = { id, message: text, type, persistent };
 
     setToasts((prev) => [...prev, toast]);
 

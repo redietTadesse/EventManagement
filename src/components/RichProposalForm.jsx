@@ -3,6 +3,7 @@ import { pricingTiers } from '../utils/constants';
 import { useApp } from '../context/AppContext';
 import VendorSuggestions from './VendorSuggestions';
 import api from '../api/axios';
+import { proposalDraft } from '../utils/proposals';
 
 /**
  * Coordinator proposal composer.
@@ -50,22 +51,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           ? JSON.parse(inquiry.proposal)
           : inquiry.proposal;
 
-        setFormData({
-          venueId: proposal.venueId?.toString() || '',
-          pricingTier: proposal.pricingTier || 'basic',
-          customPrice: '',
-          terms: proposal.terms || '',
-          vendorShortlist: {},
-        });
-
-        // Parse vendor shortlist back to ID arrays
-        if (Array.isArray(proposal.vendorShortlist)) {
-          const shortlistMap = {};
-          proposal.vendorShortlist.forEach(cat => {
-            shortlistMap[cat.category] = cat.vendors.map(v => v.id);
-          });
-          setFormData(prev => ({ ...prev, vendorShortlist: shortlistMap }));
-        }
+        setFormData(proposalDraft(proposal));
 
         if (proposal.categories?.length) {
           setSelectedCategories(proposal.categories);
@@ -164,7 +150,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       // Only include categories the coordinator actually chose, and always as arrays of numbers.
       const shortlist = Object.fromEntries(
         Object.entries(formData.vendorShortlist)
-          .filter(([, ids]) => ids && ids.length > 0)
+          .filter(([category, ids]) => selectedCategories.includes(category) && ids && ids.length > 0)
           .map(([category, ids]) => [category, ids.map(id => Number(id))])
       );
 

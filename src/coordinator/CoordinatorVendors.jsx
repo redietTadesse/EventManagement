@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import api from '../api/axios';
 import VendorPerformanceModal from '../components/VendorPerformanceModal';
+import { normalizeVendor } from '../utils/vendors';
+import { Link } from 'react-router-dom';
 
 export default function CoordinatorVendors() {
   const [vendors, setVendors] = useState([]);
@@ -15,7 +17,7 @@ export default function CoordinatorVendors() {
       setLoading(true);
       try {
         const res = await api.get('/vendors');
-        setVendors(res.data);
+        setVendors(res.data.map(normalizeVendor));
       } catch {
         setError('Failed to load vendors');
       } finally {
@@ -40,6 +42,7 @@ export default function CoordinatorVendors() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Vendors</h1>
         <p className="text-sm text-gray-500">Directory of service providers. Activation is managed by an administrator.</p>
+        <Link to="/coordinator/availability" className="mt-2 inline-block text-sm text-indigo-700 underline">View vendor availability</Link>
       </div>
 
       <div className="bg-white rounded-xl shadow p-4 mb-6 flex flex-wrap gap-3">

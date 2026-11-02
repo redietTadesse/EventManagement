@@ -55,7 +55,7 @@ export default function Login() {
     setError('');
     setNotice('');
     try {
-      if (portalKey === 'client') {
+      if (!portalKey || portalKey === 'client') {
         await registerClient(form);
         setMode('signin');
         setNotice('Account created. Sign in with your new username and password.');
@@ -290,7 +290,7 @@ export default function Login() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes blob {
           0% {
             transform: translate(0px, 0px) scale(1);

@@ -2,102 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import PipelineLadder from '../components/PipelineLadder';
+import EventVendorTable from './EventVendorTable';
 import AuditTimeline from '../components/AuditTimeline';
 import VendorDecisionHistory from '../components/VendorTrailDrawer';
 import ManualAssignModal from '../components/ManualAssignModal';
-import VendorSuggestions from '../components/VendorSuggestions';
 import EventReadinessWidget from '../components/EventReadinessWidget';
 import ChangeDateModal from '../components/ChangeDateModal';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
-
-const RESOLVED_ASSIGNMENT_STATUSES = new Set(['ACCEPTED', 'COMPLETED']);
-const EXHAUSTED_ASSIGNMENT_STATUSES = new Set(['DECLINED', 'EXPIRED', 'OPEN', 'CANCELLED']);
-
-function getCategoryRollup(category, assignmentsByCategory) {
-  const attempts = [...(assignmentsByCategory[category] || [])]
-    .sort((left, right) => Number(left.id || 0) - Number(right.id || 0));
-  const resolvedAttempt = attempts.find(attempt => RESOLVED_ASSIGNMENT_STATUSES.has(attempt.status));
-  if (resolvedAttempt) return { category, state: 'resolved' };
-
-  const latest = attempts.at(-1);
-  if (!latest) return { category, state: 'exhausted', reason: 'no vendor offer exists' };
-  if (latest.status === 'PENDING') {
-    return { category, state: 'pending', vendorName: latest.vendorName || 'a vendor' };
-  }
-
-  const reasonByStatus = {
-    OPEN: 'the vendor-pool offer is unclaimed',
-    DECLINED: `the latest offer${latest.vendorName ? ` to ${latest.vendorName}` : ''} was declined`,
-    EXPIRED: `the latest offer${latest.vendorName ? ` to ${latest.vendorName}` : ''} expired`,
-    CANCELLED: 'the latest vendor offer was cancelled',
-  };
-  return {
-    category,
-    state: 'exhausted',
-    reason: reasonByStatus[latest.status] || 'there is no active vendor offer',
-  };
-}
-
-function getEventStatusReason(status, categoryRollups) {
-  const exhausted = categoryRollups.filter(category => category.state === 'exhausted');
-  const pending = categoryRollups.filter(category => category.state === 'pending');
-  const resolved = categoryRollups.filter(category => category.state === 'resolved');
-  const total = categoryRollups.length;
-  const list = values => values.length === 1
-    ? values[0]
-    : `${values.slice(0, -1).join(', ')} and ${values.at(-1)}`;
-  const label = value => value.replace(/_/g, ' ');
-
-  const expectedRollup = exhausted.length > 0
-    ? 'NEEDS_COORDINATOR'
-    : total > 0 && resolved.length === total
-      ? 'CONFIRMED'
-      : 'AWAITING_VENDORS';
-  if (total > 0
-      && ['NEEDS_COORDINATOR', 'AWAITING_VENDORS', 'CONFIRMED'].includes(status)
-      && status !== expectedRollup) {
-    const detailItems = exhausted.length
-      ? exhausted.map(category => `${label(category.category)}: ${category.reason}`)
-      : pending.map(category => `${label(category.category)} is awaiting a response from ${category.vendorName}`);
-    const details = detailItems.length ? list(detailItems) : 'all required service categories are resolved';
-    return `Saved status is ${label(status)}, but current vendor attempts indicate ${label(expectedRollup)}: ${details}.`;
-  }
-
-  if (status === 'NEEDS_COORDINATOR') {
-    const blockers = exhausted.map(category => `${label(category.category)}: ${category.reason}`);
-    const waiting = pending.map(category => `${label(category.category)} is awaiting a response from ${category.vendorName}`);
-    const detail = blockers.length ? list(blockers) : 'one or more required categories have no active offer';
-    const waitingText = waiting.length ? ` ${list(waiting)}.` : '';
-    return `Needs coordinator because ${detail}.${waitingText} Confirmation requires an accepted or completed assignment in every required service category.`;
-  }
-  if (status === 'AWAITING_VENDORS') {
-    const waiting = pending.map(category => `${label(category.category)} is awaiting a response from ${category.vendorName}`);
-    const detail = waiting.length ? list(waiting) : 'vendor coordination is still in progress';
-    return `Awaiting vendors because ${detail}. Confirmation requires every required service category to have an accepted or completed assignment.`;
-  }
-  if (status === 'CONFIRMED') {
-    return total
-      ? `Confirmed because all ${total} required service ${total === 1 ? 'category has' : 'categories have'} an accepted or completed assignment.`
-      : 'Confirmed; no unresolved external vendor categories are recorded for this event.';
-  }
-  if (status === 'EVENT_CREATED') return 'The event exists, but vendor coordination has not yet reached its final rollup.';
-  if (status === 'COMPLETED') return 'The event is recorded as completed.';
-  if (status === 'CANCELLED') return 'The event is cancelled; its active vendor assignments and venue booking have been released.';
-  if (status === 'CLOSED') return 'The event workflow is closed.';
-  return 'Review the event lifecycle and required services below.';
-}
+import { buildServiceRows, eventActions, formatEventDate, formatEventRange, getEventStatusReason, nextEventAction, serviceLabel, venueReservation } from './eventDetailModel';
 
 export default function EventDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const {
+    state,
     fetchAssignmentsForEvent,
     forceAssign,
     manuallyAssignForEvent,
-    fetchEventHistory,
     fetchChecklist,
     createChecklist,
     updateChecklist,
@@ -107,12 +30,27 @@ export default function EventDetail() {
 
   const [event, setEvent] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState('');
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
+  const [categoriesError, setCategoriesError] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [highlightedCategory, setHighlightedCategory] = useState(null);
+  const [vendorReviewVersion, setVendorReviewVersion] = useState(0);
+  const [historyCategory, setHistoryCategory] = useState(null);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [lifecycleSaving, setLifecycleSaving] = useState('');
+  const [lifecycleFeedback, setLifecycleFeedback] = useState(null);
+  const [dateFeedback, setDateFeedback] = useState('');
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [vendorFeedback, setVendorFeedback] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [forceAssignModal, setForceAssignModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [checklist, setChecklist] = useState([]);
   const [checklistLoading, setChecklistLoading] = useState(true);
+  const [checklistLoaded, setChecklistLoaded] = useState(false);
   const [checklistError, setChecklistError] = useState('');
   const [checklistNotice, setChecklistNotice] = useState('');
   const [checklistEditor, setChecklistEditor] = useState(null);
@@ -121,32 +59,57 @@ export default function EventDetail() {
   });
   const [checklistSaving, setChecklistSaving] = useState(false);
   const [checklistGenerating, setChecklistGenerating] = useState(false);
-  const [checklistExpanded, setChecklistExpanded] = useState(false);
+  const [taskSavingId, setTaskSavingId] = useState(null);
+  const [taskFeedback, setTaskFeedback] = useState(null);
   const [alternativesByCategory, setAlternativesByCategory] = useState({});
   const [excludedVendorsByCategory, setExcludedVendorsByCategory] = useState({});
   const [decisionLoadingByCategory, setDecisionLoadingByCategory] = useState({});
   const [decisionErrorByCategory, setDecisionErrorByCategory] = useState({});
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedCategoryForSuggestions, setSelectedCategoryForSuggestions] = useState(null);
   const [showDateModal, setShowDateModal] = useState(false);
   const [readinessRefresh, setReadinessRefresh] = useState(0);
   const [venueOptions, setVenueOptions] = useState([]);
   const [venueOptionsLoading, setVenueOptionsLoading] = useState(false);
   const [venueOptionsError, setVenueOptionsError] = useState('');
-  const [venueOptionsExpanded, setVenueOptionsExpanded] = useState(true);
+  const [venueOptionsExpanded, setVenueOptionsExpanded] = useState(false);
+  const [venueNotice, setVenueNotice] = useState('');
+  const [venueBookings, setVenueBookings] = useState([]);
+  const [venueBookingsLoaded, setVenueBookingsLoaded] = useState(false);
+  const [venueBookingsLoading, setVenueBookingsLoading] = useState(false);
+  const [venueBookingsError, setVenueBookingsError] = useState('');
   const [assigningVenueId, setAssigningVenueId] = useState(null);
   const [refreshingOperations, setRefreshingOperations] = useState(false);
   const [refreshError, setRefreshError] = useState('');
   const isMounted = useRef(true);
   const venueRequestId = useRef(0);
-  const decisionHistoryRef = useRef(null);
+  const bookingRequestId = useRef(0);
+  const operationRequestId = useRef(0);
+  const tabRefs = useRef({});
 
   useEffect(() => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
       venueRequestId.current += 1;
+      bookingRequestId.current += 1;
+      operationRequestId.current += 1;
     };
+  }, []);
+
+  const loadVenueBookings = useCallback(async (record) => {
+    const request = ++bookingRequestId.current;
+    setVenueBookingsLoading(true);
+    try {
+      const response = record.venueId ? await api.get(`/venues/${record.venueId}/bookings`) : { data: [] };
+      if (isMounted.current && request === bookingRequestId.current) {
+        setVenueBookings((response.data || []).filter(booking => String(booking.eventId) === String(record.id)));
+        setVenueBookingsLoaded(true);
+        setVenueBookingsError('');
+      }
+    } catch (requestError) {
+      if (isMounted.current && request === bookingRequestId.current) setVenueBookingsError(requestError.response?.data?.message || 'The venue reservation could not be verified.');
+    } finally {
+      if (isMounted.current && request === bookingRequestId.current) setVenueBookingsLoading(false);
+    }
   }, []);
 
   const loadVenueOptions = useCallback(async (eventRecord) => {
@@ -190,11 +153,7 @@ useEffect(() => {
     setDecisionErrorByCategory({});
     return () => { active = false; };
   }
-  const byCat = assignments.reduce((acc, a) => {
-    (acc[a.serviceCategory] = acc[a.serviceCategory] || []).push(a);
-    return acc;
-  }, {});
-  const categories = [...new Set([...(event.requiredCategories || []), ...Object.keys(byCat)])];
+  const categories = event.requiredCategories || [];
   setAlternativesByCategory(prev => ({ ...prev, ...Object.fromEntries(categories.map(cat => [cat, []])) }));
   setExcludedVendorsByCategory(prev => ({ ...prev, ...Object.fromEntries(categories.map(cat => [cat, []])) }));
   setDecisionLoadingByCategory(prev => ({ ...prev, ...Object.fromEntries(categories.map(cat => [cat, true])) }));
@@ -228,12 +187,32 @@ useEffect(() => {
     let cancelled = false;
     const loadEvent = async () => {
       setLoading(true);
+      setEvent(null);
+      setAssignments([]);
+      setAssignmentsLoaded(false);
+      setCategoriesLoaded(false);
+      setChecklist([]);
+      setChecklistLoaded(false);
+      setVenueBookings([]);
+      setVenueBookingsLoaded(false);
+      setActiveTab('overview');
+      setLifecycleFeedback(null);
+      setDateFeedback('');
+      setVendorFeedback({});
       try {
         const eventResponse = await api.get(`/events/${id}`);
         if (cancelled) return;
         const eventRecord = eventResponse.data;
-        const assignmentsData = await fetchAssignmentsForEvent(id);
+        const [assignmentResult, categoryResult] = await Promise.allSettled([
+          fetchAssignmentsForEvent(id),
+          api.get(`/events/${id}/categories`),
+        ]);
         if (cancelled) return;
+        const assignmentsData = assignmentResult.status === 'fulfilled' ? assignmentResult.value : [];
+        setAssignmentsLoaded(assignmentResult.status === 'fulfilled');
+        setAssignmentsError(assignmentResult.status === 'fulfilled' ? '' : 'Vendor offers could not be loaded. Retry event data to verify their status.');
+        setCategoriesLoaded(categoryResult.status === 'fulfilled');
+        setCategoriesError(categoryResult.status === 'fulfilled' ? '' : 'Required services could not be verified. Retry before assigning a vendor.');
         let inquiry = {};
         if (eventRecord.inquiryId) {
           try {
@@ -251,16 +230,17 @@ useEffect(() => {
           inquiryId: eventRecord.inquiryId,
           name: eventRecord.name,
           status: eventRecord.status,
-          date: inquiry.eventDate || currentAssignments[0]?.eventDate,
-          endDate: inquiry.endDate,
+          date: eventRecord.eventDate || inquiry.eventDate || currentAssignments[0]?.eventDate,
+          endDate: eventRecord.endDate || inquiry.endDate,
           venue: eventRecord.venue,
           venueId: eventRecord.venueId,
-          requiredCategories: eventRecord.requiredCategories || [],
-          clientName: inquiry.clientName || currentAssignments[0]?.eventClientName,
+          requiredCategories: categoryResult.status === 'fulfilled' ? categoryResult.value.data : eventRecord.requiredCategories || [],
+          clientName: eventRecord.clientName || inquiry.clientName || currentAssignments[0]?.eventClientName,
           expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees,
         };
         setEvent(nextEvent);
         void loadVenueOptions(nextEvent);
+        void loadVenueBookings(nextEvent);
 
         // Checklist is an independent section: its failure should not hide event details.
         setChecklistLoading(true);
@@ -268,6 +248,7 @@ useEffect(() => {
           const checklistData = await fetchChecklist(eventRecord.id || id);
           if (cancelled) return;
           setChecklist(checklistData || []);
+          setChecklistLoaded(true);
           setChecklistError('');
         } catch {
           if (cancelled) return;
@@ -286,89 +267,74 @@ useEffect(() => {
     };
 
     loadEvent();
-    return () => { cancelled = true; };
-  }, [id, fetchAssignmentsForEvent, fetchChecklist, loadVenueOptions]);
+    return () => {
+      cancelled = true;
+      venueRequestId.current += 1;
+      bookingRequestId.current += 1;
+      operationRequestId.current += 1;
+    };
+  }, [id, fetchAssignmentsForEvent, fetchChecklist, loadVenueOptions, loadVenueBookings]);
 
   const handleForceAssign = async (assignmentId, vendorId, category, reason) => {
-    const overrideReason = reason?.trim() || window.prompt('Why are you choosing this vendor?')?.trim();
+    const overrideReason = reason?.trim();
     if (!overrideReason) return;
-
+    setAssignmentSaving(true);
+    setVendorFeedback(previous => ({ ...previous, [category]: null }));
     try {
       const targetAssignment = assignmentId || selectedAssignment?.id
         || assignments.find(assignment => assignment.serviceCategory === category && assignment.status === 'OPEN')?.id;
       const targetIsOpen = assignments.some(assignment =>
         String(assignment.id) === String(targetAssignment) && assignment.status === 'OPEN'
       );
-      if (targetAssignment && targetIsOpen) {
-        await forceAssign(targetAssignment, vendorId, category, overrideReason);
-      } else {
-        await manuallyAssignForEvent(event?.id || id, vendorId, category, overrideReason);
-      }
+      const result = targetAssignment && targetIsOpen
+        ? await forceAssign(targetAssignment, vendorId, category, overrideReason)
+        : await manuallyAssignForEvent(event?.id || id, vendorId, category, overrideReason);
+      if (!isMounted.current) return;
+      if (result?.id) setAssignments(previous => [...previous.filter(assignment => assignment.id !== result.id), result]);
+      setVendorFeedback(previous => ({ ...previous, [category]: { type: 'success', message: 'Vendor offer sent. Waiting for their response.' } }));
       setForceAssignModal(false);
       setSelectedAssignment(null);
-      await reloadAll();
+      await refreshAfterAction();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to force assign vendor');
+      if (isMounted.current) setVendorFeedback(previous => ({ ...previous, [category]: { type: 'error', message: err.response?.data?.message || 'Vendor assignment failed.' } }));
+    } finally {
+      if (isMounted.current) setAssignmentSaving(false);
     }
   };
 
 
-  // Group assignments by service category
-  const assignmentsByCategory = assignments.reduce((acc, assignment) => {
-    const category = assignment.serviceCategory || 'Unknown';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(assignment);
-    return acc;
-  }, {});
-
-  // Check for unfilled categories
-  const requiredCategories = [...new Set([...(event?.requiredCategories || []), ...Object.keys(assignmentsByCategory)])];
-  const rollupCategories = event?.requiredCategories?.length
-    ? event.requiredCategories
-    : Object.keys(assignmentsByCategory);
-  const unfilledCategories = requiredCategories.filter(category => {
-    const categoryAssignments = assignmentsByCategory[category] || [];
-    return !categoryAssignments.some(a => a.status === 'ACCEPTED' || a.status === 'COMPLETED');
+  const services = buildServiceRows(event?.requiredCategories || [], assignments);
+  const statusReason = getEventStatusReason(event?.status, services);
+  const vendorsKnown = assignmentsLoaded && categoriesLoaded && !assignmentsError && !categoriesError;
+  const confirmedServices = services.filter(service => service.state === 'resolved').length;
+  const pendingServices = services.filter(service => service.state === 'pending').length;
+  const blockedServices = services.filter(service => service.state === 'exhausted').length;
+  const completedTasks = checklist.filter(task => task.isComplete).length;
+  const reservation = venueReservation(venueBookings, event?.id, event?.date, event?.endDate);
+  const actions = eventActions(event?.status, state.currentUser?.role);
+  const nextAction = nextEventAction({
+    status: event?.status, rows: services, vendorsKnown,
+    venueNeedsAttention: !event?.venueId || (venueBookingsLoaded && !venueBookingsError && !reservation.complete),
+    venueKnown: venueBookingsLoaded && !venueBookingsError && !venueBookingsLoading,
+    tasksKnown: checklistLoaded && !checklistError, tasksRemaining: checklist.length - completedTasks,
   });
 
-  const acceptedCount = assignments.filter(a => a.status === 'ACCEPTED' || a.status === 'COMPLETED').length;
-  const totalCategories = requiredCategories.length;
-  const statusReason = getEventStatusReason(
-    event?.status,
-    rollupCategories.map(category => getCategoryRollup(category, assignmentsByCategory)),
-  );
-
-  const scrollToDecisionHistory = () => decisionHistoryRef.current?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  });
-
-  if (loading) {
-    return (
-      <Layout title="Event Detail">
-        <div className="text-center py-10 text-gray-500">Loading…</div>
-      </Layout>
-    );
-  }
-
-  if (error && !event) {
-    return (
-      <Layout title="Event Detail">
-        <div className="bg-rose-100 text-rose-700 p-4 rounded-lg">{error}</div>
-        <button onClick={() => navigate('/coordinator/events')} className="mt-4 text-indigo-600 text-sm">
-          ← Back to events
-        </button>
-      </Layout>
-    );
-  }
+  const selectTab = (tab, category = null) => {
+    setActiveTab(tab);
+    setHighlightedCategory(tab === 'vendors' ? category : null);
+    if (tab === 'vendors' && category) setVendorReviewVersion(value => value + 1);
+    setHistoryCategory(tab === 'history' ? category : null);
+    tabRefs.current[tab]?.focus();
+  };
 
   const reloadAll = async () => {
-    const [eventResponse, assignmentsData] = await Promise.all([
-      api.get(`/events/${id}`),
+    const request = ++operationRequestId.current;
+    const eventResponse = await api.get(`/events/${id}`);
+    const [assignmentResult, categoryResult] = await Promise.allSettled([
       fetchAssignmentsForEvent(id),
+      api.get(`/events/${id}/categories`),
     ]);
+    if (!isMounted.current || request !== operationRequestId.current) return;
     const eventRecord = eventResponse.data;
     let inquiry = {};
     if (eventRecord.inquiryId) {
@@ -379,32 +345,60 @@ useEffect(() => {
         // Keep the current inquiry-derived context if that optional endpoint is temporarily unavailable.
       }
     }
-    const currentAssignments = assignmentsData || [];
-    setAssignments(currentAssignments);
+    if (!isMounted.current || request !== operationRequestId.current) return;
+    const currentAssignments = assignmentResult.status === 'fulfilled' ? assignmentResult.value || [] : assignments;
+    if (assignmentResult.status === 'fulfilled') {
+      setAssignments(currentAssignments);
+      setAssignmentsLoaded(true);
+      setAssignmentsError('');
+    } else setAssignmentsError('Vendor offers could not be refreshed. Previously loaded offers may be out of date.');
+    if (categoryResult.status === 'fulfilled') {
+      setCategoriesLoaded(true);
+      setCategoriesError('');
+    } else setCategoriesError('Required services could not be verified. Retry before assigning a vendor.');
     const nextEvent = {
       id: eventRecord.id,
       inquiryId: eventRecord.inquiryId,
       name: eventRecord.name,
       status: eventRecord.status,
-      date: inquiry.eventDate || currentAssignments[0]?.eventDate || event?.date,
-      endDate: inquiry.endDate || event?.endDate,
+      date: eventRecord.eventDate || inquiry.eventDate || currentAssignments[0]?.eventDate || event?.date,
+      endDate: eventRecord.endDate || inquiry.endDate || event?.endDate,
       venue: eventRecord.venue,
       venueId: eventRecord.venueId,
-      requiredCategories: eventRecord.requiredCategories || [],
-      clientName: inquiry.clientName || currentAssignments[0]?.eventClientName,
+      requiredCategories: categoryResult.status === 'fulfilled' ? categoryResult.value.data : event?.requiredCategories || eventRecord.requiredCategories || [],
+      clientName: eventRecord.clientName || inquiry.clientName || currentAssignments[0]?.eventClientName || event?.clientName,
       expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees || event?.expectedAttendees,
     };
     setEvent(nextEvent);
+    setError('');
     void loadVenueOptions(nextEvent);
+    void loadVenueBookings(nextEvent);
     setChecklistLoading(true);
     try {
       const checklistData = await fetchChecklist(id);
+      if (!isMounted.current || request !== operationRequestId.current) return;
       setChecklist(checklistData || []);
+      setChecklistLoaded(true);
       setChecklistError('');
     } catch {
-      setChecklistError('Could not refresh the event checklist. Your previous data is still shown.');
+      if (isMounted.current && request === operationRequestId.current) setChecklistError('Could not refresh the event checklist. Your previous data is still shown.');
     } finally {
-      setChecklistLoading(false);
+      if (isMounted.current && request === operationRequestId.current) setChecklistLoading(false);
+    }
+  };
+
+  const refreshDerivedData = () => {
+    setReadinessRefresh(value => value + 1);
+    setHistoryRefresh(value => value + 1);
+  };
+
+  const refreshAfterAction = async () => {
+    refreshDerivedData();
+    try {
+      await reloadAll();
+      if (isMounted.current) setRefreshError('');
+    } catch {
+      if (isMounted.current) setRefreshError('The action succeeded, but some details could not be refreshed. Use Refresh event data to retry.');
     }
   };
 
@@ -413,11 +407,61 @@ useEffect(() => {
     setRefreshError('');
     try {
       await reloadAll();
-      setReadinessRefresh(value => value + 1);
+      if (isMounted.current) refreshDerivedData();
     } catch (err) {
-      setRefreshError(err.response?.data?.message || 'Event and assignment data could not be refreshed. Previously loaded data remains visible.');
+      if (isMounted.current) setRefreshError(err.response?.data?.message || 'Event and assignment data could not be refreshed. Previously loaded data remains visible.');
     } finally {
-      setRefreshingOperations(false);
+      if (isMounted.current) setRefreshingOperations(false);
+    }
+  };
+
+  const handleLifecycleAction = async (status) => {
+    const cancelling = status === 'CANCELLED';
+    if (!window.confirm(cancelling ? 'Cancel this event? Active vendor assignments and venue bookings will be cancelled.' : 'Record this event as completed?')) return;
+    setLifecycleSaving(status);
+    setLifecycleFeedback(null);
+    try {
+      const response = await api.patch(`/events/${id}/status`, null, { params: { status } });
+      if (!isMounted.current) return;
+      setEvent(previous => ({ ...previous, status: response.data.status }));
+      setLifecycleFeedback({ type: 'success', message: cancelling ? 'Event cancelled. Active vendor assignments and venue bookings were released.' : 'Event completed. Accepted vendor assignments were marked completed.' });
+      await refreshAfterAction();
+    } catch (requestError) {
+      if (isMounted.current) setLifecycleFeedback({ type: 'error', message: requestError.response?.data?.message || 'The event status could not be updated.' });
+    } finally {
+      if (isMounted.current) setLifecycleSaving('');
+    }
+  };
+
+  const reloadChecklist = async () => {
+    setChecklistLoading(true);
+    try {
+      const data = await fetchChecklist(id);
+      if (!isMounted.current) return;
+      setChecklist(data || []);
+      setChecklistLoaded(true);
+      setChecklistError('');
+      setReadinessRefresh(value => value + 1);
+    } catch {
+      if (isMounted.current) setChecklistError('Could not load the checklist. Previously loaded tasks remain visible.');
+    } finally {
+      if (isMounted.current) setChecklistLoading(false);
+    }
+  };
+
+  const handleChecklistToggle = async (item) => {
+    setTaskSavingId(item.id);
+    setTaskFeedback(null);
+    try {
+      const updated = await toggleChecklistItem(item.id, !item.isComplete);
+      if (!isMounted.current) return;
+      setChecklist(previous => previous.map(task => task.id === item.id ? updated : task));
+      setTaskFeedback({ id: item.id, type: 'success', message: updated.isComplete ? 'Task completed.' : 'Task reopened.' });
+      refreshDerivedData();
+    } catch (requestError) {
+      if (isMounted.current) setTaskFeedback({ id: item.id, type: 'error', message: requestError.response?.data?.message || 'Could not update this task.' });
+    } finally {
+      if (isMounted.current) setTaskSavingId(null);
     }
   };
 
@@ -465,6 +509,7 @@ useEffect(() => {
       setChecklistError('');
       setChecklistEditor(null);
       setChecklistNotice(checklistEditor === 'new' ? 'Task added.' : 'Task updated.');
+      refreshDerivedData();
     } catch (err) {
       setChecklistError(err.response?.data?.message || 'Could not save this checklist task.');
     } finally {
@@ -479,7 +524,9 @@ useEffect(() => {
     try {
       const refreshed = await regenerateChecklist(event?.id || id);
       setChecklist(refreshed || []);
+      setChecklistLoaded(true);
       setChecklistNotice('Missing template tasks were added. Existing tasks were preserved.');
+      refreshDerivedData();
     } catch (err) {
       setChecklistError(err.response?.data?.message || 'Could not add missing template tasks.');
     } finally {
@@ -490,6 +537,7 @@ useEffect(() => {
   const handleVenueAssign = async (venueOption) => {
     setAssigningVenueId(venueOption.venueId);
     setVenueOptionsError('');
+    setVenueNotice('');
     try {
       const response = await api.put(`/events/${event.id}`, {
         venueId: venueOption.venueId,
@@ -500,12 +548,8 @@ useEffect(() => {
         venue: response.data?.venue || venueOption.name,
         venueId: response.data?.venueId || venueOption.venueId,
       } : current);
-      setReadinessRefresh(value => value + 1);
-      try {
-        await reloadAll();
-      } catch {
-        setRefreshError('Venue assigned successfully, but some event details could not be refreshed. Use “Refresh event data” to retry.');
-      }
+      setVenueNotice(`Venue updated to ${venueOption.name}.`);
+      await refreshAfterAction();
     } catch (err) {
       setVenueOptionsError(err.response?.data?.message || 'The venue could not be assigned. Recheck availability and try again.');
     } finally {
@@ -513,221 +557,138 @@ useEffect(() => {
     }
   };
 
+  if (loading) return <Layout title="Event Detail"><p role="status" className="py-10 text-center text-slate-500">Loading event…</p></Layout>;
+  if (!event) return (
+    <Layout title="Event Detail">
+      <div role="alert" className="rounded-lg bg-rose-50 p-4 text-sm text-rose-700">
+        {refreshError || error || 'Event details are unavailable.'}
+        <button type="button" disabled={refreshingOperations} onClick={handleRefreshOperations} className="ml-3 underline">{refreshingOperations ? 'Retrying…' : 'Retry'}</button>
+      </div>
+      <button type="button" onClick={() => navigate('/coordinator/events')} className="mt-4 text-sm text-indigo-700">← Back to events</button>
+    </Layout>
+  );
+
+  const noEligibleAlternative = nextAction.category && !decisionLoadingByCategory[nextAction.category]
+    && !decisionErrorByCategory[nextAction.category] && Object.hasOwn(alternativesByCategory, nextAction.category)
+    && alternativesByCategory[nextAction.category].length === 0;
+  const tabs = [
+    { id: 'overview', label: 'Overview' }, { id: 'vendors', label: 'Vendors' },
+    { id: 'tasks', label: 'Tasks' }, { id: 'history', label: 'History' },
+  ];
+
   return (
     <Layout title="Event Detail">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          <EventReadinessWidget eventId={event?.id || id} refreshKey={readinessRefresh} />
-          {/* Event Header Card */}
-          <div className="bg-white rounded-xl shadow p-4 md:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
-                  <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700 self-start">
-                    ← Back
-                  </button>
-                  <h1 className="text-xl md:text-2xl font-bold text-gray-800">{event?.name}</h1>
-                  {event?.status && <StatusBadge status={event.status} size="lg" showIcon />}
-                </div>
-                <p className="text-sm text-gray-600">
-                  {acceptedCount} vendor offers accepted. {unfilledCategories.length} service categor{unfilledCategories.length === 1 ? 'y needs' : 'ies need'} attention.
-                </p>
-                <p role="status" className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-950">
-                  {statusReason}
-                </p>
+      <div className="space-y-6">
+        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <button type="button" onClick={() => navigate('/coordinator/events')} className="mb-3 text-sm text-indigo-700 hover:underline">← Events</button>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold text-slate-900">{event.name}</h1>
+                <StatusBadge status={event.status} size="lg" showIcon />
               </div>
-              <div className="flex flex-wrap gap-2">
-                {!['CANCELLED', 'COMPLETED', 'CLOSED'].includes(event?.status) && (
-                <button
-                  onClick={() => setShowDateModal(true)}
-                  className="text-sm text-indigo-700 hover:text-indigo-800 px-3 py-2 border border-indigo-300 rounded-lg"
-                >
-                  Change date
-                </button>
-                )}
-<button
-                          onClick={async () => {
-                            if (!confirm('Cancel this event? This cannot be undone.')) return;
-                            try {
-                              await api.patch(`/events/${event.id}/status`, null, {
-                                params: { status: 'CANCELLED' }
-                              });
-                              window.location.reload();
-                            } catch (err) {
-                              setError(err.response?.data?.message || 'Failed to cancel event');
-                            }
-                          }}
-                          className="text-sm text-rose-600 hover:text-rose-700 px-3 py-2 border border-rose-300 rounded-lg"
-                        >
-                          Cancel event
-                        </button>
-                        {event?.status === 'CONFIRMED' && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm('Mark this event as COMPLETED?')) return;
-                              try {
-                                await api.patch(`/events/${event.id}/status`, null, {
-                                  params: { status: 'COMPLETED' }
-                                });
-                                window.location.reload();
-                              } catch (err) {
-                                setError(err.response?.data?.message || 'Failed to complete event');
-                              }
-                            }}
-                            className="text-sm text-emerald-600 hover:text-emerald-700 px-3 py-2 border border-emerald-300 rounded-lg"
-                          >
-                            Complete event
-                          </button>
-                        )}
-              </div>
+              <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+                <div><dt className="text-xs text-slate-500">Event dates</dt><dd className="mt-1 font-medium text-slate-800">{formatEventRange(event.date, event.endDate)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Venue</dt><dd className="mt-1 font-medium text-slate-800">{event.venue || 'Not assigned'}</dd></div>
+                <div><dt className="text-xs text-slate-500">Client</dt><dd className="mt-1 font-medium text-slate-800">{event.clientName || 'Client unavailable'}</dd></div>
+              </dl>
             </div>
-            <div className="mt-4 border-t border-gray-100 pt-3">
-              <button
-                type="button"
-                onClick={() => setVenueOptionsExpanded(value => !value)}
-                aria-expanded={venueOptionsExpanded}
-                className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
-              >
-                <span>
-                  <span className="block text-sm font-semibold text-gray-800">Venue fit and alternatives</span>
-                  <span className="block text-xs text-gray-500">
-                    Current: {event?.venue || 'No venue assigned'}
-                    {event?.expectedAttendees ? ` · ${event.expectedAttendees} attendees · ${event.date}` : event?.date ? ` · ${event.date}` : ''}
-                  </span>
-                </span>
-                <span className="text-xs text-indigo-700">
-                  {venueOptionsLoading ? 'Checking…' : `${venueOptions.filter(option => option.eligible).length} eligible`}
-                  {' · '}{venueOptionsExpanded ? 'Hide' : 'Review'}
-                </span>
-              </button>
-              {venueOptionsExpanded && (
-                <div className="mt-3 space-y-3">
-                  <p className="text-xs text-gray-500">
-                    Availability includes the configured setup and teardown buffer. The current event is excluded from its own conflict check.
-                  </p>
-                  {venueOptionsError && (
-                    <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
-                      <span>{venueOptionsError}</span>
-                      <button type="button" onClick={() => loadVenueOptions(event)} className="underline">Retry</button>
+            <div className="max-w-md space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={refreshingOperations || Boolean(lifecycleSaving)} onClick={handleRefreshOperations} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">{refreshingOperations ? 'Refreshing…' : 'Refresh event data'}</button>
+                {actions.reschedule && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => { setDateFeedback(''); setShowDateModal(true); }} className="rounded-lg border border-indigo-300 px-3 py-2 text-sm text-indigo-700 disabled:opacity-50">Change date</button>}
+                {actions.complete && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => handleLifecycleAction('COMPLETED')} className="rounded-lg border border-emerald-300 px-3 py-2 text-sm text-emerald-700 disabled:opacity-50">{lifecycleSaving === 'COMPLETED' ? 'Completing…' : 'Complete event'}</button>}
+                {actions.cancel && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => handleLifecycleAction('CANCELLED')} className="rounded-lg border border-rose-300 px-3 py-2 text-sm text-rose-700 disabled:opacity-50">{lifecycleSaving === 'CANCELLED' ? 'Cancelling…' : 'Cancel event'}</button>}
+              </div>
+              {lifecycleFeedback && <p role={lifecycleFeedback.type === 'error' ? 'alert' : 'status'} className={`text-sm ${lifecycleFeedback.type === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}>{lifecycleFeedback.message}</p>}
+              {dateFeedback && <p role="status" className="text-sm text-emerald-700">{dateFeedback}</p>}
+              {refreshError && <p role="alert" className="text-sm text-amber-800">{refreshError}</p>}
+            </div>
+          </div>
+        </header>
+
+        <section aria-labelledby="next-action-title" className={`rounded-xl border p-4 md:p-5 ${['intervene', 'venue'].includes(nextAction.kind) ? 'border-amber-200 bg-amber-50' : 'border-indigo-100 bg-indigo-50'}`}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-4xl">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Next action</p>
+              <h2 id="next-action-title" className="font-semibold text-slate-900">{nextAction.title}</h2>
+              <p className="mt-1 text-sm text-slate-700">{nextAction.description}</p>
+              {noEligibleAlternative && <p className="mt-2 text-sm font-medium text-amber-900">No eligible alternative currently passes the checks for {serviceLabel(nextAction.category)}. Review the exclusion reasons.</p>}
+              {vendorsKnown && nextAction.kind !== 'closed' && <p className="mt-3 text-xs text-slate-600">{confirmedServices}/{services.length} required services confirmed · {pendingServices} awaiting response · {blockedServices} {blockedServices === 1 ? 'needs' : 'need'} review</p>}
+            </div>
+            <button type="button" disabled={refreshingOperations} onClick={() => {
+              if (nextAction.target === 'refresh') handleRefreshOperations();
+              else { selectTab(nextAction.target, nextAction.category); if (nextAction.kind === 'venue') setVenueOptionsExpanded(true); }
+            }} className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{nextAction.action}</button>
+          </div>
+        </section>
+
+        <div role="tablist" aria-label="Event detail sections" className="flex overflow-x-auto border-b border-slate-200">
+          {tabs.map((tab, index) => (
+            <button key={tab.id} ref={node => { tabRefs.current[tab.id] = node; }} type="button" role="tab" id={`event-tab-${tab.id}`} aria-controls={`event-panel-${tab.id}`} aria-selected={activeTab === tab.id} tabIndex={activeTab === tab.id ? 0 : -1} onClick={() => selectTab(tab.id)} onKeyDown={keyEvent => {
+              const nextIndex = keyEvent.key === 'ArrowRight' ? (index + 1) % tabs.length : keyEvent.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : keyEvent.key === 'Home' ? 0 : keyEvent.key === 'End' ? tabs.length - 1 : null;
+              if (nextIndex != null) { keyEvent.preventDefault(); selectTab(tabs[nextIndex].id); }
+            }} className={`whitespace-nowrap border-b-2 px-5 py-3 text-sm font-medium ${activeTab === tab.id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{tab.label}</button>
+          ))}
+        </div>
+
+        <section role="tabpanel" id={`event-panel-${activeTab}`} aria-labelledby={`event-tab-${activeTab}`} className="space-y-6">
+          {activeTab === 'overview' && <>
+            <EventReadinessWidget eventId={id} refreshKey={readinessRefresh} />
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div><h2 className="font-semibold text-slate-900">Venue reservation</h2><p className="mt-1 text-sm text-slate-600">{event.venue || 'No venue assigned'} · {formatEventRange(event.date, event.endDate)}</p></div>
+                <button type="button" onClick={() => setVenueOptionsExpanded(value => !value)} aria-expanded={venueOptionsExpanded} className="text-sm font-medium text-indigo-700 hover:underline">{venueOptionsExpanded ? 'Hide venue fit' : 'Review venue fit and alternatives'}</button>
+              </div>
+              {venueBookingsLoading && <p role="status" className="mt-3 text-sm text-slate-500">Checking reservation…</p>}
+              {venueBookingsError && <p role="alert" className="mt-3 text-sm text-rose-700">{venueBookingsError} <button type="button" onClick={() => loadVenueBookings(event)} className="underline">Retry</button></p>}
+              {!venueBookingsLoading && !venueBookingsError && venueBookingsLoaded && <p className={`mt-3 text-sm font-medium ${reservation.complete ? 'text-emerald-700' : 'text-amber-800'}`}>
+                {reservation.complete ? `Confirmed for all ${reservation.requiredDays} event ${reservation.requiredDays === 1 ? 'day' : 'days'}.` : event.status === 'CANCELLED' ? 'No active reservation; event cancelled.' : `${reservation.confirmedDates.length} of ${reservation.requiredDays ?? 'unknown'} event days have a confirmed booking.`}
+              </p>}
+              {venueNotice && <p role="status" className="mt-3 text-sm text-emerald-700">{venueNotice}</p>}
+              {venueOptionsExpanded && <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                <p className="text-xs text-slate-500">Capacity and availability include configured setup and teardown buffers. This event is excluded from its own conflict check.</p>
+                {venueOptionsError && <p role="alert" className="text-sm text-rose-700">{venueOptionsError} <button type="button" onClick={() => loadVenueOptions(event)} className="underline">Retry</button></p>}
+                {venueOptionsLoading && <p role="status" className="text-sm text-slate-500">Checking venue fit…</p>}
+                {!venueOptionsLoading && !venueOptionsError && !venueOptions.length && <p className="text-sm text-slate-500">No venues are registered.</p>}
+                {[...venueOptions].sort((a, b) => Number(String(b.venueId) === String(event.venueId)) - Number(String(a.venueId) === String(event.venueId)) || Number(b.eligible) - Number(a.eligible)).map(option => {
+                  const isCurrent = String(option.venueId) === String(event.venueId);
+                  return <div key={option.venueId} className={`rounded-lg border p-3 ${option.eligible ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div><p className="text-sm font-semibold text-slate-800">{option.name}{isCurrent ? ' · Current venue' : ''}</p><p className="mt-1 text-xs text-slate-500">{option.capacity == null ? 'Capacity not configured' : `Capacity ${option.capacity}`}{event.expectedAttendees ? ` · ${event.expectedAttendees} attendees` : ''}{option.location ? ` · ${option.location}` : ''}</p><p className="mt-1 text-xs text-slate-500">Block window: {option.blockedFrom} to {option.blockedThrough}</p></div>
+                      <span className={`rounded-full px-2 py-1 text-xs font-medium ${option.eligible ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>{option.eligible ? 'Eligible' : 'Unavailable'}</span>
                     </div>
-                  )}
-                  {venueOptionsLoading && venueOptions.length === 0 && <p role="status" className="text-sm text-gray-500">Checking venue capacity and calendar…</p>}
-                  {!venueOptionsLoading && venueOptions.length === 0 && !venueOptionsError && (
-                    <p className="text-sm text-gray-500">No venues are registered yet.</p>
-                  )}
-                  {[...venueOptions]
-                    .sort((a, b) => Number(b.eligible) - Number(a.eligible)
-                      || Number(String(b.venueId) === String(event?.venueId)) - Number(String(a.venueId) === String(event?.venueId)))
-                    .map(option => {
-                      const isCurrent = String(option.venueId) === String(event?.venueId);
-                      return (
-                        <div key={option.venueId} className={`rounded-lg border p-3 ${option.eligible ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-gray-50'}`}>
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800">
-                                {option.name}{isCurrent ? ' · Current venue' : ''}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {option.capacity == null ? 'Capacity not configured' : `Capacity ${option.capacity}`}
-                                {option.location ? ` · ${option.location}` : ''}
-                                {` · Block window ${option.blockedFrom} to ${option.blockedThrough}`}
-                              </p>
-                            </div>
-                            <span className={`rounded-full px-2 py-1 text-xs font-medium ${option.eligible ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                              {option.eligible ? 'Eligible' : 'Unavailable'}
-                            </span>
-                          </div>
-                          <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                            {(option.explanation || []).map((reason, index) => <li key={`${option.venueId}-${index}`}>• {reason}</li>)}
-                          </ul>
-                          {option.eligible && !isCurrent && !['CANCELLED', 'COMPLETED', 'CLOSED'].includes(event?.status) && (
-                            <button
-                              type="button"
-                              onClick={() => handleVenueAssign(option)}
-                              disabled={assigningVenueId != null}
-                              className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                              {assigningVenueId === option.venueId ? 'Assigning venue…' : event?.venueId ? 'Move event to this venue' : 'Assign this venue'}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
+                    <ul className="mt-2 space-y-1 text-xs text-slate-600">{(option.explanation || []).map((reason, index) => <li key={index}>• {reason}</li>)}</ul>
+                    {actions.reschedule && option.eligible && !isCurrent && <button type="button" disabled={assigningVenueId != null || Boolean(lifecycleSaving)} onClick={() => handleVenueAssign(option)} className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">{assigningVenueId === option.venueId ? 'Assigning…' : event.venueId ? 'Move event to this venue' : 'Assign this venue'}</button>}
+                  </div>;
+                })}
+              </div>}
             </div>
-          </div>
-
-          {error && <div className="bg-rose-100 text-rose-700 p-3 rounded-lg">{error}</div>}
-          {refreshError && <div role="alert" className="bg-amber-50 text-amber-800 p-3 rounded-lg text-sm">{refreshError}</div>}
-
-          {/* Pipeline Visualization */}
-          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base md:text-lg font-semibold text-gray-800">Vendor Pipeline</h3>
-                <p className="mt-1 text-xs text-gray-500">Eligible vendors pass the event-specific checks. Match score weights quality 50%, load 40%, and rotation 10%.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleRefreshOperations}
-                  disabled={refreshingOperations}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {refreshingOperations ? 'Refreshing…' : 'Refresh event data'}
-                </button>
-                <button
-                  type="button"
-                  onClick={scrollToDecisionHistory}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
-                >
-                  Decision history
-                </button>
-              </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-900">Vendor coordination</h2><p className="mt-2 text-sm text-slate-600">{vendorsKnown ? statusReason : 'Vendor status has not been verified.'}</p><button type="button" onClick={() => selectTab('vendors')} className="mt-3 text-sm font-medium text-indigo-700">View required services →</button></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-900">Preparation tasks</h2><p className="mt-2 text-sm text-slate-600">{checklistLoaded ? `${completedTasks} of ${checklist.length} tasks complete. Owners, deadlines and prerequisites are in Tasks.` : 'Task progress is unavailable.'}</p><button type="button" onClick={() => selectTab('tasks')} className="mt-3 text-sm font-medium text-indigo-700">View tasks →</button></div>
             </div>
-            <div className="space-y-4">
-              {requiredCategories.map(category => (
-                <PipelineLadder
-                  key={category}
-                  category={category}
-                  assignments={assignmentsByCategory[category] || []}
-                  alternativeVendors={alternativesByCategory[category] || []}
-                  excludedVendors={excludedVendorsByCategory[category] || []}
-                  decisionLoading={Boolean(decisionLoadingByCategory[category])}
-                  decisionError={decisionErrorByCategory[category] || ''}
-                  onForceAssign={handleForceAssign}
-                />
-              ))}
-            </div>
-          </div>
+          </>}
 
-          <div ref={decisionHistoryRef} className="scroll-mt-6">
-            <VendorDecisionHistory eventId={event?.id || id} />
-          </div>
+          {activeTab === 'vendors' && <>
+            <div><h2 className="font-semibold text-slate-900">Required vendor services</h2><p className="mt-1 text-sm text-slate-500">Each row shows the latest offer for one required external service. Earlier attempts remain in History.</p></div>
+            {(assignmentsError || categoriesError) && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{assignmentsError || categoriesError} <button type="button" onClick={handleRefreshOperations} className="underline">Retry</button></p>}
+            {assignmentsLoaded && categoriesLoaded && <EventVendorTable rows={services} alternatives={alternativesByCategory} excluded={excludedVendorsByCategory} loading={decisionLoadingByCategory} errors={decisionErrorByCategory} highlightedCategory={highlightedCategory} reviewVersion={vendorReviewVersion} canAssign={actions.assign && vendorsKnown && !assignmentSaving && !lifecycleSaving} feedbackByCategory={vendorFeedback} onAssign={row => {
+              setSelectedAssignment(row.current || { serviceCategory: row.category });
+              setVendorFeedback(previous => ({ ...previous, [row.category]: null }));
+              setForceAssignModal(true);
+            }} onHistory={category => selectTab('history', category)} />}
+          </>}
 
-          {/* Checklist Section */}
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <button
-              onClick={() => setChecklistExpanded(!checklistExpanded)}
-              className="w-full px-6 py-4 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50"
-              aria-expanded={checklistExpanded}
-            >
-              <h3 className="font-medium text-gray-800">Event Checklist</h3>
-              <span className="text-sm text-gray-500">
-                {checklistLoading && checklist.length === 0
-                  ? 'Loading tasks…'
-                  : `${checklist.filter(c => c.isComplete).length} of ${checklist.length} complete`}
-              </span>
-            </button>
-            {checklistExpanded && (
+          {activeTab === 'tasks' && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-6 py-4"><h2 className="font-semibold text-slate-900">Event tasks</h2><span className="text-sm text-slate-500">{checklistLoaded ? `${completedTasks} of ${checklist.length} complete` : checklistLoading ? 'Loading tasks…' : 'Task progress unavailable'}</span></div>
               <div className="p-6">
                 <div className="flex flex-wrap gap-2 mb-4">
                   <button
                     type="button"
                     onClick={startChecklistCreate}
-                    className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg"
+                    disabled={!checklistLoaded}
+                    className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg disabled:opacity-50"
                   >
                     Add task
                   </button>
@@ -749,7 +710,7 @@ useEffect(() => {
                     {checklistError}
                     <button
                       type="button"
-                      onClick={reloadAll}
+                      onClick={reloadChecklist}
                       className="ml-2 underline"
                     >Retry</button>
                   </div>
@@ -769,7 +730,7 @@ useEffect(() => {
 
                 {checklistLoading && checklist.length === 0 ? (
                   <p className="py-4 text-sm text-gray-500" role="status">Loading checklist tasks…</p>
-                ) : checklist.length === 0 ? (
+                ) : checklistError && checklist.length === 0 ? null : checklist.length === 0 ? (
                   <p className="py-4 text-sm text-gray-500">No checklist tasks yet. Add a task or add the missing template tasks.</p>
                 ) : (
                   <ul className="space-y-3">
@@ -787,16 +748,8 @@ useEffect(() => {
                             <input
                               type="checkbox"
                               checked={Boolean(item.isComplete)}
-                              disabled={(!item.isComplete && incompletePrerequisites.length > 0) || (item.isComplete && hasCompletedDependents)}
-                              onChange={async () => {
-                                setChecklistError('');
-                                try {
-                                  const updated = await toggleChecklistItem(item.id, !item.isComplete);
-                                  setChecklist(prev => prev.map(task => task.id === item.id ? updated : task));
-                                } catch (err) {
-                                  setChecklistError(err.response?.data?.message || 'Failed to update checklist task.');
-                                }
-                              }}
+                              disabled={taskSavingId != null || (!item.isComplete && incompletePrerequisites.length > 0) || (item.isComplete && hasCompletedDependents)}
+                              onChange={() => handleChecklistToggle(item)}
                               aria-label={`${item.isComplete ? 'Mark incomplete' : 'Mark complete'}: ${item.itemName}`}
                               className="mt-1 w-4 h-4 text-emerald-600 rounded disabled:opacity-40"
                             />
@@ -838,6 +791,10 @@ useEffect(() => {
                               )}
                             </div>
                           </div>
+
+                          {taskFeedback?.id === item.id && (
+                            <p role={taskFeedback.type === 'error' ? 'alert' : 'status'} className={`mt-2 text-xs ${taskFeedback.type === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}>{taskFeedback.message}</p>
+                          )}
 
                           {isEditing && (
                             <form onSubmit={handleChecklistSave} className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-100 pt-4 md:grid-cols-2">
@@ -938,167 +895,31 @@ useEffect(() => {
                   </form>
                 )}
               </div>
-            )}
-          </div>
+          </section>}
 
-          {/* Audit Trail */}
-          <AuditTimeline referenceType="EVENT" referenceId={id} expandedByDefault={true} />
-
-        </div>
-
-        {/* Right Sidebar - Assignments Needing Action */}
-        <div className="lg:sticky lg:top-6 space-y-6">
-          <div className="bg-white rounded-xl shadow p-4 md:p-6">
-            <h3 className="font-semibold text-gray-800 mb-4">Needs Attention</h3>
-            {unfilledCategories.length === 0 ? (
-              <p className="text-sm text-gray-500">All categories filled</p>
-            ) : (
-              <div className="space-y-3">
-                {unfilledCategories.map(category => {
-                  const categoryAssignments = assignmentsByCategory[category] || [];
-                  const openAssignment = categoryAssignments.find(a => a.status === 'OPEN');
-                  const pendingAssignment = categoryAssignments.find(a => a.status === 'PENDING');
-                  const declinedCount = categoryAssignments.filter(a => a.status === 'DECLINED').length;
-
-                  return (
-                    <div key={category} className="bg-rose-50 border border-rose-200 rounded-lg p-3">
-                      <p className="font-medium text-rose-800 text-sm">{category}</p>
-                      <p className="text-xs text-rose-600 mt-1">
-                        {pendingAssignment
-                          ? `Offer sent to ${pendingAssignment.vendorName || 'a vendor'}; waiting for a response.`
-                          : `${declinedCount > 0 ? `${declinedCount} vendor${declinedCount === 1 ? '' : 's'} declined. ` : ''}${openAssignment ? 'Open vendor-pool offer; no claim yet.' : 'No active vendor offer. Coordinator action is available.'}`}
-                      </p>
-                      <div className="flex gap-2 mt-2">
-                        {!pendingAssignment && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setSelectedAssignment(openAssignment || { serviceCategory: category, status: 'UNASSIGNED' });
-                                setForceAssignModal(true);
-                              }}
-                              className="text-xs bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded font-medium"
-                            >
-                              Assign vendor
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedCategoryForSuggestions(category);
-                                setShowSuggestions(true);
-                              }}
-                              className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded font-medium"
-                            >
-                              Review suggestions
-                            </button>
-                          </>
-                        )}
-                        {pendingAssignment && (
-                          <button type="button" onClick={scrollToDecisionHistory} className="text-xs text-indigo-700 underline">
-                            View decision history
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Vendor Suggestions Panel */}
-          {showSuggestions && selectedCategoryForSuggestions && (
-            <div className="bg-white rounded-xl shadow p-4 md:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-800">
-                  Vendor Suggestions for {selectedCategoryForSuggestions}
-                </h3>
-                <button
-                  onClick={() => setShowSuggestions(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ✕
-                </button>
-              </div>
-              <VendorSuggestions
-                category={selectedCategoryForSuggestions}
-                eventDate={event?.date}
-                eventId={event?.id || id}
-                excludeVendorId={assignmentsByCategory[selectedCategoryForSuggestions]?.find(a => a.status === 'ACCEPTED')?.vendorId}
-                onSelectVendor={(vendor) => {
-                  const assignment = (assignmentsByCategory[selectedCategoryForSuggestions] || []).find(a => a.status === 'OPEN');
-                  const reason = window.prompt('Why are you choosing this vendor?');
-                  if (reason?.trim()) {
-                    handleForceAssign(assignment?.id, vendor.id, selectedCategoryForSuggestions, reason.trim());
-                    setShowSuggestions(false);
-                  }
-                }}
-                actionLabel="Assign vendor"
-              />
-            </div>
-          )}
-
-          {/* Assignment Status Summary */}
-          <div className="bg-white rounded-xl shadow p-4 md:p-6">
-            <h3 className="font-semibold text-gray-800 mb-4">Status Summary</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Open</span>
-                <span className="text-sm font-bold text-orange-600">
-                  {assignments.filter(a => a.status === 'OPEN').length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Pending</span>
-                <span className="text-sm font-bold text-amber-600">
-                  {assignments.filter(a => a.status === 'PENDING').length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Accepted</span>
-                <span className="text-sm font-bold text-emerald-600">
-                  {assignments.filter(a => a.status === 'ACCEPTED').length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Declined</span>
-                <span className="text-sm font-bold text-rose-600">
-                  {assignments.filter(a => a.status === 'DECLINED').length}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+          {activeTab === 'history' && <>
+            <AuditTimeline referenceType="EVENT" referenceId={id} refreshKey={historyRefresh} title="Lifecycle history" />
+            <VendorDecisionHistory eventId={id} refreshKey={historyRefresh} expandedCategory={historyCategory} />
+          </>}
+        </section>
       </div>
 
       <ManualAssignModal
         isOpen={forceAssignModal}
-        onClose={() => {
-          setForceAssignModal(false);
-          setSelectedAssignment(null);
-        }}
-        onAssign={async (vendorId, reason) => {
-          await handleForceAssign(
-            selectedAssignment?.id,
-            vendorId,
-            selectedAssignment?.serviceCategory,
-            reason
-          );
-        }}
+        onClose={() => { if (!assignmentSaving) { setForceAssignModal(false); setSelectedAssignment(null); } }}
+        onAssign={(vendorId, reason) => handleForceAssign(selectedAssignment?.id, vendorId, selectedAssignment?.serviceCategory, reason)}
         availableVendors={selectedAssignment ? alternativesByCategory[selectedAssignment.serviceCategory] || [] : []}
         loading={Boolean(selectedAssignment && decisionLoadingByCategory[selectedAssignment.serviceCategory])}
+        submitting={assignmentSaving}
+        error={selectedAssignment && vendorFeedback[selectedAssignment.serviceCategory]?.type === 'error' ? vendorFeedback[selectedAssignment.serviceCategory].message : ''}
         loadError={selectedAssignment ? decisionErrorByCategory[selectedAssignment.serviceCategory] || '' : ''}
         serviceCategory={selectedAssignment?.serviceCategory}
       />
-
-      <ChangeDateModal
-        isOpen={showDateModal}
-        onClose={() => setShowDateModal(false)}
-        eventId={event?.id || id}
-        currentDate={event?.date}
-        onDateChanged={async () => {
-          await reloadAll();
-          setReadinessRefresh(value => value + 1);
-        }}
-      />
+      <ChangeDateModal isOpen={showDateModal} onClose={() => setShowDateModal(false)} eventId={id} currentDate={event.date} onDateChanged={async (newDate, record) => {
+        setEvent(previous => ({ ...previous, status: record?.status || previous.status, date: record?.eventDate || newDate, endDate: record?.endDate || previous.endDate }));
+        setDateFeedback(`Event rescheduled to ${formatEventDate(newDate)}. Template task deadlines were refreshed where applicable.`);
+        await refreshAfterAction();
+      }} />
     </Layout>
   );
 }

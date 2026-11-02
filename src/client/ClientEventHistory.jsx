@@ -3,29 +3,19 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
+import useApiResource from '../hooks/useApiResource';
 
-const FILTERS = ['ALL', 'EVENT_CREATED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
+const FILTERS = ['ALL', 'EVENT_CREATED', 'AWAITING_VENDORS', 'NEEDS_COORDINATOR', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'CLOSED'];
 
 export default function ClientEventHistory() {
-  const { state, fetchMyInquiries } = useApp();
-  const { currentUser, inquiries, loading } = state;
+  const { data: myEvents, loading, error, reload } = useApiResource('/events');
   const [params, setParams] = useSearchParams();
 
   const status = params.get('status') || 'ALL';
 
-  useEffect(() => {
-    if (currentUser?.id != null) fetchMyInquiries(currentUser.id).catch(() => {});
-  }, [fetchMyInquiries, currentUser?.id]);
-
-  // Filter inquiries that have been converted to events
-  const myEvents = inquiries.filter(i => 
-    i.clientId === currentUser?.id && 
-    (i.event || i.status === 'EVENT_CREATED' || i.status === 'CONFIRMED' || i.status === 'COMPLETED' || i.status === 'CANCELLED')
-  );
-
   const filtered = status === 'ALL'
     ? myEvents
-    : myEvents.filter(e => (e.event?.status || e.status) === status);
+    : myEvents.filter(e => e.status === status);
 
   if (loading) {
     return (
@@ -69,7 +59,7 @@ export default function ClientEventHistory() {
         </div>
 
         {/* Events List */}
-        {filtered.length === 0 ? (
+        {error ? <div role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{error} <button onClick={reload} className="underline">Retry</button></div> : filtered.length === 0 ? (
           <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
             {myEvents.length === 0 
               ? 'No events yet. Create an inquiry to get started.'
@@ -92,14 +82,14 @@ export default function ClientEventHistory() {
                 {filtered.map(event => (
                   <tr key={event.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-800">
-                      {event.event?.name || event.eventType}
+                      {event.name}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{event.eventDate}</td>
                     <td className="px-4 py-3 text-gray-600">
-                      {event.event?.venue || 'TBD'}
+                      {event.venue || 'TBD'}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={event.event?.status || event.status} />
+                      <StatusBadge status={event.status} />
                     </td>
                     <td className="px-4 py-3">
                       <Link

@@ -16,6 +16,8 @@ export default function VenueDetail() {
   useEffect(() => {
     const loadVenue = async () => {
       setLoading(true);
+      setVenue(null);
+      setBookings([]);
       try {
         const [venueData, bookingsData] = await Promise.all([
           fetchVenueById(id),
