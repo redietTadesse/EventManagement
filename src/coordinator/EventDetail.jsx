@@ -44,11 +44,27 @@ function getCategoryRollup(category, assignmentsByCategory) {
 function getEventStatusReason(status, categoryRollups) {
   const exhausted = categoryRollups.filter(category => category.state === 'exhausted');
   const pending = categoryRollups.filter(category => category.state === 'pending');
+  const resolved = categoryRollups.filter(category => category.state === 'resolved');
   const total = categoryRollups.length;
   const list = values => values.length === 1
     ? values[0]
     : `${values.slice(0, -1).join(', ')} and ${values.at(-1)}`;
   const label = value => value.replace(/_/g, ' ');
+
+  const expectedRollup = exhausted.length > 0
+    ? 'NEEDS_COORDINATOR'
+    : total > 0 && resolved.length === total
+      ? 'CONFIRMED'
+      : 'AWAITING_VENDORS';
+  if (total > 0
+      && ['NEEDS_COORDINATOR', 'AWAITING_VENDORS', 'CONFIRMED'].includes(status)
+      && status !== expectedRollup) {
+    const detailItems = exhausted.length
+      ? exhausted.map(category => `${label(category.category)}: ${category.reason}`)
+      : pending.map(category => `${label(category.category)} is awaiting a response from ${category.vendorName}`);
+    const details = detailItems.length ? list(detailItems) : 'all required service categories are resolved';
+    return `Saved status is ${label(status)}, but current vendor attempts indicate ${label(expectedRollup)}: ${details}.`;
+  }
 
   if (status === 'NEEDS_COORDINATOR') {
     const blockers = exhausted.map(category => `${label(category.category)}: ${category.reason}`);
@@ -309,6 +325,9 @@ useEffect(() => {
 
   // Check for unfilled categories
   const requiredCategories = [...new Set([...(event?.requiredCategories || []), ...Object.keys(assignmentsByCategory)])];
+  const rollupCategories = event?.requiredCategories?.length
+    ? event.requiredCategories
+    : Object.keys(assignmentsByCategory);
   const unfilledCategories = requiredCategories.filter(category => {
     const categoryAssignments = assignmentsByCategory[category] || [];
     return !categoryAssignments.some(a => a.status === 'ACCEPTED' || a.status === 'COMPLETED');
@@ -318,7 +337,7 @@ useEffect(() => {
   const totalCategories = requiredCategories.length;
   const statusReason = getEventStatusReason(
     event?.status,
-    requiredCategories.map(category => getCategoryRollup(category, assignmentsByCategory)),
+    rollupCategories.map(category => getCategoryRollup(category, assignmentsByCategory)),
   );
 
   const scrollToDecisionHistory = () => decisionHistoryRef.current?.scrollIntoView({
@@ -648,7 +667,7 @@ useEffect(() => {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-base md:text-lg font-semibold text-gray-800">Vendor Pipeline</h3>
-                <p className="mt-1 text-xs text-gray-500">Eligible vendors pass the event-specific checks. Match score weights quality 50%, workload 40%, and rotation 10%.</p>
+                <p className="mt-1 text-xs text-gray-500">Eligible vendors pass the event-specific checks. Match score weights quality 50%, load 40%, and rotation 10%.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button

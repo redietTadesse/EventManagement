@@ -65,6 +65,7 @@ class RecordOwnershipIntegrationTest {
     private Vendor vendorB;
     private VendorAssignment assignmentA;
     private VendorAssignment assignmentB;
+    private Checklist coordinatorTaskA;
     private Checklist coordinatorTaskB;
 
     @BeforeEach
@@ -85,6 +86,7 @@ class RecordOwnershipIntegrationTest {
         assignmentA = assignment(eventA, vendorA);
         assignmentB = assignment(eventB, vendorB);
 
+        coordinatorTaskA = checklist(eventA, "Coordinator task A", Role.COORDINATOR);
         coordinatorTaskB = checklist(eventB, "Coordinator task", Role.COORDINATOR);
         checklist(eventB, "Vendor task", Role.VENDOR);
     }
@@ -94,6 +96,8 @@ class RecordOwnershipIntegrationTest {
         String token = token(clientA);
 
         mockMvc.perform(get("/api/v1/inquiries/{id}", inquiryB.getId()).header("Authorization", token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/history/inquiry/{id}", inquiryB.getId()).header("Authorization", token))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/inquiries/client/{clientId}", clientB.getId()).header("Authorization", token))
                 .andExpect(status().isForbidden());
@@ -127,6 +131,9 @@ class RecordOwnershipIntegrationTest {
 
         mockMvc.perform(get("/api/v1/events/{id}", eventB.getId()).header("Authorization", token))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/v1/events/{id}/status", eventB.getId())
+                        .param("status", EventStatus.CANCELLED.name()).header("Authorization", token))
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/events/inquiry/{id}", inquiryB.getId()).header("Authorization", token))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/assignments/event/{id}", eventB.getId()).header("Authorization", token))
@@ -144,6 +151,8 @@ class RecordOwnershipIntegrationTest {
                 .andExpect(jsonPath("$[0].id").value(eventA.getId()))
                 .andExpect(jsonPath("$[1]").doesNotExist());
         assertThat(checklistRepository.findById(coordinatorTaskB.getId()).orElseThrow().isComplete()).isFalse();
+        assertThat(eventRepository.findById(eventB.getId()).orElseThrow().getStatus())
+                .isEqualTo(EventStatus.CONFIRMED);
     }
 
     @Test
@@ -153,6 +162,11 @@ class RecordOwnershipIntegrationTest {
         mockMvc.perform(get("/api/v1/assignments/{id}", assignmentB.getId()).header("Authorization", token))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/events/{id}", eventB.getId()).header("Authorization", token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/checklists/event/{id}", eventB.getId()).header("Authorization", token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/v1/checklists/{id}/complete", coordinatorTaskA.getId())
+                        .header("Authorization", token))
                 .andExpect(status().isForbidden());
         mockMvc.perform(patch("/api/v1/assignments/{id}/respond", assignmentB.getId())
                         .header("Authorization", token)

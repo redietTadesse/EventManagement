@@ -51,7 +51,7 @@ function AssignmentDecisionPanel({
 
       {expanded && (
         <div className="mt-3 space-y-2 border-t border-indigo-100 pt-3">
-          <p className="text-xs text-slate-600">Ranked by quality (50%), workload (40%), and rotation (10%).</p>
+          <p className="text-xs text-slate-600">Ranked by quality (50%), load (40%), and rotation (10%).</p>
           {decisionLoading && <p role="status" className="text-xs text-slate-500">Checking event-specific vendor eligibility…</p>}
           {decisionError && <p role="alert" className="text-xs text-rose-700">{decisionError}</p>}
           {!decisionLoading && !decisionError && alternativeVendors.length === 0 && (
@@ -65,7 +65,7 @@ function AssignmentDecisionPanel({
                   <p className="text-sm font-medium text-slate-900">{vendor.companyName || vendor.name || 'Vendor'}</p>
                   {vendor.score != null && (
                     <p className="mt-0.5 text-xs text-slate-600">
-                      Match {Math.round(vendor.score)}% · quality {Math.round(vendor.qualityScore || 0)}% · workload {Math.round(vendor.workloadScore || 0)}% · rotation {Math.round(vendor.rotationScore || 0)}%
+                      Match {Math.round(vendor.score)}% · quality {Math.round(vendor.qualityScore || 0)}% · load {Math.round(vendor.workloadScore || 0)}% · rotation {Math.round(vendor.rotationScore || 0)}%
                     </p>
                   )}
                   {vendor.eligibilityExplanation && <p className="mt-1 text-xs text-emerald-700">{vendor.eligibilityExplanation}</p>}
@@ -195,7 +195,7 @@ export default function PipelineLadder({
                     : isAccepted
                     ? 'border-emerald-200 bg-emerald-50/50'
                     : isDeclined
-                    ? 'border-rose-200 bg-slate-50 opacity-50 line-through'
+                    ? 'border-rose-200 bg-rose-50/60'
                     : 'border-slate-200 bg-white'
                 }`}
               >
@@ -206,14 +206,12 @@ export default function PipelineLadder({
                       <p
                         className={`text-sm font-medium ${
                           isCurrent ? 'text-indigo-900' : 'text-slate-900'
-                        } ${isDeclined ? 'line-through' : ''}`}
+                        }`}
                       >
                         {attempt.vendorName || 'Vendor Pool'}
                       </p>
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded ${statusColor} ${
-                          isDeclined ? 'line-through' : ''
-                        }`}
+                        className={`text-xs font-bold px-2 py-0.5 rounded ${statusColor}`}
                       >
                         {attempt.status.replace(/_/g, ' ')}
                       </span>
