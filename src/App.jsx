@@ -34,6 +34,7 @@ import AdminDashboard from './admin/Dashboard';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
+import AdminVenues from './admin/Venues';
 
 function AppRoutes() {
   return (
@@ -81,6 +82,7 @@ function AppRoutes() {
         <Route path="/admin/vendors/new" element={<VendorForm />} />
         <Route path="/admin/vendors/:id/edit" element={<VendorForm />} />
         <Route path="/admin/vendors/:id" element={<VendorDetail />} />
+        <Route path="/admin/venues" element={<AdminVenues />} />
       </Route>
 
       <Route path="*" element={<RootRedirect />} />

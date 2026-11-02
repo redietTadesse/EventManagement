@@ -85,10 +85,22 @@ export default function VenueDetail() {
                 <p className="font-medium">{venue.location}</p>
               </div>
             )}
-            {venue?.capacity && (
+            {venue?.capacity != null && (
               <div>
                 <p className="text-gray-500">Capacity</p>
                 <p className="font-medium">{venue.capacity} people</p>
+              </div>
+            )}
+            {venue?.setupBufferDays != null && (
+              <div>
+                <p className="text-gray-500">Setup buffer</p>
+                <p className="font-medium">{venue.setupBufferDays} days</p>
+              </div>
+            )}
+            {venue?.teardownBufferDays != null && (
+              <div>
+                <p className="text-gray-500">Teardown buffer</p>
+                <p className="font-medium">{venue.teardownBufferDays} days</p>
               </div>
             )}
             {venue?.hourlyRate && (
@@ -106,6 +118,12 @@ export default function VenueDetail() {
             <div>
               <p className="text-gray-500">Description</p>
               <p className="font-medium mt-1">{venue.description}</p>
+            </div>
+          )}
+          {venue?.resources && (
+            <div>
+              <p className="text-gray-500">Resources and facilities</p>
+              <p className="font-medium mt-1 whitespace-pre-line">{venue.resources}</p>
             </div>
           )}
         </div>

@@ -40,7 +40,24 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
 
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
 
+    boolean existsByVenueIdAndBookingDateGreaterThanEqualAndStatus(
+            Long venueId, LocalDate date, VenueBooking.BookingStatus status);
+
+    @Query("""
+           SELECT CASE WHEN COUNT(vb) > 0 THEN true ELSE false END
+           FROM VenueBooking vb JOIN vb.event event JOIN event.inquiry inquiry
+           WHERE vb.venue.id = :venueId
+             AND vb.bookingDate >= :today
+             AND vb.status = 'CONFIRMED'
+             AND inquiry.expectedAttendees > :capacity
+           """)
+    boolean existsFutureBookingExceedingCapacity(@Param("venueId") Long venueId,
+                                                 @Param("today") LocalDate today,
+                                                 @Param("capacity") Integer capacity);
+
     List<VenueBooking> findByVenueId(Long venueId);
+
+    boolean existsByVenueId(Long venueId);
 
     @Query("""
            SELECT vb FROM VenueBooking vb
