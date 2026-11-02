@@ -7,9 +7,8 @@ import api from '../api/axios';
 /**
  * Coordinator proposal composer.
  *
- * Venues come from the live API (GET /venues/available?date=), which already
- * excludes venues booked on that date — so there is no separate client-side
- * conflict check any more.
+ * Venues come from the live API (GET /venues/available?date=&attendees=&endDate=),
+ * which checks event dates, buffers, capacity, bookings, and administrator blocks.
  *
  * The submitted payload matches SendProposalRequest exactly:
  *   venue            String  (required)
@@ -114,7 +113,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     setLoading(true);
     setError('');
 
-    fetchAvailableVenues(inquiry.eventDate)
+    fetchAvailableVenues(inquiry.eventDate, inquiry.expectedAttendees, inquiry.endDate)
       .then((venueList) => {
         if (cancelled) return;
         setVenues(venueList || []);
@@ -125,7 +124,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [inquiry?.eventDate, fetchAvailableVenues]);
+  }, [inquiry?.eventDate, inquiry?.endDate, inquiry?.expectedAttendees, fetchAvailableVenues]);
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 

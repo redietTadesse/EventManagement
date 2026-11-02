@@ -12,11 +12,26 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface VendorAssignmentRepository extends JpaRepository<VendorAssignment, Long> {
 
     List<VendorAssignment> findByEventId(Long eventId);
+
+    @Query("SELECT va FROM VendorAssignment va " +
+            "JOIN FETCH va.event event " +
+            "JOIN FETCH event.inquiry inquiry " +
+            "LEFT JOIN FETCH va.vendor " +
+            "WHERE va.id = :assignmentId")
+    Optional<VendorAssignment> findDetailedById(@Param("assignmentId") Long assignmentId);
+
+    @Query("SELECT va FROM VendorAssignment va " +
+            "JOIN FETCH va.event event " +
+            "JOIN FETCH event.inquiry inquiry " +
+            "LEFT JOIN FETCH va.vendor " +
+            "WHERE event.id = :eventId")
+    List<VendorAssignment> findDetailedByEventId(@Param("eventId") Long eventId);
 
     List<VendorAssignment> findByVendorId(Long vendorId);
 

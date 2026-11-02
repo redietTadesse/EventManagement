@@ -25,6 +25,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
@@ -60,6 +61,9 @@ class InquiryServiceTest {
 
     @Mock
     private VendorRatingService ratingService;
+
+    @Mock
+    private ChecklistService checklistService;
 
 
     @InjectMocks
@@ -285,7 +289,12 @@ class InquiryServiceTest {
         request.setVenue("Main Hall");
 
         when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
-        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
+            Event saved = invocation.getArgument(0);
+            saved.setId(5L);
+            return saved;
+        });
+        when(checklistService.generateMissingTemplateTasks(anyLong())).thenReturn(List.of());
         when(inquiryRepository.save(any(Inquiry.class))).thenReturn(inquiry);
 
         // Stub the engine for the transition PROPOSAL_ACCEPTED -> EVENT_CREATED

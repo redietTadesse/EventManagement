@@ -5,12 +5,17 @@ import jakarta.validation.constraints.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import com.aicc.eventmanagement.enums.Role;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
-@Table(name = "checklists")
+@Table(name = "checklists", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_checklists_event_template", columnNames = {"event_id", "template_key"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -38,6 +43,30 @@ public class Checklist {
 
     @Column(name = "due_date")
     private LocalDate dueDate;
+
+    @Column(name = "template_key", length = 100)
+    private String templateKey;
+
+    @Column(name = "offset_days")
+    private Integer offsetDays;
+
+    @Column(name = "due_date_overridden", nullable = false)
+    @Builder.Default
+    private boolean dueDateOverridden = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "owner_role", nullable = false, length = 20)
+    @Builder.Default
+    private Role ownerRole = Role.COORDINATOR;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "checklist_dependencies",
+            joinColumns = @JoinColumn(name = "checklist_id"),
+            inverseJoinColumns = @JoinColumn(name = "prerequisite_id"),
+            uniqueConstraints = @UniqueConstraint(name = "uk_checklist_dependency",
+                    columnNames = {"checklist_id", "prerequisite_id"}))
+    @Builder.Default
+    private Set<Checklist> dependencies = new LinkedHashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

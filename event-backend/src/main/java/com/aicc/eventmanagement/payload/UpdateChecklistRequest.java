@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
+import com.aicc.eventmanagement.enums.Role;
 
 @Data
 @Builder
@@ -18,6 +20,12 @@ public class UpdateChecklistRequest {
     private String itemName;
     
     private LocalDate dueDate;
+
+    private Boolean clearDueDate;
     
     private Boolean isComplete;
+
+    private Role ownerRole;
+
+    private List<Long> dependencyIds;
 }

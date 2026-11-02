@@ -4,15 +4,21 @@ import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Checklist;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.entities.User;
+import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.EventReadinessResponse;
+import com.aicc.eventmanagement.payload.EventResponse;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
+import com.aicc.eventmanagement.repositories.UserRepository;
+import com.aicc.eventmanagement.repositories.VendorRepository;
+import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.services.VenueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +40,9 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final InquiryRepository inquiryRepository;
+    private final UserRepository userRepository;
+    private final VendorRepository vendorRepository;
+    private final VendorAssignmentRepository assignmentRepository;
     private final VendorService vendorService;
     private final WorkflowEngine workflowEngine;
     private final ApplicationEventPublisher eventPublisher;
@@ -72,6 +81,56 @@ public class EventService {
         log.info("Fetching event with id: {}", id);
         return eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Event not found with id: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public EventResponse getEventResponseById(Long id) {
+        return EventResponse.from(getEventById(id));
+    }
+
+    @Transactional(readOnly = true)
+    public EventResponse getEventResponseByInquiryId(Long inquiryId) {
+        return EventResponse.from(getEventByInquiryId(inquiryId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventResponse> getEventResponsesForUser(String username, boolean upcomingOnly) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        List<Event> events;
+        if (user.getRole() == Role.COORDINATOR || user.getRole() == Role.ADMIN) {
+            events = upcomingOnly
+                    ? eventRepository.findAllActiveEvents(List.of(
+                            EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED))
+                    : eventRepository.findAll();
+        } else if (user.getRole() == Role.CLIENT) {
+            events = eventRepository.findByInquiry_ClientId(user.getId());
+        } else if (user.getRole() == Role.VENDOR) {
+            Vendor vendor = vendorRepository.findByUserId(user.getId()).orElse(null);
+            events = vendor == null ? List.of() : assignmentRepository.findDetailedByVendorId(vendor.getId())
+                    .stream()
+                    .map(VendorAssignment::getEvent)
+                    .distinct()
+                    .toList();
+        } else {
+            events = List.of();
+        }
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        return events.stream()
+                .filter(event -> !upcomingOnly || (event.getInquiry() != null
+                        && event.getInquiry().getEventDate() != null
+                        && !event.getInquiry().getEventDate().isBefore(today)
+                        && event.getStatus() != EventStatus.COMPLETED
+                        && event.getStatus() != EventStatus.CANCELLED
+                        && event.getStatus() != EventStatus.CLOSED))
+                .map(EventResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EventResponse> getEventResponsesByStatus(EventStatus status) {
+        return eventRepository.findByStatus(status).stream().map(EventResponse::from).toList();
     }
 
     public List<Event> getAllEvents() {
@@ -122,6 +181,12 @@ public class EventService {
         if (request.getVenueId() != null && !request.getVenueId().equals(oldVenueId)) {
             Long inquiryId = event.getInquiry() != null ? event.getInquiry().getId() : null;
             if (inquiryId != null) {
+                if (oldVenueId != null) {
+                    // Keep the old venue from remaining blocked after a successful move.
+                    // This update and the new booking share the surrounding transaction,
+                    // so a failed booking restores the previous reservation.
+                    venueService.cancelVenueBookingsForEvent(saved.getId());
+                }
                 inquiryRepository.findById(inquiryId)
                     .ifPresent(inquiry -> {
                         venueService.bookVenue(
@@ -165,6 +230,11 @@ public class EventService {
         eventPublisher.publishEvent(new WorkflowTransitionEvent(this, oldStatus, status, "EVENT-" + id, userRole));
 
         return saved;
+    }
+
+    @Transactional
+    public EventResponse updateEventStatusResponse(Long id, EventStatus status, Role userRole) {
+        return EventResponse.from(updateEventStatus(id, status, userRole));
     }
 
     @Transactional
@@ -253,7 +323,8 @@ public class EventService {
         }
 
         boolean venueAvailable = event.getVenueId() == null || venueService.isVenueAvailableForEvent(
-                event.getVenueId(), newDate, newEndDate, eventId);
+                event.getVenueId(), newDate, newEndDate, eventId,
+                event.getInquiry() != null ? event.getInquiry().getExpectedAttendees() : null);
         if (!venueAvailable) {
             conflicts.add("The venue is already booked on the new date.");
         }
@@ -289,6 +360,7 @@ public class EventService {
         inquiry.setEventDate(newDate);
         if (inquiry.getEndDate() != null) inquiry.setEndDate(shiftedEndDate);
         inquiryRepository.save(inquiry);
+        checklistService.rescheduleGeneratedDueDates(eventId, newDate);
 
         if (event.getVenueId() != null) {
             venueService.rescheduleVenueBookingsForEvent(
@@ -302,6 +374,11 @@ public class EventService {
                     EventStatus.AWAITING_VENDORS, "EVENT-" + eventId, Role.COORDINATOR));
         }
         return eventRepository.save(event);
+    }
+
+    @Transactional
+    public EventResponse changeEventDateResponse(Long eventId, java.time.LocalDate newDate) {
+        return EventResponse.from(changeEventDate(eventId, newDate));
     }
 
     private java.time.LocalDate shiftedEndDate(Event event, java.time.LocalDate newStartDate) {

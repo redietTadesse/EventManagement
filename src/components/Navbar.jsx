@@ -35,6 +35,7 @@ const Navbar = () => {
     ],
     ADMIN: [
       { to: '/admin/vendors', label: 'Vendors' },
+      { to: '/admin/venues', label: 'Venues' },
     ],
   }[currentUser.role] || [];
 

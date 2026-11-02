@@ -1,9 +1,9 @@
 package com.aicc.eventmanagement.services;
 
-import com.aicc.eventmanagement.entities.Checklist;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.User;
+import com.aicc.eventmanagement.entities.Venue;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
@@ -65,18 +65,9 @@ public class InquiryService {
     private final VendorRatingService ratingService;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRepository vendorRepository;
+    private final ChecklistService checklistService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    private static final Map<String, List<String>> CHECKLIST_TEMPLATES = Map.of(
-            "conference", List.of("Book main hall", "Arrange AV equipment", "Arrange catering service", "Arrange security", "Set up registration desk"),
-            "wedding", List.of("Book ceremony venue", "Arrange catering service", "Arrange photography", "Book music / DJ", "Order flowers"),
-            "trade_show", List.of("Book exhibition space", "Arrange booth setup", "Arrange security", "Arrange cleaning services", "Confirm exhibitor list"),
-            "exhibition", List.of("Book exhibition space", "Arrange booth setup", "Arrange security", "Arrange cleaning services", "Confirm exhibitor list"),
-            "concert", List.of("Book venue", "Arrange stage setup", "Arrange AV equipment", "Arrange security", "Confirm artist line-up"),
-            "gala", List.of("Book ballroom", "Arrange catering service", "Arrange photography", "Book music / DJ", "Arrange security"),
-            "seminar", List.of("Book meeting room", "Arrange AV equipment", "Arrange catering")
-    );
 
     private List<String> canonicalCategories(Collection<String> selected) {
         if (selected == null) return List.of();
@@ -264,10 +255,9 @@ public class InquiryService {
                 .requiredCategories(resolvedCategories)
                 .build();
 
-        List<Checklist> checklistItems = generateChecklistForEventType(inquiry.getEventType());
-        checklistItems.forEach(event::addChecklistItem);
-
         Event savedEvent = eventRepository.save(event);
+        List<com.aicc.eventmanagement.entities.Checklist> checklistItems =
+                checklistService.generateMissingTemplateTasks(savedEvent.getId());
 
         // Book venue without catching the exception so that conflicts roll back the whole transaction.
         if (request.getVenueId() != null) {
@@ -314,11 +304,11 @@ public class InquiryService {
 
         List<ConversionPreviewResponse.CategoryPreview> categoryPreviews = new ArrayList<>();
         for (String category : requiredCategories) {
-            List<VendorRankingService.Ranked> ranked = rankingService.rank(
-                    category, eventDate, Set.of(), inquiry.getEventType());
+            VendorRankingService.DecisionPreview decision = rankingService.preview(
+                    category, eventDate, inquiry.getEventType());
             List<ConversionPreviewResponse.VendorCandidate> candidates = new ArrayList<>();
-            for (int i = 0; i < Math.min(3, ranked.size()); i++) {
-                VendorRankingService.Ranked r = ranked.get(i);
+            for (int i = 0; i < Math.min(3, decision.eligible().size()); i++) {
+                VendorRankingService.Ranked r = decision.eligible().get(i);
                 var v = r.vendor();
                 boolean hasDeclined = hasRecentDecline(v.getId(), category);
                 long load = assignmentRepository.countActiveAndPendingByVendor(v.getId());
@@ -329,10 +319,20 @@ public class InquiryService {
                         .rating(r.rating())
                         .currentLoad(load)
                         .score(r.score())
+                        .qualityScore(r.qualityScore())
+                        .workloadScore(r.workloadScore())
+                        .rotationScore(r.rotationScore())
                         .rank(i + 1)
                         .hasRecentDecline(hasDeclined)
                         .build());
             }
+            List<ConversionPreviewResponse.ExcludedCandidate> excluded = decision.excluded().stream()
+                    .map(candidate -> ConversionPreviewResponse.ExcludedCandidate.builder()
+                            .vendorId(candidate.vendorId())
+                            .companyName(candidate.vendorName())
+                            .reason(candidate.reason())
+                            .build())
+                    .toList();
 
             String warning = null;
             if (candidates.isEmpty()) {
@@ -344,6 +344,7 @@ public class InquiryService {
             categoryPreviews.add(ConversionPreviewResponse.CategoryPreview.builder()
                     .category(category)
                     .candidates(candidates)
+                    .excludedCandidates(excluded)
                     .warning(warning)
                     .build());
         }
@@ -379,13 +380,32 @@ public class InquiryService {
             String venueName = (String) proposal.get("venue");
 
             if (venueId == null) {
-                return ConversionPreviewResponse.VenuePreview.builder().venueName(venueName).available(false).message("No specific venue selected in proposal").build();
+                String message = "No specific venue selected in proposal";
+                return ConversionPreviewResponse.VenuePreview.builder().venueName(venueName).available(false)
+                        .message(message).explanation(List.of(message)).build();
             }
 
-            boolean available = venueService.isVenueAvailable(venueId, eventDate);
-            String message = available ? "Available on " + eventDate : "Already booked on " + eventDate;
+            Venue venue = venueService.getById(venueId);
+            LocalDate endDate = inquiry.getEndDate() != null ? inquiry.getEndDate() : eventDate;
+            var fit = venueService.explainVenueFit(eventDate, endDate,
+                            inquiry.getExpectedAttendees(), null).stream()
+                    .filter(option -> option.venueId().equals(venueId))
+                    .findFirst()
+                    .orElse(null);
+            boolean available = fit != null && fit.eligible();
+            List<String> explanation = fit != null ? fit.explanation()
+                    : List.of("Venue is no longer present in the configured venue list.");
+            String message = available ? "Eligible for the event date and attendance"
+                    : String.join(" ", explanation);
 
-            return ConversionPreviewResponse.VenuePreview.builder().venueId(venueId).venueName(venueName).available(available).message(message).build();
+            return ConversionPreviewResponse.VenuePreview.builder()
+                    .venueId(venueId)
+                    .venueName(venue.getName() != null ? venue.getName() : venueName)
+                    .capacity(venue.getCapacity())
+                    .available(available)
+                    .message(message)
+                    .explanation(explanation)
+                    .build();
         } catch (Exception e) {
             log.warn("Failed to build venue preview for inquiry {}: {}", inquiry.getId(), e.getMessage());
             return ConversionPreviewResponse.VenuePreview.builder().available(false).message("Could not parse proposal venue details").build();
@@ -394,19 +414,6 @@ public class InquiryService {
 
     private boolean hasRecentDecline(Long vendorId, String category) {
         return assignmentRepository.existsRecentDeclineByVendorAndCategory(vendorId, category, LocalDateTime.now().minusDays(30));
-    }
-
-    private List<Checklist> generateChecklistForEventType(String eventType) {
-        List<String> items = CHECKLIST_TEMPLATES.getOrDefault(eventType, List.of("Book venue", "Arrange services"));
-        List<Checklist> checklist = new ArrayList<>();
-        for (String itemName : items) {
-            checklist.add(Checklist.builder()
-                    .itemName(itemName)
-                    .isComplete(false)
-                    .dueDate(LocalDate.now().plusDays(7))
-                    .build());
-        }
-        return checklist;
     }
 
     @Transactional

@@ -6,7 +6,8 @@ export default function ManualAssignModal({
   onAssign, 
   availableVendors = [],
   serviceCategory,
-  loading = false 
+  loading = false,
+  loadError = ''
 }) {
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [reason, setReason] = useState('');
@@ -72,6 +73,11 @@ export default function ManualAssignModal({
                 </option>
               ))}
             </select>
+            {loading && <p role="status" className="mt-2 text-xs text-slate-400">Refreshing event-specific eligibility…</p>}
+            {loadError && <p role="alert" className="mt-2 text-xs text-rose-300">{loadError}</p>}
+            {!loading && !loadError && availableVendors.length === 0 && (
+              <p className="mt-2 text-xs text-slate-400">No vendors currently pass the eligibility checks for this event.</p>
+            )}
           </div>
 
           <div>

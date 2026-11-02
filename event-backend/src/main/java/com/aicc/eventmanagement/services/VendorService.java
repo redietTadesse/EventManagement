@@ -16,6 +16,7 @@ import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.payload.CreateVendorRequest;
 import com.aicc.eventmanagement.payload.UpdateVendorRequest;
+import com.aicc.eventmanagement.payload.VendorDecisionPreviewResponse;
 import com.aicc.eventmanagement.payload.VendorPerformanceResponse;
 import com.aicc.eventmanagement.payload.VendorReviewResponse;
 import com.aicc.eventmanagement.repositories.EventRepository;
@@ -989,7 +990,7 @@ public class VendorService {
     // ============ GET ASSIGNMENTS ============
 
     public List<VendorAssignment> getAssignmentsByEvent(Long eventId) {
-        return assignmentRepository.findByEventId(eventId);
+        return assignmentRepository.findDetailedByEventId(eventId);
     }
 
     public List<VendorAssignment> getAssignmentsByVendor(Long vendorId) {
@@ -1045,7 +1046,7 @@ public class VendorService {
     }
 
     public VendorAssignment getAssignmentById(Long id) {
-        return assignmentRepository.findById(id)
+        return assignmentRepository.findDetailedById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment", id));
     }
 
@@ -1109,6 +1110,34 @@ public class VendorService {
 
     public List<String> getRequiredCategoriesFor(Event event) {
         return requiredCategoriesFor(event);
+    }
+
+    @Transactional(readOnly = true)
+    public VendorDecisionPreviewResponse previewVendorDecision(Long eventId, String category) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
+        Inquiry inquiry = event.getInquiry();
+        LocalDate eventDate = inquiry != null ? inquiry.getEventDate() : null;
+        if (eventDate == null) {
+            throw new BusinessException("Event date is required to evaluate vendors", "INVALID_EVENT_DATE");
+        }
+
+        VendorRankingService.DecisionPreview preview = rankingService.previewForEvent(
+                eventId, inquiry.getEventType(), category, eventDate);
+        List<VendorDecisionPreviewResponse.EligibleVendor> eligible = new ArrayList<>();
+        for (int index = 0; index < preview.eligible().size(); index++) {
+            VendorRankingService.Ranked candidate = preview.eligible().get(index);
+            eligible.add(new VendorDecisionPreviewResponse.EligibleVendor(
+                    candidate.vendor().getId(), candidate.vendor().getCompanyName(), index + 1,
+                    candidate.score() * 100.0, candidate.rating(), candidate.qualityScore() * 100.0,
+                    candidate.workloadScore() * 100.0, candidate.rotationScore() * 100.0,
+                    "Passed event-specific service, account, insurance, prior-attempt, and availability checks."));
+        }
+        List<VendorDecisionPreviewResponse.ExcludedVendor> excluded = preview.excluded().stream()
+                .map(candidate -> new VendorDecisionPreviewResponse.ExcludedVendor(
+                        candidate.vendorId(), candidate.vendorName(), candidate.reason()))
+                .toList();
+        return new VendorDecisionPreviewResponse(eventId, category, eventDate, eligible, excluded);
     }
 
     public boolean hasAllCategoriesFilled(Event event) {

@@ -1,6 +1,8 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
+import com.aicc.eventmanagement.entities.Checklist;
+import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.repositories.EventRepository;
@@ -14,7 +16,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
+import java.util.List;
+import java.time.LocalDate;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -33,6 +38,9 @@ class EventServiceTest {
 
     @Mock
     private VendorService vendorService;
+
+    @Mock
+    private ChecklistService checklistService;
 
     @Mock
     private WorkflowEngine workflowEngine;
@@ -75,5 +83,29 @@ class EventServiceTest {
                 Role.COORDINATOR
         );
         verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("Readiness preserves the existing 20 percent checklist contribution")
+    void checklistReadinessContributionRemainsTwentyPercent() {
+        Event event = Event.builder()
+                .id(2L)
+                .inquiry(Inquiry.builder().id(3L).eventDate(LocalDate.of(2027, 8, 10)).build())
+                .name("Checklist readiness")
+                .status(EventStatus.EVENT_CREATED)
+                .build();
+        Checklist complete = Checklist.builder().id(20L).event(event).itemName("Complete").isComplete(true).build();
+        Checklist blocked = Checklist.builder().id(21L).event(event).itemName("Blocked").isComplete(false).build();
+
+        when(eventRepository.findById(2L)).thenReturn(Optional.of(event));
+        when(vendorService.getRequiredCategoriesFor(event)).thenReturn(List.of());
+        when(vendorService.getAssignmentsByEvent(2L)).thenReturn(List.of());
+        when(checklistService.getChecklistByEvent(2L)).thenReturn(List.of(complete, blocked));
+
+        var readiness = eventService.getEventReadiness(2L);
+
+        assertThat(readiness.getReadinessPercentage()).isEqualTo(10);
+        assertThat(readiness.getCompletedChecklistItems()).isEqualTo(1);
+        assertThat(readiness.getTotalChecklistItems()).isEqualTo(2);
     }
 }

@@ -1,27 +1,112 @@
-import { CheckCircleIcon, ClockIcon, XCircleIcon, ChevronDownIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon, ClockIcon, XCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
+
+function ExcludedVendorList({ excludedVendors = [] }) {
+  if (excludedVendors.length === 0) return null;
+  return (
+    <details open className="mt-3 rounded-lg border border-rose-200 bg-rose-50/60 p-3">
+      <summary className="cursor-pointer text-xs font-semibold text-rose-800">
+        {excludedVendors.length} vendor{excludedVendors.length === 1 ? '' : 's'} excluded by eligibility checks
+      </summary>
+      <ul className="mt-2 space-y-2">
+        {excludedVendors.map((vendor, index) => (
+          <li key={vendor.vendorId || index} className="text-xs text-rose-800">
+            <span className="font-medium">{vendor.companyName || vendor.vendorName || 'Vendor'}</span>
+            <span> — {vendor.reason || 'Not eligible for this event.'}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function AssignmentDecisionPanel({
+  category,
+  alternativeVendors,
+  excludedVendors,
+  decisionLoading,
+  decisionError,
+  expanded,
+  setExpanded,
+  canAssign,
+  assignmentId,
+  onForceAssign,
+}) {
+  return (
+    <section className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+      <button
+        type="button"
+        onClick={() => setExpanded(value => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span>
+          <span className="block text-sm font-semibold text-slate-900">Assignment decision</span>
+          <span className="block text-xs text-slate-600">
+            {decisionLoading ? 'Refreshing eligibility' : `${alternativeVendors.length} eligible alternative${alternativeVendors.length === 1 ? '' : 's'}`}
+          </span>
+        </span>
+        <ChevronDownIcon className={`h-4 w-4 shrink-0 text-indigo-700 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-2 border-t border-indigo-100 pt-3">
+          <p className="text-xs text-slate-600">Ranked by quality (50%), workload (40%), and rotation (10%).</p>
+          {decisionLoading && <p role="status" className="text-xs text-slate-500">Checking event-specific vendor eligibility…</p>}
+          {decisionError && <p role="alert" className="text-xs text-rose-700">{decisionError}</p>}
+          {!decisionLoading && !decisionError && alternativeVendors.length === 0 && (
+            <p className="text-xs text-slate-600">No eligible alternative is available for this category and event date.</p>
+          )}
+          {alternativeVendors.slice(0, 4).map((vendor, index) => (
+            <div key={vendor.id || vendor.vendorId || index} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700">{index + 1}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">{vendor.companyName || vendor.name || 'Vendor'}</p>
+                  {vendor.score != null && (
+                    <p className="mt-0.5 text-xs text-slate-600">
+                      Match {Math.round(vendor.score)}% · quality {Math.round(vendor.qualityScore || 0)}% · workload {Math.round(vendor.workloadScore || 0)}% · rotation {Math.round(vendor.rotationScore || 0)}%
+                    </p>
+                  )}
+                  {vendor.eligibilityExplanation && <p className="mt-1 text-xs text-emerald-700">{vendor.eligibilityExplanation}</p>}
+                  {vendor.reasoning && <p className="mt-1 text-xs text-slate-600">{vendor.reasoning}</p>}
+                </div>
+              </div>
+              {canAssign && onForceAssign && (
+                <button
+                  type="button"
+                  onClick={() => onForceAssign(assignmentId, vendor.id || vendor.vendorId, category)}
+                  className="shrink-0 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                >
+                  Assign
+                </button>
+              )}
+            </div>
+          ))}
+          <ExcludedVendorList excludedVendors={excludedVendors} />
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function PipelineLadder({
   category,
   assignments = [],
   alternativeVendors = [],
+  excludedVendors = [],
+  decisionLoading = false,
+  decisionError = '',
   onForceAssign,
   showAlternatives = true,
 }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const rank = (s) => {
-    if (s === 'ACCEPTED' || s === 'COMPLETED') return 3;
-    if (s === 'PENDING' || s === 'OPEN') return 2;
-    if (s === 'DECLINED') return 1;
-    return 0;
-  };
+  const [expanded, setExpanded] = useState(true);
 
   const sorted = [...assignments].sort(
-    (a, b) => rank(b.status) - rank(a.status) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+    (a, b) => Number(a.id || 0) - Number(b.id || 0) || new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
   );
 
-  const current = sorted.find((a) => a.status === 'PENDING' || a.status === 'OPEN') || sorted[0];
+  const current = [...sorted].reverse().find((a) => a.status === 'PENDING' || a.status === 'OPEN') || sorted.at(-1);
   const accepted = sorted.find((a) => a.status === 'ACCEPTED' || a.status === 'COMPLETED');
 
   if (sorted.length === 0) {
@@ -36,46 +121,18 @@ export default function PipelineLadder({
             <p className="text-sm text-slate-600 mt-0.5">No vendors assigned yet</p>
           </div>
         </div>
-        {showAlternatives && alternativeVendors.length > 0 && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="w-full py-2.5 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-          >
-            {expanded ? 'Hide' : 'Show'} available vendors{' '}
-            <ChevronDownIcon className={`w-4 h-4 ml-2 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-        )}
-        {expanded && alternativeVendors.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-            {alternativeVendors.slice(0, 4).map((vendor, index) => (
-              <div
-                key={vendor.id || index}
-                className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 text-xs font-bold">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      {vendor.companyName || vendor.name}
-                    </p>
-                    {vendor.rating && (
-                      <span className="text-xs text-slate-500">? {vendor.rating.toFixed(1)}</span>
-                    )}
-                  </div>
-                </div>
-                {onForceAssign && (
-                  <button
-                    onClick={() => onForceAssign(null, vendor.id, category)}
-                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
-                  >
-                    Assign <ArrowRightIcon className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+        {showAlternatives && (
+          <AssignmentDecisionPanel
+            category={category}
+            alternativeVendors={alternativeVendors}
+            excludedVendors={excludedVendors}
+            decisionLoading={decisionLoading}
+            decisionError={decisionError}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            canAssign
+            onForceAssign={onForceAssign}
+          />
         )}
       </div>
     );
@@ -99,8 +156,7 @@ export default function PipelineLadder({
 
         {sorted.map((attempt, index) => {
           const isLast = index === sorted.length - 1;
-          const isCurrent =
-            attempt.status === 'PENDING' || attempt.status === 'OPEN';
+          const isCurrent = current?.id === attempt.id;
           const isAccepted =
             attempt.status === 'ACCEPTED' || attempt.status === 'COMPLETED';
           const isDeclined = attempt.status === 'DECLINED';
@@ -175,52 +231,6 @@ export default function PipelineLadder({
                   </div>
                 </div>
 
-                {isCurrent && onForceAssign && alternativeVendors.length > 0 && (
-                  <div className="mt-2.5 pt-2.5 border-t border-slate-100">
-                    <button
-                      onClick={() => setExpanded(!expanded)}
-                      className="w-full py-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors"
-                    >
-                      {expanded ? 'Hide alternatives' : 'Show alternatives'}{' '}
-                      <ChevronDownIcon
-                        className={`w-3 h-3 ml-1 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                      />
-                    </button>
-                  </div>
-                )}
-
-                {expanded && isCurrent && alternativeVendors.length > 0 && (
-                  <div className="mt-2 space-y-2">
-                    {alternativeVendors.slice(0, 4).map((vendor, idx) => (
-                      <div
-                        key={vendor.id || idx}
-                        className="flex items-center justify-between bg-white p-2 rounded border border-slate-200"
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="vendor"
-                            className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <div>
-                            <p className="text-sm font-medium text-slate-900">
-                              {vendor.companyName || vendor.name}
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                              ★ {vendor.rating ?? 'N/A'} · {vendor.currentLoad ?? 0} active
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => onForceAssign(null, vendor.id, category)}
-                          className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-                        >
-                          Assign
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {!isLast && (
@@ -230,6 +240,20 @@ export default function PipelineLadder({
           );
         })}
       </div>
+      {showAlternatives && (
+        <AssignmentDecisionPanel
+          category={category}
+          alternativeVendors={alternativeVendors}
+          excludedVendors={excludedVendors}
+          decisionLoading={decisionLoading}
+          decisionError={decisionError}
+          expanded={expanded}
+          setExpanded={setExpanded}
+          canAssign={!accepted && current?.status !== 'PENDING'}
+          assignmentId={current?.status === 'OPEN' ? current.id : null}
+          onForceAssign={onForceAssign}
+        />
+      )}
     </div>
   );
 }

@@ -32,6 +32,7 @@ public class ConversionPreviewResponse {
         private Integer capacity;
         private boolean available;
         private String message;
+        private List<String> explanation;
     }
 
     @Data
@@ -41,7 +42,18 @@ public class ConversionPreviewResponse {
     public static class CategoryPreview {
         private String category;
         private List<VendorCandidate> candidates;
+        private List<ExcludedCandidate> excludedCandidates;
         private String warning;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ExcludedCandidate {
+        private Long vendorId;
+        private String companyName;
+        private String reason;
     }
 
     @Data
@@ -54,6 +66,9 @@ public class ConversionPreviewResponse {
         private Double rating;
         private long currentLoad;
         private double score;
+        private double qualityScore;
+        private double workloadScore;
+        private double rotationScore;
         private int rank;
         private boolean hasRecentDecline;
     }

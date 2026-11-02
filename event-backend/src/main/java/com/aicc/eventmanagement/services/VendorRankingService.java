@@ -56,6 +56,10 @@ public class VendorRankingService {
         public double rating() { return qualityScore() * RATING_SCALE; }
     }
 
+    public record ExcludedCandidate(Long vendorId, String vendorName, String reason) { }
+
+    public record DecisionPreview(List<Ranked> eligible, List<ExcludedCandidate> excluded) { }
+
     /** The winning candidate plus the decision snapshot captured at selection time. */
     public record Selection(Vendor vendor, double score, SelectionReason reason, String reasoning) {}
 
@@ -174,6 +178,28 @@ public class VendorRankingService {
         );
 
         return evaluate(category, date, tried, eventId, eventType).ranked();
+    }
+
+    /** Read-only preview using the same eligibility rules and score calculation as assignment. */
+    public DecisionPreview previewForEvent(
+            Long eventId, String eventType, String category, LocalDate date) {
+        Set<Long> tried = Set.copyOf(assignmentRepository.findTriedVendorIds(eventId, category));
+        return toDecisionPreview(evaluate(category, date, tried, eventId, eventType));
+    }
+
+    /** Read-only eligibility and ranking preview before an event record exists. */
+    public DecisionPreview preview(String category, LocalDate date, String eventType) {
+        return toDecisionPreview(evaluate(category, date, Set.of(), null, eventType));
+    }
+
+    private DecisionPreview toDecisionPreview(RankResult result) {
+        List<ExcludedCandidate> excluded = result.excluded().stream()
+                .map(candidate -> new ExcludedCandidate(
+                        (Long) candidate.get("vendorId"),
+                        (String) candidate.get("vendorName"),
+                        (String) candidate.get("reason")))
+                .toList();
+        return new DecisionPreview(result.ranked(), excluded);
     }
 
     /**
