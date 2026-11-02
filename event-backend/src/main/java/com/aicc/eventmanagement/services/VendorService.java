@@ -179,7 +179,7 @@ public class VendorService {
         if (req.getPhone() != null)            vendor.setPhone(req.getPhone());
         if (req.getEmail() != null)            vendor.setEmail(req.getEmail());
         if (req.getActive() != null)           vendor.setActive(req.getActive());
-        if (req.getInsuranceExpiryDate() != null) vendor.setInsuranceExpiryDate(req.getInsuranceExpiryDate());
+        if (req.isInsuranceExpiryDateProvided()) vendor.setInsuranceExpiryDate(req.getInsuranceExpiryDate());
 
         log.info("Updated vendor {}", id);
         return vendorRepository.save(vendor);

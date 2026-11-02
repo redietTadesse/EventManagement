@@ -37,6 +37,7 @@ public class VendorAssignmentResponse {
     // Assignment lifecycle
     private VendorAssignmentStatus status;
     private LocalDateTime assignedAt;
+    private LocalDateTime expiresAt;
     private LocalDateTime respondedAt;
     private String declineReason;
     private Double vendorRating;
@@ -69,6 +70,7 @@ public class VendorAssignmentResponse {
             // lifecycle
             .status(assignment.getStatus())
             .assignedAt(assignment.getAssignedAt())
+            .expiresAt(assignment.getExpiresAt())
             .respondedAt(assignment.getRespondedAt())
             .declineReason(assignment.getDeclineReason())
             .vendorRating(assignment.getVendorRating())

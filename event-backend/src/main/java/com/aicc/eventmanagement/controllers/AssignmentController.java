@@ -46,8 +46,10 @@ public class AssignmentController {
             @AuthenticationPrincipal UserDetails principal) {
         recordAccessService.requireEventAccess(eventId, principal.getUsername());
         List<VendorAssignment> assignments = vendorService.getAssignmentsByEvent(eventId);
+        boolean includeDecision = principal.getAuthorities().stream().anyMatch(authority ->
+                authority.getAuthority().equals("ROLE_COORDINATOR") || authority.getAuthority().equals("ROLE_ADMIN"));
         return ResponseEntity.ok(assignments.stream()
-            .map(VendorAssignmentResponse::from)
+            .map(assignment -> VendorAssignmentResponse.from(assignment, includeDecision))
             .collect(Collectors.toList()));
     }
 
@@ -89,7 +91,7 @@ public class AssignmentController {
             actor.getId(),
             actor.getUsername()
         );
-        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment, true));
     }
 
     @PatchMapping("/{id}/respond")
@@ -191,7 +193,7 @@ public class AssignmentController {
             actor.getId(),
             actor.getUsername()
         );
-        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment, true));
     }
 
     // ============ MY ASSIGNMENTS (vendor-scoped) ============

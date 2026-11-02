@@ -389,6 +389,7 @@ public class VenueService {
         log.info("Cancelled {} venue bookings for event {}", bookings.size(), eventId);
     }
 
+    @Transactional(readOnly = true)
     public List<VenueBookingResponse> getVenueBookings(Long venueId) {
         getById(venueId); // 404 if the venue doesn't exist
         List<VenueBooking> bookings = venueBookingRepository.findByVenueId(venueId);

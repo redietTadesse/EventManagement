@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDate;
 
@@ -29,4 +30,12 @@ public class UpdateVendorRequest {
     private Boolean active;
 
     private LocalDate insuranceExpiryDate;
+
+    @JsonIgnore
+    private boolean insuranceExpiryDateProvided;
+
+    public void setInsuranceExpiryDate(LocalDate value) {
+        insuranceExpiryDate = value;
+        insuranceExpiryDateProvided = true;
+    }
 }

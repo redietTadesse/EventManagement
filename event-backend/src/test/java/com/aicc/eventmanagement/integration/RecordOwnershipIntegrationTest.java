@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -183,6 +184,32 @@ class RecordOwnershipIntegrationTest {
                 .andExpect(jsonPath("$[1]").doesNotExist());
         assertThat(assignmentRepository.findById(assignmentB.getId()).orElseThrow().getStatus())
                 .isEqualTo(VendorAssignmentStatus.PENDING);
+    }
+
+    @Test
+    void onlyCoordinatorsAndAdminsReceiveAssignmentDecisionEvidence() throws Exception {
+        String snapshot = "{\"reasoning\":\"Ranked for the coordinator\",\"considered\":[]}";
+        String deadline = "2027-01-18T12:00:00";
+        assignmentA.setDecisionSnapshot(snapshot);
+        assignmentA.setExpiresAt(LocalDateTime.parse(deadline));
+        assignmentRepository.saveAndFlush(assignmentA);
+
+        for (User actor : java.util.List.of(coordinator, user("admin-evidence", Role.ADMIN))) {
+            mockMvc.perform(get("/api/v1/assignments/event/{id}", eventA.getId())
+                            .header("Authorization", token(actor)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].decisionSnapshot").value(snapshot))
+                    .andExpect(jsonPath("$[0].expiresAt").value(deadline));
+        }
+        mockMvc.perform(get("/api/v1/assignments/event/{id}", eventA.getId())
+                        .header("Authorization", token(clientA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].decisionSnapshot").doesNotExist())
+                .andExpect(jsonPath("$[0].expiresAt").value(deadline));
+        mockMvc.perform(get("/api/v1/assignments/{id}", assignmentA.getId())
+                        .header("Authorization", token(vendorUserA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.decisionSnapshot").doesNotExist());
     }
 
     @Test

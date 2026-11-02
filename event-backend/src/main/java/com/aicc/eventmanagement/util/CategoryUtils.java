@@ -5,6 +5,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class CategoryUtils {
 
@@ -76,9 +78,19 @@ public final class CategoryUtils {
 
     public static List<String> split(String csv) {
         if (csv == null || csv.isBlank()) return List.of();
-        return Arrays.stream(csv.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
+        List<String> values;
+        if (csv.trim().startsWith("[")) {
+            try {
+                values = new ObjectMapper().readValue(csv, new TypeReference<List<String>>() {});
+            } catch (Exception exception) {
+                throw new IllegalArgumentException("Invalid stored service categories", exception);
+            }
+        } else {
+            values = Arrays.asList(csv.split(","));
+        }
+        return values.stream()
+                .map(CategoryUtils::canonicalize)
+                .filter(s -> s != null && !s.isEmpty())
                 .distinct()
                 .collect(Collectors.toList());
     }

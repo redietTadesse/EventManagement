@@ -72,6 +72,14 @@ public class Vendor {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    // Lifecycle callbacks may temporarily append persistence metadata before a flush.
+    // Public descriptions must remain clean even while the entity is managed.
+    public String getDescription() {
+        if (description == null) return null;
+        int markerIndex = description.lastIndexOf("\n[insurance-expiry:");
+        return markerIndex >= 0 ? description.substring(0, markerIndex) : description;
+    }
+
     @PostLoad
     private void loadInsuranceExpiryDate() {
         String marker = "\n[insurance-expiry:";

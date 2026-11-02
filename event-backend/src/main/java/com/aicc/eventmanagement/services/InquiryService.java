@@ -227,11 +227,11 @@ public class InquiryService {
         Inquiry inquiry = getInquiryById(inquiryId);
 
         if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
-            throw new RuntimeException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()));
+            throw new BusinessException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()), "INVALID_STATE");
         }
 
         if (inquiry.getEvent() != null) {
-            throw new RuntimeException("This inquiry already has an event associated.");
+            throw new BusinessException("This inquiry already has an event associated.", "ALREADY_CONVERTED");
         }
 
         List<String> selectedCategories = request.getCategories() != null && !request.getCategories().isEmpty()

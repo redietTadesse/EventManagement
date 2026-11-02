@@ -9,6 +9,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CategoryUtilsTest {
 
     @Test
+    void readsBothLegacyJsonAndCsvCategoryStorage() {
+        assertThat(CategoryUtils.split("[\"AV\", \"catering\", \"security\", \"AV\"]"))
+                .containsExactly("av", "catering", "security");
+        assertThat(CategoryUtils.split("audio_visual, catering,security,AV"))
+                .containsExactly("av", "catering", "security");
+        assertThat(CategoryUtils.split("[]")).isEmpty();
+    }
+
+    @Test
     void categoryVariantsNormalizeAudioVisualAliases() {
         assertThat(CategoryUtils.categoryVariants("Audio_Visual"))
                 .containsExactly("av", "AV", "audio_visual", "AUDIO_VISUAL");
