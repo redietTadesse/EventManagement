@@ -66,6 +66,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EventLifecycleApiIntegrationTest {
     @Autowired private MockMvc http;
+    @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @Test
+    void onlyAdminCanProvisionCoordinatorAccounts() throws Exception {
+        User admin = user("admin", Role.ADMIN);
+        String path = "/admin/coordinators";
+        String username = "staff-" + run;
+        String password = "Fixture-only-password";
+        var payload = Map.of("fullName", "Demo Coordinator", "username", username,
+                "email", username + "@example.test", "password", password);
+        call(GET, path, coordinator, null, 403);
+        call(POST, path, coordinator, payload, 403);
+        JsonNode created = call(POST, path, admin, payload, 201);
+        assertThat(created.path("username").asText()).isEqualTo(username);
+        assertThat(created.has("passwordHash")).isFalse();
+        assertThat(created.has("password")).isFalse();
+        User account = users.findByUsername(username).orElseThrow();
+        assertThat(account.getRole()).isEqualTo(Role.COORDINATOR);
+        assertThat(passwordEncoder.matches(password, account.getPasswordHash())).isTrue();
+        assertThat(nodes(call(GET, path, admin, null, 200)))
+                .anySatisfy(item -> assertThat(item.path("username").asText()).isEqualTo(username));
+        call(POST, path, admin, payload, 409);
+    }
     @Autowired private ObjectMapper json;
     @Autowired private JwtUtils jwt;
     @Autowired private JdbcTemplate jdbc;

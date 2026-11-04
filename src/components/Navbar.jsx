@@ -35,6 +35,7 @@ const Navbar = () => {
     ],
     ADMIN: [
       { to: '/admin/dashboard', label: 'Dashboard' },
+      { to: '/admin/coordinators', label: 'Coordinators' },
       { to: '/admin/vendors', label: 'Vendors' },
       { to: '/admin/venues', label: 'Venues' },
     ],
