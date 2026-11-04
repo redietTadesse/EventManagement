@@ -14,7 +14,7 @@ export default function VendorEcosystemChart({ data = [] }) {
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Vendor intelligence</p>
         <h2 id="vendor-ecosystem-title" className="mt-1 font-semibold text-slate-900">Vendor Load vs. Quality</h2>
-        <p className="mt-1 text-sm text-slate-500">A quick view of active workload balanced against client ratings.</p>
+        <p className="mt-1 text-sm text-slate-500">Illustrative demo data for vendor workload and client ratings.</p>
       </div>
       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Max load: {MAX_ACTIVE_LOAD}</span>
     </div>
