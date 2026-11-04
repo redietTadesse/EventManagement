@@ -13,7 +13,7 @@ export default function ClientDashboard() {
   const { data: inquiries, loading } = inquiryResource;
   const { data: events } = eventResource;
 
-  const myInquiries = inquiries.filter(i => i.clientId === currentUser?.id);
+  const myInquiries = inquiries.filter(i => String(i.clientId) === String(currentUser?.id));
   
   // Calculate statistics
   const stats = {

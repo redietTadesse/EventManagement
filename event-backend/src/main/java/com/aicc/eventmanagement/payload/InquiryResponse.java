@@ -81,6 +81,9 @@ public class InquiryResponse {
 
     private static ProposalResponse parseProposal(String proposalJson) throws JsonProcessingException {
         Map<String, Object> proposalMap = objectMapper.readValue(proposalJson, new TypeReference<>() {});
+        if (proposalMap == null) {
+            return null;
+        }
 
         ProposalResponse proposal = new ProposalResponse();
         proposal.setVenue((String) proposalMap.get("venue"));

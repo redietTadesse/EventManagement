@@ -6,6 +6,20 @@ import EventTimeline from '../components/EventTimeline';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 
+const requestProgress = {
+  INQUIRY_SUBMITTED: ['Request received', 'The coordinator will review your dates and requirements before sending a proposal.'],
+  PROPOSAL_SENT: ['Your response is needed', 'Review the proposal below, then accept it, request changes, or decline it.'],
+  PROPOSAL_ACCEPTED: ['Proposal accepted', 'The coordinator will check availability again and reserve the venue during booking.'],
+  PROPOSAL_REJECTED: ['Proposal declined', 'This request has ended. You can submit a new inquiry if your plans change.'],
+  CLOSED: ['Request closed', 'This request has ended.'],
+  EVENT_CREATED: ['Event created', 'The coordinator is preparing the event. Check your event details for the latest information.'],
+  AWAITING_VENDORS: ['Waiting for vendor confirmations', 'The coordinator is waiting for the required services to be confirmed.'],
+  NEEDS_COORDINATOR: ['The coordinator is resolving an issue', 'Check your event details for the latest information.'],
+  CONFIRMED: ['Event confirmed', 'Open your event for the current venue, dates, and services.'],
+  COMPLETED: ['Event completed', 'Your event details are available in My Events.'],
+  CANCELLED: ['Event cancelled', 'This event has been cancelled.'],
+};
+
 export default function ClientInquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -17,6 +31,7 @@ export default function ClientInquiryDetail() {
   const [error, setError] = useState('');
   const [changeMode, setChangeMode] = useState(false);
   const [changeReason, setChangeReason] = useState('');
+  const [responseNotice, setResponseNotice] = useState('');
 
   const loadInquiry = useCallback(async () => {
     try {
@@ -41,6 +56,7 @@ export default function ClientInquiryDetail() {
   const decideProposal = async (decision) => {
     setSaving(true);
     setError('');
+    setResponseNotice('');
     try {
       const updated = decision === 'accept'
         ? await acceptProposal(id)
@@ -53,6 +69,7 @@ export default function ClientInquiryDetail() {
       if (decision === 'changes') {
         setChangeMode(false);
         setChangeReason('');
+        setResponseNotice('Your change request was sent to the coordinator.');
       }
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${decision} proposal`);
@@ -75,14 +92,18 @@ export default function ClientInquiryDetail() {
   }
 
   const proposal = inquiry.proposal;
-  const canRespond = inquiry.status === 'PROPOSAL_SENT' && proposal;
-
   // Parse proposal if it's a string
   let parsedProposal = proposal;
   if (typeof proposal === 'string') {
     try { parsedProposal = JSON.parse(proposal); }
     catch { parsedProposal = null; }
   }
+  const event = inquiry.event;
+  const status = event?.status || inquiry.status;
+  const canRespond = status === 'PROPOSAL_SENT' && parsedProposal;
+  const [progressTitle, progressDescription] = status === 'PROPOSAL_SENT' && !parsedProposal
+    ? ['Proposal details unavailable', 'Ask the coordinator to review this proposal before you respond.']
+    : requestProgress[status] || ['Request status', 'Check the details below for the latest information.'];
 
   // Parse the enriched shortlist - handle both new array format and old map format
   let shortlist = [];
@@ -113,12 +134,22 @@ export default function ClientInquiryDetail() {
             <Link to="/client/inquiries" className="text-sm text-indigo-600 hover:text-indigo-700">← My inquiries</Link>
             <h1 className="mt-2 text-2xl font-bold text-gray-800">{inquiry.eventType}</h1>
           </div>
-          <StatusBadge status={inquiry.status} />
+          <StatusBadge status={status} />
         </div>
 
-        {timeline && <EventTimeline timeline={timeline} />}
+        <section aria-labelledby="request-progress" className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+          <h2 id="request-progress" className="font-semibold text-gray-900">{progressTitle}</h2>
+          <p className="mt-1 text-sm text-gray-700">{progressDescription}</p>
+          {event?.id && (
+            <Link to={`/client/events/${event.id}`} className="mt-3 inline-block text-sm font-semibold text-indigo-700 hover:underline">
+              View event details →
+            </Link>
+          )}
+        </section>
 
-        {error && <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
+        {responseNotice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{responseNotice}</p>}
+        {error && <div role="alert" className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
+        {timeline && <EventTimeline timeline={{ ...timeline, proposalSent: Boolean(parsedProposal) }} />}
 
         <section className="space-y-4 rounded-xl bg-white p-6 shadow">
           <h2 className="font-semibold text-gray-800">Inquiry details</h2>
@@ -177,7 +208,7 @@ export default function ClientInquiryDetail() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-500 mt-3">
-                  Accepting this proposal initiates the booking process. The system will automatically assign the requested vendors and escalate if they are unavailable.
+                  These vendors are suggestions. Vendor offers are sent after the coordinator creates the event.
                 </p>
               </div>
             )}
@@ -218,6 +249,8 @@ export default function ClientInquiryDetail() {
                     <textarea
                       value={changeReason}
                       onChange={(e) => setChangeReason(e.target.value)}
+                      aria-label="Changes you would like"
+                      maxLength={2000}
                       rows={3}
                       className="w-full rounded-xl border-gray-200 p-3 text-sm focus:ring-2 focus:ring-brand-500"
                       placeholder="e.g., Please swap the catering vendor for a different one"
@@ -241,19 +274,9 @@ export default function ClientInquiryDetail() {
                   </>
                 )}
               </div>
-            ) : (
-              <p className="border-t border-gray-100 pt-4 text-sm text-gray-600">
-                {inquiry.status === 'PROPOSAL_ACCEPTED' ? 'You accepted this proposal.' : `Proposal status: ${inquiry.status.replaceAll('_', ' ').toLowerCase()}.`}
-              </p>
-            )}
+            ) : null}
           </section>
-        ) : (
-          <section className="rounded-xl bg-white p-6 text-sm text-gray-600 shadow">
-            {inquiry.status === 'INQUIRY_SUBMITTED'
-              ? 'No proposal has been sent for this inquiry yet.'
-              : 'Proposal details are unavailable for this record. Ask the coordinator to review the proposal before responding.'}
-          </section>
-        )}
+        ) : null}
       </div>
     </Layout>
   );

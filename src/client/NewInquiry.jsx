@@ -69,14 +69,14 @@ export default function NewInquiry() {
     setSubmitting(true);
     setError('');
     try {
-      await createInquiry({
+      const inquiry = await createInquiry({
         clientId: currentUser?.id,
         clientName: currentUser?.name || currentUser?.fullName,
         ...form,
         requestedCategories: form.requestedCategories,
         expectedAttendees: Number(form.expectedAttendees),
       });
-      navigate('/client/dashboard');
+      navigate(`/client/inquiries/${inquiry.id}`, { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit');
     } finally {

@@ -38,6 +38,14 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
 
     List<VenueBooking> findByEventId(Long eventId);
 
+    @Query("""
+           SELECT COUNT(vb) FROM VenueBooking vb
+           WHERE vb.event.id = :eventId AND vb.venue.id = :venueId
+             AND vb.bookingDate BETWEEN :startDate AND :endDate AND vb.status = 'CONFIRMED'
+           """)
+    long countEventBookingsInRange(@Param("eventId") Long eventId, @Param("venueId") Long venueId,
+                                   @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
 
     boolean existsByVenueIdAndBookingDateGreaterThanEqualAndStatus(

@@ -29,6 +29,7 @@ import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
+import com.aicc.eventmanagement.repositories.VenueBookingRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -66,6 +68,7 @@ public class InquiryService {
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRepository vendorRepository;
     private final ChecklistService checklistService;
+    private final VenueBookingRepository venueBookingRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -653,19 +656,30 @@ public class InquiryService {
         return userRepository.findById(userId).map(User::getEmail).orElse("client@example.com");
     }
 
+    @Transactional(readOnly = true)
     public TimelineResponse getTimeline(Long inquiryId) {
         Inquiry inquiry = getInquiryById(inquiryId);
 
-        boolean hasProposal = inquiry.getProposal() != null;
-        boolean isAccepted = inquiry.getStatus() == EventStatus.PROPOSAL_ACCEPTED || inquiry.getEvent() != null;
+        String proposal = inquiry.getProposal();
+        boolean hasProposal = proposal != null && !proposal.isBlank() && !"null".equals(proposal.trim());
+        boolean venueBooked = false;
 
         boolean isConfirmed = false;
         boolean allVendorsAccepted = false;
         String venueName = null;
 
-        if (inquiry.getEvent() != null) {
-            Event event = inquiry.getEvent();
-            venueName = event.getVenue();
+        Event event = inquiry.getEvent();
+        if (event != null && event.getStatus() != EventStatus.CANCELLED) {
+            LocalDate startDate = inquiry.getEventDate();
+            LocalDate endDate = inquiry.getEndDate() == null ? startDate : inquiry.getEndDate();
+            if (event.getVenueId() != null && startDate != null && !endDate.isBefore(startDate)) {
+                long eventDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+                venueBooked = venueBookingRepository.countEventBookingsInRange(
+                        event.getId(), event.getVenueId(), startDate, endDate) == eventDays;
+            }
+            if (venueBooked) {
+                venueName = event.getVenue();
+            }
 
             if (event.getStatus() == EventStatus.CONFIRMED || event.getStatus() == EventStatus.COMPLETED) {
                 isConfirmed = true;
@@ -685,7 +699,7 @@ public class InquiryService {
         return TimelineResponse.builder()
                 .inquirySubmitted(true)
                 .proposalSent(hasProposal)
-                .venueHeld(isAccepted)
+                .venueHeld(venueBooked)
                 .vendorsConfirmed(allVendorsAccepted)
                 .eventConfirmed(isConfirmed)
                 .venueName(venueName)

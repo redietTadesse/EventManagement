@@ -170,6 +170,10 @@ class EventLifecycleApiIntegrationTest {
         VendorActor expiredAv = vendor("Expired AV", "av", 5.0, date.minusDays(1));
         long offersBefore = assignments.count();
         long inquiry = acceptedInquiry();
+        JsonNode acceptedTimeline = call(GET, "/inquiries/" + inquiry + "/timeline", client, null, 200);
+        assertThat(acceptedTimeline.path("proposalSent").asBoolean()).isTrue();
+        assertThat(acceptedTimeline.path("venueHeld").asBoolean()).isFalse();
+        assertThat(acceptedTimeline.path("eventConfirmed").asBoolean()).isFalse();
 
         JsonNode preview = call(GET, "/inquiries/" + inquiry + "/conversion-preview", coordinator, null, 200);
         assertThat(preview.path("venue").path("available").asBoolean()).isTrue();
@@ -183,6 +187,10 @@ class EventLifecycleApiIntegrationTest {
 
         long event = convert(inquiry, 200).path("id").asLong();
         assertEventStatus(event, "AWAITING_VENDORS");
+        JsonNode bookedTimeline = call(GET, "/inquiries/" + inquiry + "/timeline", client, null, 200);
+        assertThat(bookedTimeline.path("venueHeld").asBoolean()).isTrue();
+        assertThat(bookedTimeline.path("venueName").asText()).isEqualTo(venue.getName());
+        assertThat(bookedTimeline.path("eventConfirmed").asBoolean()).isFalse();
         assertThat(call(GET, "/inquiries/" + inquiry, client, null, 200).path("event").path("id").asLong()).isEqualTo(event);
         assertThat(nodes(call(GET, "/inquiries", coordinator, null, 200)))
                 .anySatisfy(item -> assertThat(item.path("id").asLong()).isEqualTo(inquiry));
@@ -275,7 +283,8 @@ class EventLifecycleApiIntegrationTest {
     void exhaustedPoolCanBeResolvedAndCancellationReleasesCommitments(String action) throws Exception {
         VendorActor av = vendor("Only AV", "av", 4.0, date.plusYears(1));
         VendorActor firstSecurity = vendor("First Security", "security", 4.0, date.plusYears(1));
-        long event = convert(acceptedInquiry(), 200).path("id").asLong();
+        long inquiry = acceptedInquiry();
+        long event = convert(inquiry, 200).path("id").asLong();
         assertEventStatus(event, "AWAITING_VENDORS");
         respond(currentOffer(event, "av"), av.user(), "ACCEPTED");
         JsonNode declined = currentOffer(event, "security");
@@ -296,6 +305,10 @@ class EventLifecycleApiIntegrationTest {
         respond(currentOffer(event, "security"), lateVendor.user(), "ACCEPTED");
         assertEventStatus(event, "CONFIRMED");
         call(PATCH, "/events/" + event + "/status?status=CANCELLED", coordinator, null, 200);
+        JsonNode cancelledTimeline = call(GET, "/inquiries/" + inquiry + "/timeline", client, null, 200);
+        assertThat(cancelledTimeline.path("venueHeld").asBoolean()).isFalse();
+        assertThat(cancelledTimeline.path("vendorsConfirmed").asBoolean()).isFalse();
+        assertThat(cancelledTimeline.path("eventConfirmed").asBoolean()).isFalse();
         assertThat(currentOffer(event, "av").path("status").asText()).isEqualTo("CANCELLED");
         assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("CANCELLED");
         assertThat(task(offers(event), declined.path("id").asLong()).path("status").asText()).isEqualTo("DECLINED");
@@ -408,6 +421,9 @@ class EventLifecycleApiIntegrationTest {
                 "eventType", "conference", "eventDate", date.toString(), "endDate", date.plusDays(1).toString(),
                 "expectedAttendees", 150, "requirements", "AV equipment, security and in-house catering",
                 "requestedCategories", List.of("av", "security", "catering")), 201).path("id").asLong();
+        JsonNode submittedTimeline = call(GET, "/inquiries/" + inquiry + "/timeline", client, null, 200);
+        assertThat(submittedTimeline.path("proposalSent").asBoolean()).isFalse();
+        assertThat(submittedTimeline.path("venueHeld").asBoolean()).isFalse();
         long count = assignments.count();
         call(GET, "/inquiries/" + inquiry + "/recommended-vendors", coordinator, null, 200);
         call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 200);
