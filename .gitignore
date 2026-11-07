@@ -13,3 +13,11 @@ TIMELINE_ASSESSMENT.md
 # IDE
 .vscode/
 .env
+# Local environment and machine-specific configuration
+.env.*
+!.env.example
+**/application.properties
+**/application-test.properties
+
+# Generated output
+**/test-output.txt
