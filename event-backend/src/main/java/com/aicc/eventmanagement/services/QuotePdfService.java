@@ -2,12 +2,12 @@ package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.Venue;
-import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VenueRepository;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openpdf.text.Document;

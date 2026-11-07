@@ -1,8 +1,8 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
-import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.payload.ActionRequiredResponse;

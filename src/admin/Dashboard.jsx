@@ -40,9 +40,9 @@ export default function AdminDashboard() {
 
   const handleSaveEdit = (e) => {
     e.preventDefault();
-    dispatch({ 
-      type: 'UPDATE_USER', 
-      payload: { ...editingUser, ...editForm } 
+    dispatch({
+      type: 'UPDATE_USER',
+      payload: { ...editingUser, ...editForm }
     });
     setEditingUser(null);
   };
@@ -50,7 +50,7 @@ export default function AdminDashboard() {
   return (
     <Layout title="Admin Dashboard">
       <div className="space-y-6">
-        
+
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-800">System Administration</h1>
@@ -82,7 +82,7 @@ export default function AdminDashboard() {
           <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
             <h3 className="font-medium text-gray-800">User Management</h3>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {users.map(u => {
-                  const isActive = u.isActive !== false; 
+                  const isActive = u.isActive !== false;
 
                   return (
                     <tr key={u.id} className="hover:bg-gray-50">
@@ -116,25 +116,25 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right space-x-2">
-                        <button 
+                        <button
                           onClick={() => openEditModal(u)}
                           className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                         >
                           Edit
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleResetPassword(u.fullName || u.username)}
                           className="text-orange-500 hover:text-orange-700 text-xs font-medium"
                         >
                           Reset Pwd
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleToggleStatus(u.id)}
                           className={`text-xs font-medium ${isActive ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}`}
                         >
                           {isActive ? 'Deactivate' : 'Activate'}
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDelete(u.id, u.fullName || u.username)}
                           className="text-red-600 hover:text-red-800 text-xs font-medium"
                         >

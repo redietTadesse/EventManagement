@@ -154,4 +154,3 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
     </div>
   );
 }
-

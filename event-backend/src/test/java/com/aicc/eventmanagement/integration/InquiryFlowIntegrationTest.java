@@ -85,7 +85,7 @@ class InquiryFlowIntegrationTest {
 
         // Reject
         String rejectionReason = "Price too high for our budget";
-        Inquiry rejected = inquiryService.rejectProposal(withProposal.getId(), rejectionReason, Role.CLIENT);
+        Inquiry rejected = inquiryService.rejectProposal(withProposal.getId(), null, Role.CLIENT);
 
         assertThat(rejected.getStatus()).isEqualTo(EventStatus.PROPOSAL_REJECTED);
     }

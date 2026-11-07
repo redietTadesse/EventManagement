@@ -1,9 +1,9 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.Checklist;
 import com.aicc.eventmanagement.entities.Inquiry;
-import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
@@ -13,7 +13,6 @@ import com.aicc.eventmanagement.payload.EventReadinessResponse;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
-import com.aicc.eventmanagement.services.VenueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
