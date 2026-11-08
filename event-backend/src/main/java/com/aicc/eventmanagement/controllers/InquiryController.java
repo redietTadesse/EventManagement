@@ -302,7 +302,7 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
 
-        Inquiry updated = inquiryService.sendProposal(id, request, userRole);
+        Inquiry updated = inquiryService.sendProposal(id, request, userRole, principal.getUsername());
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 

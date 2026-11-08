@@ -14,6 +14,10 @@ import java.util.List;
 @Repository
 public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from Inquiry i where i.id = :id")
+    java.util.Optional<Inquiry> findForCoordinatorUpdate(@Param("id") Long id);
+
     List<Inquiry> findByStatus(EventStatus status);
 
     List<Inquiry> findByClientId(Long clientId);

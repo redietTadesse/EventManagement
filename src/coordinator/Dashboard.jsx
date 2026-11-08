@@ -8,6 +8,8 @@ import api from '../api/axios';
 import { buildAttentionItems, countLifecycleStages, createRequestTracker, makeDateRange, mergeDashboardResults, metricDisplay } from './dashboardModel';
 import LiveSimulationModal from './LiveSimulationModal';
 import VendorEcosystemChart from './VendorEcosystemChart';
+import IssueAttention from './IssueAttention';
+import useApiResource from '../hooks/useApiResource';
 
 const demoVendorEcosystem = [
   { name: 'Elite AV', activeLoad: 8, qualityScore: 4.8 },
@@ -17,7 +19,9 @@ const demoVendorEcosystem = [
 ];
 
 export default function CoordinatorDashboard() {
-  const { fetchInquiries, fetchCoordinatorStats, fetchCoordinatorExceptions, fetchRecentHistory } = useApp();
+  const { state, fetchInquiries, fetchCoordinatorStats, fetchCoordinatorExceptions, fetchRecentHistory } = useApp();
+  const workload = useApiResource('/coordinators/workload');
+  const mine = workload.data.find((item) => item.coordinator.id === state.currentUser?.id);
   const [period, setPeriod] = useState(30);
   const [isSimulationOpen, setIsSimulationOpen] = useState(false);
   const [data, setData] = useState({ stats: null, exceptions: null, inquiries: [], events: [], history: [] });
@@ -87,6 +91,17 @@ export default function CoordinatorDashboard() {
     </div></header>
     {Object.keys(sectionErrors).length > 0 && <div role="alert" className="flex justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">Some dashboard sections could not be refreshed. Existing results are retained.<button onClick={refresh} className="font-semibold underline">Retry</button></div>}
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Operational summary">{summary.map((card) => { const metricLoaded = card.title === 'Upcoming events' || card.title === 'Confirmed events' ? loaded.events : card.title === 'Needs attention' ? loaded.exceptions && loaded.inquiries : loaded.stats; const metric = metricDisplay(card.value, metricLoaded); return <Link key={card.title} to={card.href} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"><div className="flex justify-between"><div><p className="text-sm text-slate-500">{card.title}</p><p className="mt-2 text-3xl font-bold tabular-nums text-slate-900" aria-busy={!metricLoaded}>{metric}</p></div><span className={`rounded-lg p-2 ${card.iconClass}`}><card.icon className="h-5 w-5" /></span></div><p className="mt-3 text-xs text-slate-500">{card.detail}</p></Link>; })}</section>
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex justify-between gap-3">
+        <h2 className="font-semibold">My workload</h2>
+        <button onClick={workload.reload} className="text-sm text-indigo-700">Refresh workload</button>
+      </div>
+      {workload.loading && <p className="mt-2 text-sm">Loading workload…</p>}
+      {workload.error && <p role="alert" className="mt-2 text-sm text-rose-700">{workload.error}</p>}
+      {mine && <p className="mt-2 text-sm text-slate-600">{mine.inquiries} active inquiries · {mine.events} active events</p>}
+      <Link to="/coordinator/events" className="mt-2 inline-block text-sm text-indigo-700">View events and filter by My events</Link>
+    </section>
+    <IssueAttention />
     <VendorEcosystemChart data={demoVendorEcosystem} />
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex justify-between border-b border-slate-100 px-5 py-4"><div><h2 className="font-semibold text-slate-900">Attention required</h2><p className="mt-1 text-sm text-slate-500">Prioritized unresolved issues</p></div><Link to="/coordinator/inquiries" className="text-sm text-indigo-600">View all</Link></div>{attention.length ? <ul className="divide-y divide-slate-100">{attention.slice(0, 5).map((item) => <li key={item.id}><Link to={item.href} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50"><span className={`h-2.5 w-2.5 rounded-full ${item.priority === 0 ? 'bg-rose-500' : item.priority === 1 ? 'bg-amber-500' : 'bg-sky-500'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{item.title || 'Operational issue'}</span><span className="block truncate text-xs text-slate-500">{item.detail}</span></span><span className="text-xs text-slate-400">{item.time ? new Date(item.time).toLocaleDateString() : ''}</span></Link></li>)}</ul> : sectionErrors.exceptions || sectionErrors.inquiries ? <p className="px-5 py-8 text-center text-sm text-rose-700">Attention items are temporarily unavailable.</p> : !loaded.exceptions || !loaded.inquiries ? <p className="animate-pulse px-5 py-8 text-center text-sm text-slate-500">Loading attention items…</p> : <p className="px-5 py-8 text-center text-sm text-slate-500">No unresolved operational issues.</p>}</section>
     <div className="grid gap-6 xl:grid-cols-5"><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-3"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"><div><h2 className="font-semibold text-slate-900">Upcoming events</h2><p className="mt-1 text-sm text-slate-500">From {dateRange.startDate} through {dateRange.endDate}</p></div><div className="flex gap-2"><label htmlFor="event-filter" className="sr-only">Filter upcoming events</label><select id="event-filter" value={eventFilter} onChange={(event) => setEventFilter(event.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs"><option value="ALL">All upcoming</option><option value="CONFIRMED">Confirmed</option><option value="AWAITING_VENDORS">Awaiting vendors</option><option value="NEEDS_COORDINATOR">Needs coordinator</option></select><Link to="/coordinator/events" className="px-2 py-1 text-sm text-indigo-600">View all</Link></div></div>{events.length ? <ul className="divide-y divide-slate-100">{events.slice(0, 7).map((event) => <li key={event.eventId}><Link to={`/coordinator/events/${event.eventId}`} className="flex flex-col gap-2 px-5 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-slate-800">{event.eventName}</p><p className="mt-1 text-xs text-slate-500">{event.clientName} · {event.venue || 'Venue pending'} · {event.expectedAttendees ?? '—'} guests</p></div><div className="flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{new Date(`${event.eventDate}T00:00:00`).toLocaleDateString()}</span><StatusBadge status={event.status} /></div></Link></li>)}</ul> : <p className="px-5 py-8 text-center text-sm text-slate-500">{sectionErrors.events ? 'Upcoming events are temporarily unavailable.' : !loaded.events ? 'Loading upcoming events…' : 'No upcoming events in this period.'}</p>}</section>

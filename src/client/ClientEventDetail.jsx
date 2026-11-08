@@ -102,6 +102,10 @@ export default function ClientEventDetail() {
               <p className="font-medium">{event?.expectedAttendees ?? '—'}</p>
             </div>
             <div>
+              <p className="text-gray-500">Handled by</p>
+              <p className="font-medium">{event?.coordinator?.name || 'Coordinator assignment pending'}</p>
+            </div>
+            <div>
               <p className="text-gray-500">Status</p>
               <p className="font-medium">{eventData.status || event?.status || '—'}</p>
             </div>

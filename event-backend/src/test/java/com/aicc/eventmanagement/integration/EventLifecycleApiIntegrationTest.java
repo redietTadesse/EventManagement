@@ -336,6 +336,9 @@ class EventLifecycleApiIntegrationTest {
         assertThat(tasks.count()).isEqualTo(taskCount);
         assertThat(assignments.count()).isEqualTo(offerCount);
         assertThat(inquiries.findById(second).orElseThrow().getStatus()).isEqualTo(EventStatus.PROPOSAL_ACCEPTED);
+        JsonNode ownerAfterRollback = call(GET, "/inquiries/" + second + "/coordinator", coordinator, null, 200);
+        assertThat(ownerAfterRollback.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
+        assertThat(nodes(ownerAfterRollback.path("history"))).hasSize(1);
         assertThat(bookings.findByEventId(firstEvent)).hasSize(4)
                 .allSatisfy(booking -> assertThat(booking.getStatus()).isEqualTo(VenueBooking.BookingStatus.CONFIRMED));
     }
@@ -438,11 +441,256 @@ class EventLifecycleApiIntegrationTest {
                 .map(offer -> offer.path("serviceCategory").asText())).containsExactly("av");
     }
 
-    private long proposedInquiry() throws Exception {
-        long inquiry = call(POST, "/inquiries", client, Map.of("clientId", client.getId(), "clientName", client.getFullName(),
+    @Test
+    void vendorIssuesRequireCoordinatorVerificationAndKeepProgressHistory() throws Exception {
+        VendorActor supplier = vendor("Issue AV", "av", 4.0, date.plusYears(1));
+        VendorActor otherSupplier = vendor("Issue Security", "security", 4.0, date.plusYears(1));
+        long event = convert(acceptedInquiry(), 200).path("id").asLong();
+        JsonNode offer = currentOffer(event, "av");
+        respond(offer, supplier.user(), "ACCEPTED");
+        String path = "/events/" + event + "/issues";
+        var report = Map.of("title", "Replacement projector needed", "description", "The projector is unavailable",
+                "priority", "HIGH", "assignmentId", offer.path("id").asLong());
+        call(POST, path, client, report, 403);
+        User outsider = user("other-issue-vendor", Role.VENDOR);
+        call(POST, path, outsider, report, 403);
+        JsonNode issue = call(POST, path, supplier.user(), report, 201);
+        String issuePath = "/issues/" + issue.path("id").asLong();
+        assertThat(issue.path("status").asText()).isEqualTo("OPEN");
+        assertThat(issue.path("responsible").path("role").asText()).isEqualTo("COORDINATOR");
+        assertThat(nodes(call(GET, path, supplier.user(), null, 200))).hasSize(1);
+        assertThat(nodes(call(GET, path, otherSupplier.user(), null, 200))).isEmpty();
+        call(POST, issuePath + "/updates", otherSupplier.user(), Map.of("note", "Another supplier's update"), 403);
+        call(POST, issuePath + "/updates", outsider, Map.of("note", "Unrelated update"), 403);
+
+        var edit = new java.util.HashMap<String, Object>();
+        edit.put("version", issue.path("version").asLong());
+        edit.put("priority", "URGENT");
+        edit.put("responsibleUserId", supplier.user().getId());
+        edit.put("dueDate", LocalDate.now().minusDays(1).toString());
+        edit.put("status", "RESOLVED");
+        edit.put("resolutionNote", "Replacement verified");
+        call(PUT, issuePath, supplier.user(), edit, 403);
+        call(PUT, issuePath, coordinator, edit, 400);
+        edit.put("status", "IN_PROGRESS");
+        JsonNode assigned = call(PUT, issuePath, coordinator, edit, 200);
+        assertThat(assigned.path("overdue").asBoolean()).isTrue();
+        assertThat(assigned.path("responsible").path("id").asLong()).isEqualTo(supplier.user().getId());
+        assertThat(nodes(call(GET, "/issues", coordinator, null, 200)))
+                .anySatisfy(item -> assertThat(item.path("id").asLong()).isEqualTo(issue.path("id").asLong()));
+        call(PUT, issuePath, coordinator, edit, 400); // A stale form cannot overwrite a coordinator decision.
+        call(POST, issuePath + "/updates", supplier.user(), Map.of("note", "Replacement delivered"), 200);
+        edit.put("version", assigned.path("version").asLong());
+        edit.put("status", "RESOLVED");
+        edit.put("resolutionNote", " ");
+        call(PUT, issuePath, coordinator, edit, 400);
+        edit.put("resolutionNote", "Replacement tested and verified");
+        JsonNode resolved = call(PUT, issuePath, coordinator, edit, 200);
+        assertThat(resolved.path("resolvedBy").path("id").asLong()).isEqualTo(coordinator.getId());
+        assertThat(resolved.path("overdue").asBoolean()).isFalse();
+        JsonNode persisted = nodes(call(GET, path, supplier.user(), null, 200)).get(0);
+        assertThat(persisted.path("resolutionNote").asText()).isEqualTo("Replacement tested and verified");
+        assertThat(nodes(persisted.path("updates"))).hasSize(4);
+        call(POST, issuePath + "/updates", supplier.user(), Map.of("note", "Late edit"), 400);
+        assertThat(nodes(call(GET, "/issues", coordinator, null, 200)))
+                .noneSatisfy(item -> assertThat(item.path("id").asLong()).isEqualTo(issue.path("id").asLong()));
+    }
+
+    @Test
+    void issueLinksCannotPointToAnotherEventAndTaskRemovalPreservesTheIssue() throws Exception {
+        User admin = user("issue-admin", Role.ADMIN);
+        vendor("Linked AV", "av", 4.0, date.plusYears(1));
+        long firstEvent = convert(acceptedInquiry(), 200).path("id").asLong();
+        vendor("Other event AV", "av", 4.0, date.plusYears(1));
+        long secondInquiry = acceptedInquiry();
+        long secondEvent = call(POST, "/inquiries/" + secondInquiry + "/convert", coordinator,
+                Map.of("name", "Second issue event"), 200).path("id").asLong();
+        long otherAssignment = currentOffer(secondEvent, "av").path("id").asLong();
+        long otherTask = nodes(checklist(secondEvent)).get(0).path("id").asLong();
+        String path = "/events/" + firstEvent + "/issues";
+        var report = new java.util.HashMap<String, Object>();
+        report.put("title", "Preparation problem");
+        report.put("description", "Task needs coordinator review");
+        report.put("priority", "MEDIUM");
+        report.put("assignmentId", otherAssignment);
+        call(POST, path, coordinator, report, 400);
+        report.remove("assignmentId");
+        report.put("checklistId", otherTask);
+        call(POST, path, coordinator, report, 400);
+        JsonNode manualTask = call(POST, "/checklists", coordinator,
+                Map.of("eventId", firstEvent, "itemName", "Temporary issue task", "ownerRole", "COORDINATOR"), 201);
+        report.put("checklistId", manualTask.path("id").asLong());
+        JsonNode issue = call(POST, path, coordinator, report, 201);
+        http.perform(MockMvcRequestBuilders.delete("/api/v1/checklists/{id}", manualTask.path("id").asLong())
+                        .header("Authorization", "Bearer " + jwt.generateJwtToken(admin.getUsername(), admin.getRole().name())))
+                .andExpect(status().isNoContent());
+        JsonNode persisted = nodes(call(GET, path, coordinator, null, 200)).get(0);
+        assertThat(persisted.path("id").asLong()).isEqualTo(issue.path("id").asLong());
+        assertThat(persisted.path("checklistId").isNull()).isTrue();
+        call(PATCH, "/events/" + firstEvent + "/status?status=CANCELLED", coordinator, null, 200);
+        call(POST, path, coordinator, report, 400);
+    }
+
+    @Test
+    void coordinatorOwnershipFollowsConversionAndRoutesIssuesThroughAnAuditedHandover() throws Exception {
+        User admin = user("ownership-admin", Role.ADMIN);
+        User replacement = user("replacement-coordinator", Role.COORDINATOR);
+        VendorActor supplier = vendor("Ownership AV", "av", 4.0, date.plusYears(1));
+        long inquiry = submittedInquiry();
+        String ownerPath = "/inquiries/" + inquiry + "/coordinator";
+        call(POST, ownerPath + "/claim", client, null, 403);
+        call(POST, ownerPath + "/claim", admin, null, 403);
+        call(POST, ownerPath + "/claim", supplier.user(), null, 403);
+        JsonNode claimed = call(POST, ownerPath + "/claim", coordinator, null, 200);
+        assertThat(claimed.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
+        call(POST, ownerPath + "/claim", replacement, null, 409);
+        assertThat(nodes(call(POST, ownerPath + "/claim", coordinator, null, 200).path("history"))).hasSize(1);
+
+        var handover = new java.util.HashMap<String, Object>();
+        handover.put("coordinatorId", replacement.getId());
+        handover.put("expectedVersion", claimed.path("version").asLong());
+        handover.put("reason", "Balance the preparation workload");
+        call(PUT, ownerPath, coordinator, handover, 403);
+        handover.put("coordinatorId", client.getId());
+        call(PUT, ownerPath, admin, handover, 400);
+        replacement.setActive(false);
+        users.saveAndFlush(replacement);
+        handover.put("coordinatorId", replacement.getId());
+        call(PUT, ownerPath, admin, handover, 400);
+        replacement.setActive(true);
+        users.saveAndFlush(replacement);
+        JsonNode reassigned = call(PUT, ownerPath, admin, handover, 200);
+        call(PUT, ownerPath, admin, handover, 409);
+        call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 200);
+        call(PATCH, "/inquiries/" + inquiry + "/accept", client, null, 200);
+        long event = convert(inquiry, 200).path("id").asLong();
+        assertThat(call(GET, "/events/" + event, client, null, 200).path("coordinator").path("id").asLong())
+                .isEqualTo(replacement.getId());
+        assertThat(call(GET, "/inquiries/" + inquiry, client, null, 200).path("coordinator").path("id").asLong())
+                .isEqualTo(replacement.getId());
+        JsonNode offer = currentOffer(event, "av");
+        respond(offer, supplier.user(), "ACCEPTED");
+        JsonNode issue = call(POST, "/events/" + event + "/issues", supplier.user(),
+                Map.of("title", "Projector problem", "description", "Need a replacement", "priority", "HIGH",
+                        "assignmentId", offer.path("id").asLong()), 201);
+        assertThat(issue.path("responsible").path("id").asLong()).isEqualTo(replacement.getId());
+        handover.put("coordinatorId", coordinator.getId());
+        handover.put("expectedVersion", reassigned.path("version").asLong());
+        handover.put("reason", "Lead coordinator returned");
+        JsonNode finalOwner = call(PUT, ownerPath, admin, handover, 200);
+        assertThat(nodes(finalOwner.path("history"))).hasSize(3);
+        assertThat(finalOwner.path("history").get(0).path("changedById").asLong()).isEqualTo(admin.getId());
+        JsonNode transferred = nodes(call(GET, "/events/" + event + "/issues", coordinator, null, 200)).get(0);
+        assertThat(transferred.path("responsible").path("id").asLong()).isEqualTo(coordinator.getId());
+        assertThat(transferred.path("updates").get(1).path("note").asText()).contains("Coordinator handover");
+        JsonNode workload = nodes(call(GET, "/coordinators/workload", coordinator, null, 200)).stream()
+                .filter(item -> item.path("coordinator").path("id").asLong() == coordinator.getId()).findFirst().orElseThrow();
+        assertThat(workload.path("events").asLong()).isEqualTo(1);
+        assertThat(workload.path("inquiries").asLong()).isZero();
+        call(GET, ownerPath, client, null, 403);
+        assertThat(call(GET, "/events/" + event, client, null, 200).path("coordinator").has("passwordHash")).isFalse();
+    }
+
+    @Test
+    void competingCoordinatorClaimsHaveOneOwnerAndOneHistoryEntry() throws Exception {
+        long inquiry = submittedInquiry();
+        User competitor = user("competing-coordinator", Role.COORDINATOR);
+        var executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            java.util.List<Future<Integer>> responses = new java.util.ArrayList<>();
+            for (User actor : List.of(coordinator, competitor)) {
+                responses.add(executor.submit(() -> {
+                    start.await(10, TimeUnit.SECONDS);
+                    return http.perform(MockMvcRequestBuilders.post("/api/v1/inquiries/{id}/coordinator/claim", inquiry)
+                                    .header("Authorization", "Bearer " + jwt.generateJwtToken(actor.getUsername(), actor.getRole().name())))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            assertThat(List.of(responses.get(0).get(20, TimeUnit.SECONDS), responses.get(1).get(20, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200, 409);
+            JsonNode ownership = call(GET, "/inquiries/" + inquiry + "/coordinator", coordinator, null, 200);
+            assertThat(nodes(ownership.path("history"))).hasSize(1);
+            assertThat(ownership.path("version").asLong()).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void legacyUnassignedEventsCanReceiveALeadWithoutMovingVendorWorkOrResolvedIssues() throws Exception {
+        User admin = user("legacy-owner-admin", Role.ADMIN);
+        User lead = user("legacy-event-lead", Role.COORDINATOR);
+        VendorActor supplier = vendor("Legacy AV", "av", 4.0, date.plusYears(1));
+        long inquiry = acceptedInquiry();
+        jdbc.update("DELETE FROM coordinator_assignment_history WHERE inquiry_id = ?", inquiry);
+        jdbc.update("UPDATE inquiries SET coordinator_id = NULL, coordinator_version = 0 WHERE id = ?", inquiry);
+        long event = call(POST, "/inquiries/" + inquiry + "/convert", admin,
+                Map.of("name", "Legacy unassigned event"), 200).path("id").asLong();
+        JsonNode offer = currentOffer(event, "av");
+        respond(offer, supplier.user(), "ACCEPTED");
+        String issuePath = "/events/" + event + "/issues";
+        var report = new java.util.HashMap<String, Object>();
+        report.put("title", "Legacy preparation problem");
+        report.put("description", "Requires coordinator review");
+        report.put("priority", "MEDIUM");
+        report.put("assignmentId", offer.path("id").asLong());
+        assertThat(call(POST, issuePath, supplier.user(), report, 400).path("code").asText()).isEqualTo("NO_COORDINATOR");
+        long coordinatorIssue = call(POST, issuePath, coordinator, report, 201).path("id").asLong();
+        report.put("responsibleUserId", supplier.user().getId());
+        long vendorIssue = call(POST, issuePath, coordinator, report, 201).path("id").asLong();
+        report.remove("responsibleUserId");
+        JsonNode resolvedIssue = call(POST, issuePath, coordinator, report, 201);
+        var edit = new java.util.HashMap<String, Object>();
+        edit.put("version", resolvedIssue.path("version").asLong());
+        edit.put("priority", "MEDIUM");
+        edit.put("responsibleUserId", coordinator.getId());
+        edit.put("status", "IN_PROGRESS");
+        resolvedIssue = call(PUT, "/issues/" + resolvedIssue.path("id").asLong(), coordinator, edit, 200);
+        edit.put("version", resolvedIssue.path("version").asLong());
+        edit.put("status", "RESOLVED");
+        edit.put("resolutionNote", "Verified before the handover");
+        resolvedIssue = call(PUT, "/issues/" + resolvedIssue.path("id").asLong(), coordinator, edit, 200);
+        String ownerPath = "/inquiries/" + inquiry + "/coordinator";
+        call(PUT, ownerPath, admin, Map.of("coordinatorId", lead.getId(), "expectedVersion", 0,
+                "reason", "Assign a lead to existing work"), 200);
+        for (JsonNode issue : nodes(call(GET, issuePath, coordinator, null, 200))) {
+            long expected = issue.path("id").asLong() == coordinatorIssue ? lead.getId()
+                    : issue.path("id").asLong() == vendorIssue ? supplier.user().getId() : coordinator.getId();
+            assertThat(issue.path("responsible").path("id").asLong()).isEqualTo(expected);
+        }
+        assertThat(call(POST, issuePath, supplier.user(), report, 201).path("responsible").path("id").asLong())
+                .isEqualTo(lead.getId());
+        call(PATCH, "/events/" + event + "/status?status=CANCELLED", coordinator, null, 200);
+        call(PUT, ownerPath, admin, Map.of("coordinatorId", coordinator.getId(), "expectedVersion", 1,
+                "reason", "Attempt to move closed work"), 400);
+    }
+
+    @Test
+    void firstProposalPicksUpUnclaimedInquiryAndConversionKeepsThatHandler() throws Exception {
+        long inquiry = submittedInquiry();
+        String path = "/inquiries/" + inquiry;
+        User converter = user("converting-coordinator", Role.COORDINATOR);
+        call(GET, path, converter, null, 200);
+        assertThat(call(GET, path + "/coordinator", coordinator, null, 200).path("coordinator").isNull()).isTrue();
+        JsonNode sent = call(POST, path + "/proposal", coordinator, proposal(), 200);
+        assertThat(sent.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
+        call(PATCH, path + "/accept", client, null, 200);
+        JsonNode event = call(POST, path + "/convert", converter, Map.of("name", "First handler event"), 200);
+        assertThat(event.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
+        assertThat(nodes(call(GET, path + "/coordinator", coordinator, null, 200).path("history"))).hasSize(1);
+    }
+
+    private long submittedInquiry() throws Exception {
+        return call(POST, "/inquiries", client, Map.of("clientId", client.getId(), "clientName", client.getFullName(),
                 "eventType", "conference", "eventDate", date.toString(), "endDate", date.plusDays(1).toString(),
                 "expectedAttendees", 150, "requirements", "AV equipment, security and in-house catering",
                 "requestedCategories", List.of("av", "security", "catering")), 201).path("id").asLong();
+    }
+
+    private long proposedInquiry() throws Exception {
+        long inquiry = submittedInquiry();
         JsonNode submittedTimeline = call(GET, "/inquiries/" + inquiry + "/timeline", client, null, 200);
         assertThat(submittedTimeline.path("proposalSent").asBoolean()).isFalse();
         assertThat(submittedTimeline.path("venueHeld").asBoolean()).isFalse();

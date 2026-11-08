@@ -69,6 +69,7 @@ public class InquiryService {
     private final VendorRepository vendorRepository;
     private final ChecklistService checklistService;
     private final VenueBookingRepository venueBookingRepository;
+    private final CoordinatorAssignmentService coordinatorAssignmentService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -226,7 +227,8 @@ public class InquiryService {
 
     @Transactional
     public Event convertToEvent(Long inquiryId, ConvertToEventRequest request) {
-        Inquiry inquiry = getInquiryById(inquiryId);
+        Inquiry inquiry = inquiryRepository.findForCoordinatorUpdate(inquiryId)
+                .orElseThrow(() -> new EntityNotFoundException("Inquiry", inquiryId));
 
         if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
             throw new BusinessException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()), "INVALID_STATE");
@@ -424,7 +426,12 @@ public class InquiryService {
 
     @Transactional
     public Inquiry sendProposal(Long id, SendProposalRequest request, Role userRole) {
-        Inquiry inquiry = getInquiryById(id);
+        return sendProposal(id, request, userRole, null);
+    }
+
+    @Transactional
+    public Inquiry sendProposal(Long id, SendProposalRequest request, Role userRole, String username) {
+        Inquiry inquiry = username == null ? getInquiryById(id) : coordinatorAssignmentService.pickUpForProposal(id, username);
         if (inquiry.getStatus() != EventStatus.INQUIRY_SUBMITTED) {
             throw new BusinessException(String.format("Cannot send proposal. Inquiry status is: %s (expected: INQUIRY_SUBMITTED)", inquiry.getStatus()), "INVALID_STATE");
         }

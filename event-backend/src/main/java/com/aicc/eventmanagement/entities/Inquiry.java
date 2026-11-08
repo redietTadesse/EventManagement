@@ -29,6 +29,20 @@ public class Inquiry {
     @Column(name = "client_id", nullable = false)
     private Long clientId;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @ManyToOne
+    @JoinColumn(name = "coordinator_id")
+    private User coordinator;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "coordinator_version", nullable = false)
+    private long coordinatorVersion;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @OneToMany(mappedBy = "inquiry", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private java.util.List<CoordinatorAssignmentHistory> coordinatorHistory = new java.util.ArrayList<>();
+
     @NotBlank(message = "Client name is required")
     @Size(max = 100, message = "Client name must not exceed 100 characters")
     @Column(name = "client_name", nullable = false)

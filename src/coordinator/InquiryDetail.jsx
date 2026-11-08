@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import RichProposalForm from '../components/RichProposalForm';
 import ConversionPreviewModal from '../components/ConversionPreviewModal';
+import CoordinatorOwnership from '../components/CoordinatorOwnership';
 import { useApp } from '../context/AppContext';
 
 export default function InquiryDetail() {
@@ -157,6 +158,11 @@ export default function InquiryDetail() {
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
+        <div className="md:col-span-2">
+          <CoordinatorOwnership key={id} inquiryId={id}
+            closed={['COMPLETED', 'CANCELLED', 'CLOSED', 'PROPOSAL_REJECTED'].includes(inquiry.event?.status || inquiry.status)}
+            onChanged={(coordinator) => setInquiry((previous) => ({ ...previous, coordinator }))} />
+        </div>
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex justify-between items-start">
             <h3 className="text-xl font-bold text-gray-800">Inquiry #{inquiry.id}</h3>

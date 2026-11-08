@@ -220,6 +220,7 @@ export default function ClientInquiryDetail() {
           <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
             <div><p className="text-gray-500">Event date</p><p className="font-medium">{inquiry.eventDate || '—'}</p></div>
             <div><p className="text-gray-500">Attendees</p><p className="font-medium">{inquiry.expectedAttendees ?? '—'}</p></div>
+            <div><p className="text-gray-500">Handled by</p><p className="font-medium">{inquiry.coordinator?.name || 'Coordinator assignment pending'}</p></div>
             <div><p className="text-gray-500">Requested services</p><p className="font-medium">{inquiry.requestedCategories?.join(', ') || '—'}</p></div>
           </div>
           {inquiry.requirements && <div className="text-sm"><p className="text-gray-500">Requirements</p><p className="mt-1 text-gray-800">{inquiry.requirements}</p></div>}

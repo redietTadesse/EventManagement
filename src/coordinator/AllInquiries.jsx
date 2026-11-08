@@ -5,15 +5,29 @@ import StatusBadge from '../components/StatusBadge';
 import ResponsiveTable from '../components/ResponsiveTable';
 import EmptyState from '../components/EmptyState';
 import useApiResource from '../hooks/useApiResource';
+import { useApp } from '../context/AppContext';
 
 export default function AllInquiries() {
+  const { state } = useApp();
+  const [ownership, setOwnership] = useState('all');
   const { data: inquiries, loading, error, reload } = useApiResource('/inquiries');
   const [filter, setFilter] = useState('All');
-
-  
+  const [clientName, setClientName] = useState('');
+  const [eventType, setEventType] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [attendance, setAttendance] = useState('');
 
   const statuses = ['All', ...new Set(inquiries.map((i) => i.status).filter(Boolean))];
-  const filtered = filter === 'All' ? inquiries : inquiries.filter((i) => i.status === filter);
+  const eventTypes = [...new Set(inquiries.map((inquiry) => inquiry.eventType).filter(Boolean))].sort();
+  const filtered = inquiries.filter((inquiry) =>
+    (filter === 'All' || inquiry.status === filter)
+    && (ownership !== 'mine' || inquiry.coordinator?.id === state.currentUser?.id)
+    && (ownership !== 'unassigned' || !inquiry.coordinator)
+    && (inquiry.clientName ?? '').toLowerCase().includes(clientName.trim().toLowerCase())
+    && (!eventType || inquiry.eventType === eventType)
+    && (!eventDate || inquiry.eventDate === eventDate)
+    && (!attendance || inquiry.expectedAttendees === Number(attendance))
+  );
 
   if (loading) {
     return (
@@ -27,6 +41,15 @@ export default function AllInquiries() {
     <Layout title="All Inquiries">
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-slate-900">All Inquiries</h1>
+        <label className="block text-sm font-medium">
+          Coordinator ownership
+          <select value={ownership} onChange={(event) => setOwnership(event.target.value)}
+            className="ml-3 rounded-lg border border-slate-300 px-3 py-2">
+            <option value="all">All inquiries</option>
+            <option value="mine">My inquiries</option>
+            <option value="unassigned">Unassigned inquiries</option>
+          </select>
+        </label>
         {error && <div role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{error} <button onClick={reload} className="underline">Retry</button></div>}
         <div className="flex flex-wrap gap-2">
           {statuses.map((s) => (
@@ -44,12 +67,34 @@ export default function AllInquiries() {
           ))}
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="grid gap-1 text-sm font-medium">
+            Client name
+            <input className="rounded-lg border border-slate-300 px-3 py-2" value={clientName} onChange={(event) => setClientName(event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-medium">
+            Event type
+            <select className="rounded-lg border border-slate-300 px-3 py-2" value={eventType} onChange={(event) => setEventType(event.target.value)}>
+              <option value="">All event types</option>
+              {eventTypes.map((type) => <option key={type} value={type}>{type.replace(/_/g, ' ')}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm font-medium">
+            Event date
+            <input className="rounded-lg border border-slate-300 px-3 py-2" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-medium">
+            Estimated attendees
+            <input className="rounded-lg border border-slate-300 px-3 py-2" type="number" min="1" value={attendance} onChange={(event) => setAttendance(event.target.value)} />
+          </label>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden p-4 md:p-0">
           {error ? <p className="p-6 text-slate-500">Inquiries are temporarily unavailable.</p> : filtered.length === 0 ? (
             <EmptyState
               icon="📋"
               title="No inquiries found"
-              description="Try selecting a different status filter."
+              description="Try changing or clearing your filters."
               size="small"
             />
           ) : (
@@ -62,6 +107,7 @@ export default function AllInquiries() {
                   { key: 'eventType', label: 'Event Type', render: (inq) => (
                     <span className="text-sm text-slate-600 capitalize">{inq.eventType}</span>
                   )},
+                  { key: 'coordinator', label: 'Handled by', render: (inq) => inq.coordinator?.name || 'Unassigned' },
                   { key: 'eventDate', label: 'Date', render: (inq) => inq.eventDate },
                   { key: 'expectedAttendees', label: 'Attendees', render: (inq) => inq.expectedAttendees },
                   { key: 'status', label: 'Status', render: (inq) => (

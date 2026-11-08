@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 import useApiResource from '../hooks/useApiResource';
 import api from '../api/axios';
+import CoordinatorWorkQueue from './CoordinatorWorkQueue';
 
 const fields = [
   { name: 'fullName', label: 'Full name', maxLength: 100, autoComplete: 'off' },
@@ -38,6 +39,7 @@ export default function Coordinators() {
     <Layout title="Coordinators">
       <div className="mx-auto max-w-4xl space-y-6">
         <h1 className="text-2xl font-bold text-slate-900">Coordinators</h1>
+        <CoordinatorWorkQueue />
         <form onSubmit={create} className="space-y-4 rounded-xl border bg-white p-6">
           <h2 className="font-semibold">Add coordinator</h2>
           <p className="text-sm text-slate-600">Create an account for the Coordinator Portal. Use a unique password with 12–72 printable ASCII characters.</p>

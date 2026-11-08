@@ -22,6 +22,7 @@ public class VendorAssignmentResponse {
 
     // Event context
     private Long eventId;
+    private CoordinatorAssignmentPayload.Person coordinator;
     private String eventName;
     private String eventStatus;
     private LocalDate eventDate;
@@ -53,6 +54,7 @@ public class VendorAssignmentResponse {
         Inquiry inquiry = event != null ? event.getInquiry() : null;
 
         return VendorAssignmentResponse.builder()
+                .coordinator(inquiry == null ? null : CoordinatorAssignmentPayload.Person.from(inquiry.getCoordinator()))
             .id(assignment.getId())
             // event context
             .eventId(event != null ? event.getId() : null)

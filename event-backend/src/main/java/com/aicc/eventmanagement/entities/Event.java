@@ -62,6 +62,11 @@ public class Event {
     @Builder.Default
     private List<Checklist> checklist = new ArrayList<>();
 
+    @JsonIgnore
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<EventIssue> issues = new ArrayList<>();
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

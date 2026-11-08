@@ -288,7 +288,7 @@ class InquiryServiceTest {
         request.setName("Tech Conference 2024");
         request.setVenue("Main Hall");
 
-        when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
+        when(inquiryRepository.findForCoordinatorUpdate(1L)).thenReturn(Optional.of(inquiry));
         when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> {
             Event saved = invocation.getArgument(0);
             saved.setId(5L);
@@ -326,7 +326,7 @@ class InquiryServiceTest {
 
         ConvertToEventRequest request = new ConvertToEventRequest();
 
-        when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
+        when(inquiryRepository.findForCoordinatorUpdate(1L)).thenReturn(Optional.of(inquiry));
 
         assertThatThrownBy(() -> inquiryService.convertToEvent(1L, request))
                 .isInstanceOf(RuntimeException.class)
@@ -355,7 +355,7 @@ class InquiryServiceTest {
 
         ConvertToEventRequest request = new ConvertToEventRequest();
 
-        when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
+        when(inquiryRepository.findForCoordinatorUpdate(1L)).thenReturn(Optional.of(inquiry));
 
         assertThatThrownBy(() -> inquiryService.convertToEvent(1L, request))
                 .isInstanceOf(RuntimeException.class)
