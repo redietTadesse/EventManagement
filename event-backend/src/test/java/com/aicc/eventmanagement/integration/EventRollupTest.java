@@ -35,10 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   - all required categories ACCEPTED                    -> CONFIRMED
  *   - otherwise                                           -> AWAITING_VENDORS
  *
- * The fixture pins requiredCategories to av, catering, security. The event type
- * "conference" actually defaults to five categories (venue, av, catering, security,
- * registration), and the two these tests never assign would be permanently stuck,
- * forcing every rollup to NEEDS_COORDINATOR regardless of what the test did.
+ * The fixture pins requiredCategories to av, catering, security and uses a wedding
+ * because external catering vendors are only eligible for wedding events.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -68,7 +66,7 @@ class EventRollupTest {
         Inquiry inquiry = Inquiry.builder()
                 .clientId(1L)
                 .clientName("Rollup Test Client")
-                .eventType("conference")
+                .eventType("wedding")
                 .eventDate(LocalDate.now().plusDays(45))
                 .expectedAttendees(150)
                 .status(EventStatus.EVENT_CREATED)

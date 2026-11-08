@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import api, { authApi } from '../api/axios';
 import { useToast } from './ToastContext';
+import { normalizeVendor } from '../utils/vendors';
 
 /**
  * Single source of truth for application state.
@@ -41,7 +42,11 @@ const reducer = (state, action) => {
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, initial => ({
+    ...initial,
+    // Keep protected deep links in place until the stored session is restored.
+    loading: Boolean(localStorage.getItem('token')),
+  }));
   const { showToast } = useToast();
 
   // Restore session from stored token on mount
@@ -105,8 +110,9 @@ export const AppProvider = ({ children }) => {
 
   const fetchVendors = useCallback(async () => {
     const res = await api.get('/vendors');
-    dispatch({ type: 'SET_VENDORS', payload: res.data });
-    return res.data;
+    const vendors = res.data.map(normalizeVendor);
+    dispatch({ type: 'SET_VENDORS', payload: vendors });
+    return vendors;
   }, []);
 
   const toggleUserStatus = useCallback(async (userId) => {
@@ -252,9 +258,10 @@ export const AppProvider = ({ children }) => {
 
   const rejectProposal = useCallback(async (inquiryId, reason) => {
     try {
-      const res = await api.patch(`/inquiries/${inquiryId}/reject`, null, { params: { reason } });
+      const res = await api.patch(`/inquiries/${inquiryId}/reject`, null,
+        reason ? { params: { reason } } : undefined);
       dispatch({ type: 'UPDATE_INQUIRY', payload: res.data });
-      showToast('Proposal rejected', 'warning');
+      showToast(reason ? 'Change request sent to the coordinator' : 'Proposal rejected', reason ? 'success' : 'warning');
       return res.data;
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to reject proposal';
@@ -271,7 +278,9 @@ export const AppProvider = ({ children }) => {
   const convertInquiryToEvent = useCallback(async (inquiryId, eventData) => {
     try {
       const res = await api.post(`/inquiries/${inquiryId}/convert`, eventData);
-      await fetchInquiries();
+      fetchInquiries().catch((refreshError) => {
+        console.warn('Event was created, but inquiries could not be refreshed.', refreshError);
+      });
       showToast('Event created successfully', 'success');
       return res.data;
     } catch (err) {
@@ -322,6 +331,18 @@ export const AppProvider = ({ children }) => {
     }
   }, [showToast]);
 
+  const manuallyAssignForEvent = useCallback(async (eventId, vendorId, category, reason) => {
+    try {
+      const res = await api.post(`/assignments/event/${eventId}/manual`, { vendorId, category, reason });
+      showToast('Vendor assigned successfully', 'success');
+      return res.data;
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to assign vendor';
+      showToast(msg, 'error', 5000, true);
+      throw err;
+    }
+  }, [showToast]);
+
   const fetchOpenAssignments = useCallback(async () => {
     const res = await api.get('/assignments/open');
     return res.data;
@@ -349,8 +370,8 @@ export const AppProvider = ({ children }) => {
 
   // ===== VENUES =====
 
-  const fetchAvailableVenues = useCallback(async (date) => {
-    const res = await api.get('/venues/available', { params: { date } });
+  const fetchAvailableVenues = useCallback(async (date, attendees, endDate) => {
+    const res = await api.get('/venues/available', { params: { date, attendees, endDate } });
     return res.data;
   }, []);
 
@@ -367,6 +388,30 @@ export const AppProvider = ({ children }) => {
   const fetchVenueBookings = useCallback(async (id) => {
     const res = await api.get(`/venues/${id}/bookings`);
     return res.data;
+  }, []);
+
+  const createVenue = useCallback(async (venue) => {
+    const res = await api.post('/venues', venue);
+    return res.data;
+  }, []);
+
+  const updateVenue = useCallback(async (id, updates) => {
+    const res = await api.put(`/venues/${id}`, updates);
+    return res.data;
+  }, []);
+
+  const fetchVenueUnavailableDates = useCallback(async (id) => {
+    const res = await api.get(`/venues/${id}/unavailable-dates`);
+    return res.data;
+  }, []);
+
+  const addVenueUnavailableDate = useCallback(async (id, date, reason) => {
+    const res = await api.post(`/venues/${id}/unavailable-dates`, { date, reason });
+    return res.data;
+  }, []);
+
+  const removeVenueUnavailableDate = useCallback(async (venueId, unavailableDateId) => {
+    await api.delete(`/venues/${venueId}/unavailable-dates/${unavailableDateId}`);
   }, []);
 
   const fetchCoordinatorStats = useCallback(async () => {
@@ -432,6 +477,21 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
+  const createChecklist = useCallback(async (task) => {
+    const res = await api.post('/checklists', task);
+    return res.data;
+  }, []);
+
+  const updateChecklist = useCallback(async (checklistId, updates) => {
+    const res = await api.put(`/checklists/${checklistId}`, updates);
+    return res.data;
+  }, []);
+
+  const regenerateChecklist = useCallback(async (eventId) => {
+    const res = await api.post(`/checklists/event/${eventId}/generate`);
+    return res.data;
+  }, []);
+
   const toggleChecklistItem = useCallback(async (checklistId, isComplete) => {
     const endpoint = isComplete
       ? `/checklists/${checklistId}/complete`
@@ -464,12 +524,14 @@ export const AppProvider = ({ children }) => {
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus, fetchMyVendorProfile,
     fetchInquiries, fetchMyInquiries, fetchInquiryById, downloadInquiryQuote, createInquiry, updateInquiry,
     sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion, convertInquiryToEvent,
-    fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, fetchOpenAssignments,
+    fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, manuallyAssignForEvent, fetchOpenAssignments,
     fetchMyAssignments, fetchMyAssignment, rateAssignment,
-    fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings, fetchAvailabilityGrid,
+    fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,
+    createVenue, updateVenue, fetchVenueUnavailableDates, addVenueUnavailableDate,
+    removeVenueUnavailableDate, fetchAvailabilityGrid,
     fetchCoordinatorStats, fetchCoordinatorExceptions,
     fetchEventHistory, fetchInquiryHistory, fetchRecentHistory,
-    fetchChecklist, toggleChecklistItem,
+    fetchChecklist, createChecklist, updateChecklist, regenerateChecklist, toggleChecklistItem,
     addNotification, markNotificationRead, markAllNotificationsRead,
   };
 

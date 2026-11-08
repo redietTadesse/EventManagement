@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.payload;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -16,7 +17,11 @@ public class CreateVenueRequest {
     @Size(max = 255)
     private String name;
 
+    @Size(max = 4000)
     private String description;
+
+    @Size(max = 4000)
+    private String resources;
 
     @PositiveOrZero
     private Integer capacity;
@@ -26,4 +31,10 @@ public class CreateVenueRequest {
 
     @PositiveOrZero
     private BigDecimal hourlyRate;
+
+    @Min(0)
+    private Integer setupBufferDays;
+
+    @Min(0)
+    private Integer teardownBufferDays;
 }

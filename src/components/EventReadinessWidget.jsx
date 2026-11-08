@@ -43,7 +43,7 @@ export default function EventReadinessWidget({ eventId, refreshKey = 0 }) {
         <div className="rounded-lg bg-slate-50 p-3">
           <p className="text-slate-500">Venue</p>
           <p className={`mt-1 font-semibold ${readiness.venueConfirmed ? 'text-emerald-700' : 'text-amber-700'}`}>
-            {readiness.venueConfirmed ? 'Confirmed' : 'Not confirmed'}
+            {readiness.venueConfirmed ? 'Assigned' : 'Not assigned'}
           </p>
         </div>
         <div className="rounded-lg bg-slate-50 p-3">

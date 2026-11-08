@@ -28,16 +28,21 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
                   <p className="font-medium text-slate-100">
                     {venueInfo.venueName || 'Not specified'}
                   </p>
-                  {venueInfo.capacity && (
-                    <p className="text-xs text-slate-400">Capacity: {venue.capacity}</p>
+                  {venueInfo.capacity != null && (
+                    <p className="text-xs text-slate-400">Capacity: {venueInfo.capacity}</p>
                   )}
                   <p className={`text-sm mt-1 ${venueInfo.available ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {venue.available ? '✓ ' : '✗ '}{venue.message}
+                    {venueInfo.available ? '✓ ' : '✗ '}{venueInfo.message}
                   </p>
-                  {!venue.available && (
+                  {venueInfo.explanation?.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                      {venueInfo.explanation.map((item, index) => <li key={index}>• {item}</li>)}
+                    </ul>
+                  )}
+                  {!venueInfo.available && (
                     <p className="text-xs text-rose-400 mt-2">
-                      This venue was booked by another event. Converting will proceed
-                      without a venue booking — you can assign a free venue afterwards.
+                      This venue cannot be reserved for the event. Conversion can proceed
+                      without it, and a suitable venue can be assigned afterwards.
                     </p>
                   )}
                 </div>
@@ -115,11 +120,26 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
                               <span className="text-xs text-slate-400 ml-2">
                                 score {(c.score * 100).toFixed(0)}% · rating {c.rating ?? 'N/A'}/5 · {c.currentLoad} active
                               </span>
+                              <p className="mt-1 text-xs text-slate-400">
+                                Quality {Math.round(c.qualityScore * 100)}% · workload {Math.round(c.workloadScore * 100)}% · rotation {Math.round(c.rotationScore * 100)}%
+                              </p>
                             </div>
                           </div>
                         ))}
+                        {(cat.excludedCandidates || []).length > 0 && (
+                          <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
+                            <p className="text-xs font-semibold text-rose-300">Excluded by current eligibility checks</p>
+                            <ul className="mt-2 space-y-1">
+                              {cat.excludedCandidates.map(candidate => (
+                                <li key={candidate.vendorId} className="text-xs text-rose-200">
+                                  <span className="font-medium">{candidate.companyName}</span> — {candidate.reason}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                         <p className="text-xs text-slate-400 italic mt-2">
-                          If the top vendor declines, the system offers the next ranked candidate automatically.
+                          This is the current ranking preview. Eligibility is checked again when offers are created; client-preferred vendors may be considered first. A decline triggers the next eligible assignment attempt.
                         </p>
                       </div>
                     )}

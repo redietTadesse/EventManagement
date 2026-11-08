@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import ResponsiveTable from '../components/ResponsiveTable';
 import EmptyState from '../components/EmptyState';
-import { useApp } from '../context/AppContext';
+import useApiResource from '../hooks/useApiResource';
 
 export default function AllInquiries() {
-  const { state, fetchInquiries } = useApp();
-  const { inquiries, loading } = state;
+  const { data: inquiries, loading, error, reload } = useApiResource('/inquiries');
   const [filter, setFilter] = useState('All');
 
   
@@ -27,6 +26,8 @@ export default function AllInquiries() {
   return (
     <Layout title="All Inquiries">
       <div className="space-y-4">
+        <h1 className="text-2xl font-bold text-slate-900">All Inquiries</h1>
+        {error && <div role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{error} <button onClick={reload} className="underline">Retry</button></div>}
         <div className="flex flex-wrap gap-2">
           {statuses.map((s) => (
             <button
@@ -44,7 +45,7 @@ export default function AllInquiries() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden p-4 md:p-0">
-          {filtered.length === 0 ? (
+          {error ? <p className="p-6 text-slate-500">Inquiries are temporarily unavailable.</p> : filtered.length === 0 ? (
             <EmptyState
               icon="📋"
               title="No inquiries found"

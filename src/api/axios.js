@@ -13,11 +13,13 @@ const AUTH_ROOT =
 
 const api = axios.create({
   baseURL: API_ROOT,
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 export const authApi = axios.create({
   baseURL: AUTH_ROOT,
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
 

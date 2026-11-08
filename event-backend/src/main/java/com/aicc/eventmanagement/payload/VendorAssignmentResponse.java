@@ -26,6 +26,7 @@ public class VendorAssignmentResponse {
     private SelectionReason selectionReason;
     private LocalDateTime expiresAt;
     private LocalDateTime assignedAt;
+    private LocalDateTime expiresAt;
     private LocalDateTime respondedAt;
     private String declineReason;
     private String serviceOrder;

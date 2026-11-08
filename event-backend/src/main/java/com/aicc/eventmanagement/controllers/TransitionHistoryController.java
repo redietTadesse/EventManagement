@@ -2,6 +2,7 @@ package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.TransitionHistory;
 import com.aicc.eventmanagement.repositories.TransitionHistoryRepository;
+import com.aicc.eventmanagement.services.RecordAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,14 +24,18 @@ import java.util.List;
 public class TransitionHistoryController {
 
     private final TransitionHistoryRepository historyRepository;
+    private final RecordAccessService recordAccessService;
 
     @GetMapping("/inquiry/{inquiryId}")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get transition history for an inquiry")
-    public ResponseEntity<List<TransitionHistory>> getInquiryHistory(@PathVariable String inquiryId) {
+    public ResponseEntity<List<TransitionHistory>> getInquiryHistory(
+            @PathVariable Long inquiryId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryAccess(inquiryId, principal.getUsername());
         log.info("Fetching history for inquiry {}", inquiryId);
         List<TransitionHistory> history = historyRepository
-                .findByReferenceTypeAndReferenceIdOrderByOccurredAtDesc("INQUIRY", inquiryId);
+                .findByReferenceTypeAndReferenceIdOrderByOccurredAtDesc("INQUIRY", inquiryId.toString());
         return ResponseEntity.ok(history);
     }
 

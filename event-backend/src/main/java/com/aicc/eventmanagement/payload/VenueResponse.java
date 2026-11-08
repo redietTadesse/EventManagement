@@ -14,10 +14,13 @@ public class VenueResponse {
     private Long id;
     private String name;
     private String description;
+    private String resources;
     private Integer capacity;
     private String location;
     private BigDecimal hourlyRate;
     private boolean active;
+    private int setupBufferDays;
+    private int teardownBufferDays;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -26,10 +29,13 @@ public class VenueResponse {
                 .id(venue.getId())
                 .name(venue.getName())
                 .description(venue.getDescription())
+                .resources(venue.getResources())
                 .capacity(venue.getCapacity())
                 .location(venue.getLocation())
                 .hourlyRate(venue.getHourlyRate())
                 .active(venue.isActive())
+                .setupBufferDays(venue.getSetupBufferDays())
+                .teardownBufferDays(venue.getTeardownBufferDays())
                 .createdAt(venue.getCreatedAt())
                 .updatedAt(venue.getUpdatedAt())
                 .build();

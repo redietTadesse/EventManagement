@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { eventCategoryMap, pricingTiers } from '../utils/constants';
+import { pricingTiers } from '../utils/constants';
 import { useApp } from '../context/AppContext';
 import VendorSuggestions from './VendorSuggestions';
+import api from '../api/axios';
+import { proposalDraft } from '../utils/proposals';
 
 /**
  * Coordinator proposal composer.
  *
- * Venues come from the live API (GET /venues/available?date=), which already
- * excludes venues booked on that date — so there is no separate client-side
- * conflict check any more.
+ * Venues come from the live API (GET /venues/available?date=&attendees=&endDate=),
+ * which checks event dates, buffers, capacity, bookings, and administrator blocks.
  *
  * The submitted payload matches SendProposalRequest exactly:
  *   venue            String  (required)
@@ -24,6 +25,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
   const [step, setStep] = useState(1);
   const [venues, setVenues] = useState([]);
+  const [availableCategories, setAvailableCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -38,7 +40,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
   const [selectedCategories, setSelectedCategories] = useState(() => {
     if (!inquiry) return [];
-    return inquiry.requestedCategories?.length ? inquiry.requestedCategories : (eventCategoryMap[inquiry.eventType] || []);
+    return inquiry.requestedCategories || [];
   });
 
   // Pre-populate form when editing an existing proposal
@@ -49,22 +51,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           ? JSON.parse(inquiry.proposal)
           : inquiry.proposal;
 
-        setFormData({
-          venueId: proposal.venueId?.toString() || '',
-          pricingTier: proposal.pricingTier || 'basic',
-          customPrice: '',
-          terms: proposal.terms || '',
-          vendorShortlist: {},
-        });
-
-        // Parse vendor shortlist back to ID arrays
-        if (Array.isArray(proposal.vendorShortlist)) {
-          const shortlistMap = {};
-          proposal.vendorShortlist.forEach(cat => {
-            shortlistMap[cat.category] = cat.vendors.map(v => v.id);
-          });
-          setFormData(prev => ({ ...prev, vendorShortlist: shortlistMap }));
-        }
+        setFormData(proposalDraft(proposal));
 
         if (proposal.categories?.length) {
           setSelectedCategories(proposal.categories);
@@ -78,13 +65,32 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
   const categories = inquiry ? selectedCategories : [];
 
   useEffect(() => {
-    if (!inquiry) return;
-    setSelectedCategories(
-      inquiry.requestedCategories?.length
-        ? inquiry.requestedCategories
-        : (eventCategoryMap[inquiry.eventType] || [])
-    );
-  }, [inquiry]);
+    if (!inquiry?.eventType) return;
+    let cancelled = false;
+    api.get('/vendors/service-categories', { params: { eventType: inquiry.eventType } })
+      .then((response) => {
+        if (cancelled) return;
+        const canonicalCategories = response.data || [];
+        setAvailableCategories(canonicalCategories);
+
+        let initialCategories = inquiry.requestedCategories?.length
+          ? inquiry.requestedCategories
+          : canonicalCategories;
+        if (editMode && inquiry.proposal) {
+          try {
+            const proposal = typeof inquiry.proposal === 'string'
+              ? JSON.parse(inquiry.proposal)
+              : inquiry.proposal;
+            if (proposal.categories?.length) initialCategories = proposal.categories;
+          } catch {
+            // The proposal form's existing validation reports malformed proposal data.
+          }
+        }
+        setSelectedCategories(initialCategories.filter(category => canonicalCategories.includes(category)));
+      })
+      .catch(() => { if (!cancelled) setError('Could not load event service categories.'); });
+    return () => { cancelled = true; };
+  }, [inquiry?.id, inquiry?.eventType, inquiry?.requestedCategories, inquiry?.proposal, editMode]);
 
   // Load venues available on the event date. Vendor suggestions are loaded per category.
   useEffect(() => {
@@ -93,7 +99,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     setLoading(true);
     setError('');
 
-    fetchAvailableVenues(inquiry.eventDate)
+    fetchAvailableVenues(inquiry.eventDate, inquiry.expectedAttendees, inquiry.endDate)
       .then((venueList) => {
         if (cancelled) return;
         setVenues(venueList || []);
@@ -104,7 +110,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [inquiry?.eventDate, fetchAvailableVenues]);
+  }, [inquiry?.eventDate, inquiry?.endDate, inquiry?.expectedAttendees, fetchAvailableVenues]);
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 
@@ -144,7 +150,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       // Only include categories the coordinator actually chose, and always as arrays of numbers.
       const shortlist = Object.fromEntries(
         Object.entries(formData.vendorShortlist)
-          .filter(([, ids]) => ids && ids.length > 0)
+          .filter(([category, ids]) => selectedCategories.includes(category) && ids && ids.length > 0)
           .map(([category, ids]) => [category, ids.map(id => Number(id))])
       );
 
@@ -323,7 +329,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-2">Included service categories</label>
             <div className="grid grid-cols-2 gap-2">
-              {(eventCategoryMap[inquiry?.eventType] || []).map((cat) => (
+              {availableCategories.map((cat) => (
                 <label key={cat} className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"

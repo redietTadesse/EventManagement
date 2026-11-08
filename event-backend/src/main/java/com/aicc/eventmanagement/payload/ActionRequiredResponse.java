@@ -9,8 +9,8 @@ import java.util.List;
 
 @Builder
 public record ActionRequiredResponse(
-        List<Event> needsCoordinatorEvents,
-        List<VendorAssignment> openAssignments,
-        List<Inquiry> staleProposals
+        List<EventResponse> needsCoordinatorEvents,
+        List<VendorAssignmentResponse> openAssignments,
+        List<InquiryResponse> staleProposals
 ) {
 }

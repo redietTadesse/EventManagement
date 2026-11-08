@@ -8,6 +8,7 @@ import com.aicc.eventmanagement.payload.RateAssignmentRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.payload.VendorResponseRequest;
 import com.aicc.eventmanagement.services.VendorService;
+import com.aicc.eventmanagement.services.RecordAccessService;
 import com.aicc.eventmanagement.services.WorkflowEngine;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,21 +35,30 @@ public class AssignmentController {
     private final VendorService vendorService;
     private final WorkflowEngine workflowEngine;
     private final UserRepository userRepository;
+    private final RecordAccessService recordAccessService;
 
     @GetMapping("/event/{eventId}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
     @Operation(summary = "Get all assignments for an event")
-    public ResponseEntity<List<VendorAssignmentResponse>> getAssignmentsByEvent(@PathVariable Long eventId) {
+    public ResponseEntity<List<VendorAssignmentResponse>> getAssignmentsByEvent(
+            @PathVariable Long eventId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventAccess(eventId, principal.getUsername());
         List<VendorAssignment> assignments = vendorService.getAssignmentsByEvent(eventId);
+        boolean includeDecision = principal.getAuthorities().stream().anyMatch(authority ->
+                authority.getAuthority().equals("ROLE_COORDINATOR") || authority.getAuthority().equals("ROLE_ADMIN"));
         return ResponseEntity.ok(assignments.stream()
-                .map(VendorAssignmentResponse::from)
-                .collect(Collectors.toList()));
+            .map(assignment -> VendorAssignmentResponse.from(assignment, includeDecision))
+            .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Get assignment by ID")
-    public ResponseEntity<VendorAssignmentResponse> getAssignmentById(@PathVariable Long id) {
+    public ResponseEntity<VendorAssignmentResponse> getAssignmentById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireAssignmentAccess(id, principal.getUsername());
         VendorAssignment assignment = vendorService.getAssignmentById(id);
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
@@ -81,7 +91,7 @@ public class AssignmentController {
                 actor.getId(),
                 actor.getUsername()
         );
-        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment, true));
     }
 
     @PatchMapping("/{id}/respond")
@@ -121,7 +131,7 @@ public class AssignmentController {
         }
 
         Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
-        List<VendorAssignment> openAssignments = vendorService.getOpenAssignmentsForCategory(vendor.getServiceCategory());
+        List<VendorAssignment> openAssignments = vendorService.getEligibleOpenAssignmentsForVendor(vendor.getId());
         return ResponseEntity.ok(openAssignments.stream()
                 .map(VendorAssignmentResponse::from)
                 .collect(Collectors.toList()));
@@ -179,7 +189,7 @@ public class AssignmentController {
                 actor.getId(),
                 actor.getUsername()
         );
-        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment, true));
     }
 
     @GetMapping("/me")

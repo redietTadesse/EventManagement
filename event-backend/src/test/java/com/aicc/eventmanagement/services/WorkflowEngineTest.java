@@ -152,6 +152,26 @@ class WorkflowEngineTest {
     }
 
     @Test
+    @DisplayName("A rejected proposal is terminal and cannot be changed or reactivated")
+    void rejectedProposalIsTerminal() {
+        assertThat(EventStatus.PROPOSAL_REJECTED.isTerminal()).isTrue();
+        for (EventStatus target : EventStatus.values()) {
+            assertThat(workflowEngine.isValidTransition(EventStatus.PROPOSAL_REJECTED, target))
+                    .as("PROPOSAL_REJECTED → %s should be invalid", target)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("Existing coordinator operations permit date reconfirmation and client cancellation")
+    void existingCoordinatorAndCancellationTransitionsRemainAuthorized() {
+        workflowEngine.validateAssignmentTransition(
+                VendorAssignmentStatus.ACCEPTED, VendorAssignmentStatus.PENDING, Role.COORDINATOR);
+        workflowEngine.validateAssignmentTransition(
+                VendorAssignmentStatus.OPEN, VendorAssignmentStatus.CANCELLED, Role.CLIENT);
+    }
+
+    @Test
     @DisplayName("PENDING → EXPIRED is valid and EXPIRED is terminal")
     void pendingToExpiredValidAndTerminal() {
         assertThat(workflowEngine.isValidAssignmentTransition(
@@ -466,7 +486,7 @@ class WorkflowEngineTest {
         assertThat(workflowEngine.isValidTransition(
                 EventStatus.INQUIRY_SUBMITTED, EventStatus.CANCELLED)).isFalse();
         assertThat(workflowEngine.isValidTransition(
-                EventStatus.PROPOSAL_REJECTED, EventStatus.CLOSED)).isTrue();
+                EventStatus.PROPOSAL_REJECTED, EventStatus.CLOSED)).isFalse();
         assertThat(workflowEngine.isValidTransition(
                 EventStatus.PROPOSAL_REJECTED, EventStatus.CANCELLED)).isFalse();
         assertThat(workflowEngine.isValidTransition(

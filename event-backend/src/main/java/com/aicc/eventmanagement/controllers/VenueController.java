@@ -4,11 +4,15 @@ import com.aicc.eventmanagement.payload.CreateVenueRequest;
 import com.aicc.eventmanagement.payload.UpdateVenueRequest;
 import com.aicc.eventmanagement.payload.VenueAvailabilityResponse;
 import com.aicc.eventmanagement.payload.VenueBookingResponse;
+import com.aicc.eventmanagement.payload.VenueFitResponse;
 import com.aicc.eventmanagement.payload.VenueResponse;
+import com.aicc.eventmanagement.payload.VenueUnavailableDateRequest;
+import com.aicc.eventmanagement.payload.VenueUnavailableDateResponse;
 import com.aicc.eventmanagement.services.VenueService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -16,11 +20,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
 
 import java.time.LocalDate;
 import java.util.List;
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/venues")
 @RequiredArgsConstructor
 @Slf4j
@@ -49,8 +55,10 @@ public class VenueController {
             description = "Returns { venueId, date, available }. Date format: yyyy-MM-dd")
     public ResponseEntity<VenueAvailabilityResponse> checkAvailability(
             @PathVariable Long id,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        boolean available = venueService.isVenueAvailable(id, date);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) @Min(1) Integer attendees) {
+        boolean available = venueService.isVenueAvailable(id, date, endDate != null ? endDate : date, attendees);
         return ResponseEntity.ok(new VenueAvailabilityResponse(id, date, available));
     }
 
@@ -66,11 +74,25 @@ public class VenueController {
     @Operation(summary = "List venues free on a date",
             description = "Returns active venues with no booking on the given date.")
     public ResponseEntity<List<VenueResponse>> availableOn(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        List<VenueResponse> venues = venueService.getAvailableVenues(date).stream()
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) @Min(1) Integer attendees) {
+        List<VenueResponse> venues = venueService.getAvailableVenues(date,
+                        endDate != null ? endDate : date, attendees).stream()
                 .map(VenueResponse::from)
                 .toList();
         return ResponseEntity.ok(venues);
+    }
+
+    @GetMapping("/availability/explanations")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Explain venue fit for an event date and attendance")
+    public ResponseEntity<List<VenueFitResponse>> explainAvailability(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) @Min(1) Integer attendees,
+            @RequestParam(required = false) Long excludeEventId) {
+        return ResponseEntity.ok(venueService.explainVenueFit(date, endDate, attendees, excludeEventId));
     }
 
     @PostMapping
@@ -94,6 +116,34 @@ public class VenueController {
     @Operation(summary = "Delete a venue (admin only)")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         venueService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/unavailable-dates")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List administrator-managed unavailable dates")
+    public ResponseEntity<List<VenueUnavailableDateResponse>> getUnavailableDates(@PathVariable Long id) {
+        return ResponseEntity.ok(venueService.getUnavailableDates(id).stream()
+                .map(VenueUnavailableDateResponse::from)
+                .toList());
+    }
+
+    @PostMapping("/{id}/unavailable-dates")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Block a venue date (admin only)")
+    public ResponseEntity<VenueUnavailableDateResponse> addUnavailableDate(
+            @PathVariable Long id, @Valid @RequestBody VenueUnavailableDateRequest request) {
+        VenueUnavailableDateResponse response = VenueUnavailableDateResponse.from(
+                venueService.addUnavailableDate(id, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @DeleteMapping("/{id}/unavailable-dates/{unavailableDateId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Remove an administrator-managed unavailable date")
+    public ResponseEntity<Void> removeUnavailableDate(
+            @PathVariable Long id, @PathVariable Long unavailableDateId) {
+        venueService.removeUnavailableDate(id, unavailableDateId);
         return ResponseEntity.noContent().build();
     }
 }

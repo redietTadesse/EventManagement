@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import com.aicc.eventmanagement.util.CategoryUtils;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,6 +20,11 @@ public class EventResponse {
     
     private Long id;
     private Long inquiryId;
+    private String clientName;
+    private Integer expectedAttendees;
+    private String requirements;
+    private LocalDate eventDate;
+    private LocalDate endDate;
     private String name;
     private String status;
     private String venue;
@@ -31,6 +37,7 @@ public class EventResponse {
     private List<ChecklistResponse> checklist;
     
     public static EventResponse from(Event event) {
+        var inquiry = event.getInquiry();
         List<ChecklistResponse> checklistResponses = event.getChecklist() != null
                 ? event.getChecklist().stream()
                         .map(com.aicc.eventmanagement.payload.ChecklistResponse::from)
@@ -39,7 +46,12 @@ public class EventResponse {
         
         return EventResponse.builder()
                 .id(event.getId())
-                .inquiryId(event.getInquiry() != null ? event.getInquiry().getId() : null)
+                .inquiryId(inquiry != null ? inquiry.getId() : null)
+                .clientName(inquiry != null ? inquiry.getClientName() : null)
+                .expectedAttendees(inquiry != null ? inquiry.getExpectedAttendees() : null)
+                .requirements(inquiry != null ? inquiry.getRequirements() : null)
+                .eventDate(inquiry != null ? inquiry.getEventDate() : null)
+                .endDate(inquiry != null ? inquiry.getEndDate() : null)
                 .name(event.getName())
                 .status(event.getStatus() != null ? event.getStatus().name() : null)
                 .venue(event.getVenue())

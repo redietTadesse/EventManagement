@@ -1,3 +1,4 @@
+
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Event;
@@ -15,12 +16,15 @@ import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -32,10 +36,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class VendorServiceAssignmentSafetyTest {
 
     @Mock
@@ -63,6 +70,9 @@ class VendorServiceAssignmentSafetyTest {
     private VendorRankingService rankingService;
 
     @Mock
+    private VendorEligibilityService eligibilityService;
+
+    @Mock
     private VendorRatingService ratingService;
 
     @Mock
@@ -70,6 +80,20 @@ class VendorServiceAssignmentSafetyTest {
 
     @InjectMocks
     private VendorService vendorService;
+
+    @BeforeEach
+    void allowEligibleVendorByDefault() {
+        when(eligibilityService.evaluate(
+                any(),
+                anyString(),
+                any(),
+                any(),
+                anyString(),
+                anySet()
+        )).thenReturn(
+                new VendorEligibilityService.EligibilityResult(true, null, null)
+        );
+    }
 
     private Event event() {
         Inquiry inquiry = Inquiry.builder()
@@ -111,7 +135,7 @@ class VendorServiceAssignmentSafetyTest {
     }
 
     @Test
-    void manualAssignmentRejectsInactiveVendor() {
+    void manualAssignmentSurfacesTheSharedEligibilityDecision() {
         Event event = event();
 
         Vendor vendor = vendor(
@@ -123,6 +147,21 @@ class VendorServiceAssignmentSafetyTest {
 
         stubEventAndVendor(event, vendor);
 
+        when(eligibilityService.evaluate(
+                vendor,
+                "av",
+                event.getInquiry().getEventDate(),
+                1L,
+                "conference",
+                java.util.Set.of()
+        )).thenReturn(
+                new VendorEligibilityService.EligibilityResult(
+                        false,
+                        "VENDOR_INACTIVE",
+                        "Inactive vendor"
+                )
+        );
+
         assertThatThrownBy(() ->
                 vendorService.manualAssign(
                         1L, "av", 4L, "Reason", null, 9L, "coord"
@@ -133,62 +172,39 @@ class VendorServiceAssignmentSafetyTest {
     }
 
     @Test
-    void manualAssignmentRejectsWrongCategoryAndInvalidInsurance() {
+    void manualAssignmentAllowsMissingInsuranceWhenSharedPolicyAllowsIt() {
         Event event = event();
-        LocalDate eventDate = event.getInquiry().getEventDate();
 
-        Vendor wrongCategory = vendor(
-                4L,
-                "catering",
-                true,
-                eventDate.plusDays(1)
-        );
+        Vendor vendor = vendor(4L, "av", true, null);
 
-        stubEventAndVendor(event, wrongCategory);
+        stubEventAndVendor(event, vendor);
 
-        assertThatThrownBy(() ->
-                vendorService.manualAssign(
-                        1L, "av", 4L, "Reason", null, 9L, "coord"
-                )
-        )
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("service category");
-
-        Vendor expiredInsurance = vendor(
-                5L,
+        when(eligibilityService.evaluate(
+                vendor,
                 "av",
-                true,
-                eventDate.minusDays(1)
+                event.getInquiry().getEventDate(),
+                1L,
+                "conference",
+                java.util.Set.of()
+        )).thenReturn(
+                new VendorEligibilityService.EligibilityResult(true, null, null)
         );
 
-        when(vendorRepository.findById(5L))
-                .thenReturn(Optional.of(expiredInsurance));
+        when(assignmentRepository.findByEventIdAndServiceCategory(1L, "av"))
+                .thenReturn(List.of());
 
-        assertThatThrownBy(() ->
-                vendorService.manualAssign(
-                        1L, "av", 5L, "Reason", null, 9L, "coord"
-                )
-        )
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("insurance");
+        when(assignmentRepository.save(any(VendorAssignment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Vendor missingInsurance = vendor(
-                6L,
-                "av",
-                true,
-                null
+        when(assignmentRepository.findByEventId(1L))
+                .thenReturn(List.of());
+
+        var assignment = vendorService.manualAssign(
+                1L, "av", 4L, "Reason", null, 9L, "coord"
         );
 
-        when(vendorRepository.findById(6L))
-                .thenReturn(Optional.of(missingInsurance));
-
-        assertThatThrownBy(() ->
-                vendorService.manualAssign(
-                        1L, "av", 6L, "Reason", null, 9L, "coord"
-                )
-        )
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("not on file");
+        assertThat(assignment.getStatus())
+                .isEqualTo(VendorAssignmentStatus.PENDING);
     }
 
     @Test
@@ -290,6 +306,7 @@ class VendorServiceAssignmentSafetyTest {
 
         when(rankingService.selectForEvent(
                 1L,
+                "conference",
                 "av",
                 event.getInquiry().getEventDate()
         )).thenReturn(Optional.of(
@@ -358,6 +375,7 @@ class VendorServiceAssignmentSafetyTest {
 
         when(rankingService.selectForEvent(
                 1L,
+                "conference",
                 "av",
                 event.getInquiry().getEventDate()
         )).thenReturn(Optional.empty());

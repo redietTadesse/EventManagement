@@ -9,8 +9,8 @@ import { useApp } from '../context/AppContext';
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, fetchInquiryById, downloadInquiryQuote, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
-  const { loading } = state;
+  const { fetchInquiryById, downloadInquiryQuote, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
+  const [loading, setLoading] = useState(true);
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -24,13 +24,15 @@ export default function InquiryDetail() {
   const [quoteError, setQuoteError] = useState('');
 
   const loadInquiry = useCallback(async () => {
-    const data = await fetchInquiryById(id);
-    if (data) {
+    setLoading(true);
+    try {
+      const data = await fetchInquiryById(id);
       setInquiry(data);
       setError('');
-    } else {
-      setError('Failed to load inquiry');
-    }
+    } catch (err) {
+      setInquiry(null);
+      setError(err.response?.data?.message || 'Could not load inquiry.');
+    } finally { setLoading(false); }
   }, [id, fetchInquiryById]);
 
   useEffect(() => {
@@ -91,13 +93,13 @@ export default function InquiryDetail() {
         );
       }
 
-      await convertInquiryToEvent(id, {
+      const createdEvent = await convertInquiryToEvent(id, {
         name: defaultName,
         venue: venueTaken ? null : (preview?.venue?.venueName || null),
         venueId: venueTaken ? null : (preview?.venue?.venueId || null),
       });
       setShowPreview(false);
-      navigate('/coordinator/dashboard');
+      navigate(`/coordinator/events/${createdEvent.id}`);
     } catch (err) {
       console.error('Convert error:', err);
       console.error('Error response:', err.response?.data);
@@ -108,7 +110,7 @@ export default function InquiryDetail() {
     }
   };
 
-  if (loading || !inquiry) {
+  if (loading) {
     return (
       <Layout title="Inquiry Detail">
         <div className="text-center py-10">Loading...</div>
@@ -116,10 +118,12 @@ export default function InquiryDetail() {
     );
   }
 
-  if (error && !inquiry) {
+  if (!inquiry) {
     return (
       <Layout title="Inquiry Detail">
         <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>
+        <button onClick={loadInquiry} className="mt-4 text-indigo-700 underline">Retry</button>
+        <button onClick={() => navigate('/coordinator/inquiries')} className="ml-4 text-indigo-700 underline">Back to inquiries</button>
       </Layout>
     );
   }
@@ -224,14 +228,15 @@ export default function InquiryDetail() {
                   return null;
                 }
               })()}
-              {inquiry.requirements && inquiry.requirements.includes('Proposal rejected') && (() => {
+              {inquiry.requirements && (inquiry.requirements.includes('Proposal change requested') || inquiry.requirements.includes('Proposal rejected')) && (() => {
                 // Extract the latest change request from requirements
-                const lines = inquiry.requirements.split('\n').filter(line => line.includes('Proposal rejected'));
+                const lines = inquiry.requirements.split('\n').filter(line =>
+                  line.includes('Proposal change requested') || line.includes('Proposal rejected'));
                 const latestLine = lines[lines.length - 1] || '';
-                // Format: "Proposal rejected on <timestamp>: <reason>"
+                // Format: "Proposal change requested on <timestamp>: <feedback>"
                 const changeReason = latestLine.includes(':') ? latestLine.substring(latestLine.indexOf(': ') + 2) : latestLine;
                 return (
-                  <div className="text-left text-sm text-rose-600 mb-4 p-3 bg-rose-50 rounded-lg border border-rose-200">
+                    <div className="text-left text-sm text-amber-700 mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <p className="font-semibold">Client requested a change:</p>
                     <p className="mt-1">{changeReason}</p>
                   </div>

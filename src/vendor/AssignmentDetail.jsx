@@ -18,6 +18,7 @@ export default function AssignmentDetail() {
 
   const load = async () => {
     setLoading(true);
+    setAssignment(null);
     try {
       const data = await fetchMyAssignment(id);
       setAssignment(data);

@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 @Repository
@@ -15,6 +16,8 @@ public interface VendorRepository extends JpaRepository<Vendor, Long> {
     Optional<Vendor> findByUserId(Long userId);
 
     List<Vendor> findByServiceCategory(String serviceCategory);
+
+    List<Vendor> findByServiceCategoryIn(Collection<String> serviceCategories);
 
     List<Vendor> findByIsActive(boolean isActive);
 

@@ -44,8 +44,16 @@ export default function ClientInquiryDetail() {
     try {
       const updated = decision === 'accept'
         ? await acceptProposal(id)
-        : await rejectProposal(id, changeReason || '');
+        : decision === 'changes'
+          ? await rejectProposal(id, changeReason)
+          : await rejectProposal(id);
       setInquiry(updated);
+      api.get(`/inquiries/${id}/timeline`).then(response => setTimeline(response.data))
+        .catch(() => setError('Your response was saved, but progress could not be refreshed. Refresh this page to try again.'));
+      if (decision === 'changes') {
+        setChangeMode(false);
+        setChangeReason('');
+      }
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${decision} proposal`);
     } finally {
@@ -70,7 +78,11 @@ export default function ClientInquiryDetail() {
   const canRespond = inquiry.status === 'PROPOSAL_SENT' && proposal;
 
   // Parse proposal if it's a string
-  const parsedProposal = typeof proposal === 'string' ? JSON.parse(proposal) : proposal;
+  let parsedProposal = proposal;
+  if (typeof proposal === 'string') {
+    try { parsedProposal = JSON.parse(proposal); }
+    catch { parsedProposal = null; }
+  }
 
   // Parse the enriched shortlist - handle both new array format and old map format
   let shortlist = [];
@@ -83,7 +95,7 @@ export default function ClientInquiryDetail() {
       // Convert to new format for display
       shortlist = Object.entries(parsedProposal.vendorShortlist).map(([category, vendors]) => ({
         category,
-        vendors: vendors.map((v, i) => ({
+        vendors: (Array.isArray(vendors) ? vendors : []).map((v, i) => ({
           id: i, // placeholder ID
           companyName: v,
           rating: null,
@@ -212,7 +224,7 @@ export default function ClientInquiryDetail() {
                     />
                     <div className="flex gap-3 mt-4">
                       <button
-                        onClick={() => decideProposal('reject')}
+                        onClick={() => decideProposal('changes')}
                         disabled={saving || !changeReason.trim()}
                         className="flex-1 bg-rose-600 text-white px-4 py-3 rounded-xl font-semibold disabled:opacity-50"
                       >
@@ -237,7 +249,9 @@ export default function ClientInquiryDetail() {
           </section>
         ) : (
           <section className="rounded-xl bg-white p-6 text-sm text-gray-600 shadow">
-            No proposal has been sent for this inquiry yet.
+            {inquiry.status === 'INQUIRY_SUBMITTED'
+              ? 'No proposal has been sent for this inquiry yet.'
+              : 'Proposal details are unavailable for this record. Ask the coordinator to review the proposal before responding.'}
           </section>
         )}
       </div>

@@ -5,6 +5,7 @@ import com.aicc.eventmanagement.payload.ChecklistResponse;
 import com.aicc.eventmanagement.payload.CreateChecklistRequest;
 import com.aicc.eventmanagement.payload.UpdateChecklistRequest;
 import com.aicc.eventmanagement.services.ChecklistService;
+import com.aicc.eventmanagement.services.RecordAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,6 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,6 +34,7 @@ import java.util.stream.Collectors;
 public class ChecklistController {
 
     private final ChecklistService checklistService;
+    private final RecordAccessService recordAccessService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
@@ -51,7 +55,10 @@ public class ChecklistController {
     @GetMapping("/event/{eventId}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT', 'VENDOR')")
     @Operation(summary = "Get checklist items by event ID")
-    public ResponseEntity<List<ChecklistResponse>> getChecklistByEvent(@PathVariable Long eventId) {
+    public ResponseEntity<List<ChecklistResponse>> getChecklistByEvent(
+            @PathVariable Long eventId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventAccess(eventId, principal.getUsername());
         log.info("Fetching checklist for event: {}", eventId);
         List<Checklist> checklists = checklistService.getChecklistByEvent(eventId);
         List<ChecklistResponse> responses = checklists.stream()
@@ -60,11 +67,22 @@ public class ChecklistController {
         return ResponseEntity.ok(responses);
     }
 
+    @PostMapping("/event/{eventId}/generate")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Add missing template tasks without changing existing checklist work")
+    public ResponseEntity<List<ChecklistResponse>> generateMissingTemplateTasks(@PathVariable Long eventId) {
+        return ResponseEntity.ok(checklistService.generateMissingTemplateTasks(eventId).stream()
+                .map(ChecklistResponse::from)
+                .toList());
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT', 'VENDOR')")
     @Operation(summary = "Get checklist item by ID")
     public ResponseEntity<ChecklistResponse> getChecklistById(
-            @Parameter(description = "Checklist ID", example = "1") @PathVariable Long id) {
+            @Parameter(description = "Checklist ID", example = "1") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireChecklistAccess(id, principal.getUsername(), false);
         log.info("Fetching checklist item with id: {}", id);
         Checklist checklist = checklistService.getChecklistById(id);
         return ResponseEntity.ok(ChecklistResponse.from(checklist));
@@ -73,7 +91,10 @@ public class ChecklistController {
     @PatchMapping("/{id}/complete")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Mark checklist item as complete")
-    public ResponseEntity<ChecklistResponse> markAsComplete(@PathVariable Long id) {
+    public ResponseEntity<ChecklistResponse> markAsComplete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireChecklistAccess(id, principal.getUsername(), true);
         log.info("Marking checklist item {} as complete", id);
         Checklist updated = checklistService.markAsComplete(id);
         return ResponseEntity.ok(ChecklistResponse.from(updated));
@@ -116,7 +137,10 @@ public class ChecklistController {
     @GetMapping("/event/{eventId}/pending")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT', 'VENDOR')")
     @Operation(summary = "Get pending checklist items for an event")
-    public ResponseEntity<List<ChecklistResponse>> getPendingChecklist(@PathVariable Long eventId) {
+    public ResponseEntity<List<ChecklistResponse>> getPendingChecklist(
+            @PathVariable Long eventId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventAccess(eventId, principal.getUsername());
         log.info("Fetching pending checklist items for event: {}", eventId);
         List<Checklist> checklists = checklistService.getPendingChecklist(eventId);
         List<ChecklistResponse> responses = checklists.stream()

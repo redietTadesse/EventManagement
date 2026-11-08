@@ -14,7 +14,7 @@ public enum EventStatus {
     CANCELLED;
 
     public boolean isTerminal() {
-        return this == CLOSED || this == COMPLETED || this == CANCELLED;
+        return this == PROPOSAL_REJECTED || this == CLOSED || this == COMPLETED || this == CANCELLED;
     }
 
     public boolean isEditableByClient() {

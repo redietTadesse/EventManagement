@@ -97,7 +97,7 @@ export default function Login() {
     setNotice('');
 
     try {
-      if (portalKey === 'client') {
+      if (!portalKey || portalKey === 'client') {
         await registerClient(form);
         setMode('signin');
         setNotice(
@@ -465,7 +465,7 @@ export default function Login() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes blob {
           0% {
             transform: translate(0px, 0px) scale(1);

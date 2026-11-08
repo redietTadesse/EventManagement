@@ -3,6 +3,8 @@ package com.aicc.eventmanagement.controllers;
 import com.aicc.eventmanagement.services.VendorSuggestionService;
 import com.aicc.eventmanagement.services.VendorSuggestionService.VendorDetail;
 import com.aicc.eventmanagement.services.VendorSuggestionService.VendorSuggestion;
+import com.aicc.eventmanagement.services.VendorService;
+import com.aicc.eventmanagement.payload.VendorDecisionPreviewResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,15 @@ import java.util.List;
 public class VendorSuggestionController {
 
     private final VendorSuggestionService suggestionService;
+    private final VendorService vendorService;
+
+    @GetMapping("/event/{eventId}/category/{category}/decision-preview")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    @Operation(summary = "Explain current vendor eligibility and ranking for an event category")
+    public ResponseEntity<VendorDecisionPreviewResponse> previewEventCategory(
+            @PathVariable Long eventId, @PathVariable String category) {
+        return ResponseEntity.ok(vendorService.previewVendorDecision(eventId, category));
+    }
 
     /**
      * Get ranked vendor suggestions for a category and date.

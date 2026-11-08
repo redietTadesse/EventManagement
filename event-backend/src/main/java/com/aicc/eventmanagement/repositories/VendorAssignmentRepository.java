@@ -19,14 +19,27 @@ import java.util.Optional;
 @Repository
 public interface VendorAssignmentRepository extends JpaRepository<VendorAssignment, Long> {
 
-    // OVERRIDE findById to fix the single assignment view crash
+    // Override findById to load the relationships needed by the single assignment view.
     @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
     Optional<VendorAssignment> findById(Long id);
 
     @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
     List<VendorAssignment> findByEventId(Long eventId);
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @Query("SELECT va FROM VendorAssignment va " +
+            "JOIN FETCH va.event event " +
+            "JOIN FETCH event.inquiry inquiry " +
+            "LEFT JOIN FETCH va.vendor " +
+            "WHERE va.id = :assignmentId")
+    Optional<VendorAssignment> findDetailedById(@Param("assignmentId") Long assignmentId);
+
+    @Query("SELECT va FROM VendorAssignment va " +
+            "JOIN FETCH va.event event " +
+            "JOIN FETCH event.inquiry inquiry " +
+            "LEFT JOIN FETCH va.vendor " +
+            "WHERE event.id = :eventId")
+    List<VendorAssignment> findDetailedByEventId(@Param("eventId") Long eventId);
+
     List<VendorAssignment> findByVendorId(Long vendorId);
 
     List<VendorAssignment> findByStatus(VendorAssignmentStatus status);
@@ -61,6 +74,40 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("category") String category
     );
 
+    @Query("SELECT va FROM VendorAssignment va " +
+            "WHERE va.status = 'OPEN' AND va.serviceCategory = :category " +
+            "AND va.event.status NOT IN :deadStatuses")
+    List<VendorAssignment> findOpenAssignmentsForCategory(
+            @Param("category") String category,
+            @Param("deadStatuses") List<EventStatus> deadStatuses
+    );
+
+    @Query("SELECT va FROM VendorAssignment va " +
+            "WHERE va.status = 'OPEN' AND va.serviceCategory IN :categories " +
+            "AND va.event.status NOT IN :deadStatuses " +
+            "ORDER BY va.createdAt ASC")
+    List<VendorAssignment> findOpenAssignmentsForCategories(
+            @Param("categories") List<String> categories,
+            @Param("deadStatuses") List<EventStatus> deadStatuses
+    );
+
+    /**
+     * Atomic claim of an OPEN assignment.
+     *
+     * Native SQL because JPQL does not allow an association path (va.vendor.id) in an
+     * UPDATE SET clause. The WHERE status = 'OPEN' guard makes the claim atomic, so
+     * concurrent vendors cannot both win (the loser gets 0 rows).
+     *
+     * An OPEN row now carries no vendor at all, so this fills in a blank rather than
+     * overwriting somebody. responded_at is explicitly nulled: claiming an offer is
+     * not answering it, and the claimer still has to accept or decline. assigned_at
+     * is stamped here because it means "when a vendor was attached", which for a pool
+     * row is later than created_at ("when it was opened to the pool").
+     *
+     * clearAutomatically/flushAutomatically force the persistence context to be flushed
+     * before and detached after the update, so the caller's re-read sees the new row
+     * instead of the stale pre-claim state cached in the first-level cache.
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
             value = "UPDATE vendor_assignments SET status = 'PENDING', vendor_id = :vendorId, " +
@@ -76,10 +123,10 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     );
 
     @Query("SELECT COUNT(va) FROM VendorAssignment va WHERE va.vendor.id = :vendorId AND va.status = 'ACCEPTED'")
-    long countActiveAssignmentsByVendor(@Param("vendorId") Long vendorId);
+    long countActiveAssignmentsByVendor(Long vendorId);
 
     @Query("SELECT COUNT(va) FROM VendorAssignment va WHERE va.vendor.id = :vendorId AND va.status IN ('ACCEPTED', 'PENDING')")
-    long countTotalAssignmentsByVendor(@Param("vendorId") Long vendorId);
+    long countTotalAssignmentsByVendor(Long vendorId);
 
     boolean existsByEventIdAndVendorId(Long eventId, Long vendorId);
 
@@ -98,7 +145,29 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "JOIN va.event e " +
             "JOIN e.inquiry i " +
             "WHERE va.vendor.id = :vendorId " +
-            "AND va.status = 'ACCEPTED' " +
+            "AND va.status IN ('PENDING', 'ACCEPTED') " +
+            "AND i.eventDate = :date")
+    boolean hasConflictingAssignmentOnDate(
+            @Param("vendorId") Long vendorId,
+            @Param("date") LocalDate date
+    );
+
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "JOIN va.event e JOIN e.inquiry i " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status IN ('PENDING', 'ACCEPTED') " +
+            "AND i.eventDate = :date " +
+            "AND e.id <> :excludedEventId")
+    boolean hasConflictingAssignmentOnDateExcludingEvent(
+            @Param("vendorId") Long vendorId,
+            @Param("date") LocalDate date,
+            @Param("excludedEventId") Long excludedEventId
+    );
+
+    @Query("SELECT COUNT(va) > 0 FROM VendorAssignment va " +
+            "JOIN va.event e JOIN e.inquiry i " +
+            "WHERE va.vendor.id = :vendorId " +
+            "AND va.status IN ('PENDING', 'ACCEPTED') " +
             "AND i.eventDate = :date " +
             "AND va.event.id != :eventId")
     boolean hasActiveAssignmentOnDateExcludingEvent(
@@ -131,15 +200,6 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("category") String category
     );
 
-    @Query("SELECT va FROM VendorAssignment va " +
-            "WHERE va.status = 'OPEN' " +
-            "AND va.serviceCategory = :category " +
-            "AND va.event.status NOT IN :deadStatuses")
-    List<VendorAssignment> findOpenAssignmentsForCategory(
-            @Param("category") String category,
-            @Param("deadStatuses") List<EventStatus> deadStatuses
-    );
-
     @Query("SELECT va.vendor.id FROM VendorAssignment va " +
             "WHERE va.event.id = :eventId " +
             "AND va.serviceCategory = :category " +
@@ -167,6 +227,14 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("vendorId") Long vendorId,
             @Param("category") String category,
             @Param("cutoff") LocalDateTime cutoff
+    );
+
+    @Query("SELECT DISTINCT va.vendor.id FROM VendorAssignment va " +
+            "WHERE va.event.id = :eventId AND va.serviceCategory = :category " +
+            "AND va.status = 'DECLINED' AND va.vendor.id IS NOT NULL")
+    List<Long> findDeclinedVendorIds(
+            @Param("eventId") Long eventId,
+            @Param("category") String category
     );
 
     @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})

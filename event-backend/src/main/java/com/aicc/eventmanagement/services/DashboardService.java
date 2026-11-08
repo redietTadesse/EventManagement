@@ -8,6 +8,9 @@ import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.payload.ActionRequiredResponse;
 import com.aicc.eventmanagement.payload.DashboardStatsResponse;
 import com.aicc.eventmanagement.payload.DashboardUpcomingEvent;
+import com.aicc.eventmanagement.payload.EventResponse;
+import com.aicc.eventmanagement.payload.InquiryResponse;
+import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
@@ -16,6 +19,7 @@ import com.aicc.eventmanagement.repositories.VendorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -73,6 +77,7 @@ public class DashboardService {
                 List.of(EventStatus.CANCELLED, EventStatus.COMPLETED, EventStatus.CLOSED));
     }
 
+    @Transactional(readOnly = true)
     public ActionRequiredResponse getActionRequired() {
         log.info("Building action required data for coordinator dashboard");
 
@@ -83,9 +88,9 @@ public class DashboardService {
                 EventStatus.PROPOSAL_SENT, threeDaysAgo);
 
         return ActionRequiredResponse.builder()
-                .needsCoordinatorEvents(needsCoordinatorEvents)
-                .openAssignments(openAssignments)
-                .staleProposals(staleProposals)
+                .needsCoordinatorEvents(needsCoordinatorEvents.stream().map(EventResponse::from).toList())
+                .openAssignments(openAssignments.stream().map(assignment -> VendorAssignmentResponse.from(assignment, true)).toList())
+                .staleProposals(staleProposals.stream().map(InquiryResponse::from).toList())
                 .build();
     }
 }

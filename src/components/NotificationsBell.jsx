@@ -35,7 +35,7 @@ const NotificationsBell = () => {
     <Popover className="relative">
       {({ open }) => (
         <>
-          <Popover.Button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors">
+          <Popover.Button aria-label="Notifications" className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors">
             <BellIcon className="w-6 h-6" />
             {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white animate-pulse">

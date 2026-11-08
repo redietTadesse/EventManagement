@@ -8,6 +8,7 @@ import com.aicc.eventmanagement.payload.EventReadinessResponse;
 import com.aicc.eventmanagement.services.VendorService;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
 import com.aicc.eventmanagement.services.EventService;
+import com.aicc.eventmanagement.services.RecordAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -29,7 +30,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.time.LocalDate;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/events")
@@ -40,6 +40,7 @@ public class EventController {
 
     private final EventService eventService;
     private final VendorService vendorService;
+    private final RecordAccessService recordAccessService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
@@ -60,29 +61,30 @@ public class EventController {
     @GetMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT', 'VENDOR')")
     @Operation(summary = "Get all events", description = "Returns a list of all events")
-    public ResponseEntity<List<EventResponse>> getAllEvents() {
+    public ResponseEntity<List<EventResponse>> getAllEvents(
+            @AuthenticationPrincipal UserDetails principal) {
         log.info("Fetching all events");
-        List<Event> events = eventService.getAllEvents();
-        List<EventResponse> responses = events.stream()
-                .map(EventResponse::from)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(responses);
+        return ResponseEntity.ok(eventService.getEventResponsesForUser(principal.getUsername(), false));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT', 'VENDOR')")
     @Operation(summary = "Get event by ID")
     public ResponseEntity<EventResponse> getEventById(
-            @Parameter(description = "Event ID", example = "1") @PathVariable Long id) {
+            @Parameter(description = "Event ID", example = "1") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventAccess(id, principal.getUsername());
         log.info("Fetching event with id: {}", id);
-        Event event = eventService.getEventById(id);
-        return ResponseEntity.ok(EventResponse.from(event));
+        return ResponseEntity.ok(eventService.getEventResponseById(id));
     }
 
     @GetMapping("/{id}/readiness")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
     @Operation(summary = "Get event readiness")
-    public ResponseEntity<EventReadinessResponse> getReadiness(@PathVariable Long id) {
+    public ResponseEntity<EventReadinessResponse> getReadiness(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventAccess(id, principal.getUsername());
         return ResponseEntity.ok(eventService.getEventReadiness(id));
     }
 
@@ -101,7 +103,7 @@ public class EventController {
     public ResponseEntity<EventResponse> changeEventDate(
             @PathVariable Long id,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate newDate) {
-        return ResponseEntity.ok(EventResponse.from(eventService.changeEventDate(id, newDate)));
+        return ResponseEntity.ok(eventService.changeEventDateResponse(id, newDate));
     }
 
     @GetMapping("/status/{status}")
@@ -109,20 +111,18 @@ public class EventController {
     @Operation(summary = "Get events by status")
     public ResponseEntity<List<EventResponse>> getEventsByStatus(@PathVariable EventStatus status) {
         log.info("Fetching events with status: {}", status);
-        List<Event> events = eventService.getEventsByStatus(status);
-        List<EventResponse> responses = events.stream()
-                .map(EventResponse::from)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(responses);
+        return ResponseEntity.ok(eventService.getEventResponsesByStatus(status));
     }
 
     @GetMapping("/inquiry/{inquiryId}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
     @Operation(summary = "Get event by inquiry ID")
-    public ResponseEntity<EventResponse> getEventByInquiryId(@PathVariable Long inquiryId) {
+    public ResponseEntity<EventResponse> getEventByInquiryId(
+            @PathVariable Long inquiryId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryAccess(inquiryId, principal.getUsername());
         log.info("Fetching event for inquiry: {}", inquiryId);
-        Event event = eventService.getEventByInquiryId(inquiryId);
-        return ResponseEntity.ok(EventResponse.from(event));
+        return ResponseEntity.ok(eventService.getEventResponseByInquiryId(inquiryId));
     }
 
     @PutMapping("/{id}")
@@ -145,8 +145,8 @@ public class EventController {
             @AuthenticationPrincipal UserDetails principal) {
         log.info("Updating event {} status to {}", id, status);
         Role userRole = extractRoleFromPrincipal(principal);
-        Event updated = eventService.updateEventStatus(id, status, userRole);
-        return ResponseEntity.ok(EventResponse.from(updated));
+        recordAccessService.requireEventAccess(id, principal.getUsername());
+        return ResponseEntity.ok(eventService.updateEventStatusResponse(id, status, userRole));
     }
 
     @DeleteMapping("/{id}")
@@ -166,13 +166,10 @@ public class EventController {
     @GetMapping("/upcoming")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT', 'VENDOR')")
     @Operation(summary = "Get upcoming events", description = "Returns events that are not completed/cancelled")
-    public ResponseEntity<List<EventResponse>> getUpcomingEvents() {
+    public ResponseEntity<List<EventResponse>> getUpcomingEvents(
+            @AuthenticationPrincipal UserDetails principal) {
         log.info("Fetching upcoming events");
-        List<Event> events = eventService.getUpcomingEvents();
-        List<EventResponse> responses = events.stream()
-                .map(EventResponse::from)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(responses);
+        return ResponseEntity.ok(eventService.getEventResponsesForUser(principal.getUsername(), true));
     }
 
     @GetMapping("/{id}/categories")

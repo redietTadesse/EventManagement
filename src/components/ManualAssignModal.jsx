@@ -6,7 +6,10 @@ export default function ManualAssignModal({
   onAssign, 
   availableVendors = [],
   serviceCategory,
-  loading = false 
+  loading = false,
+  loadError = '',
+  submitting = false,
+  error = ''
 }) {
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [reason, setReason] = useState('');
@@ -19,6 +22,7 @@ export default function ManualAssignModal({
   }, [isOpen]);
 
   if (!isOpen) return null;
+  const busy = loading || submitting;
 
   const handleAssign = () => {
     if (!selectedVendorId) {
@@ -34,11 +38,13 @@ export default function ManualAssignModal({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-slate-900 text-slate-100 rounded-2xl shadow-2xl border border-slate-800 max-w-md w-full p-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="manual-assignment-title" className="bg-slate-900 text-slate-100 rounded-2xl shadow-2xl border border-slate-800 max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-100">Manual Vendor Assignment</h3>
+          <h3 id="manual-assignment-title" className="text-lg font-semibold text-slate-100">Manual Vendor Assignment</h3>
           <button
             onClick={onClose}
+            disabled={submitting}
+            aria-label="Close vendor assignment"
             className="text-slate-400 hover:text-slate-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -56,14 +62,15 @@ export default function ManualAssignModal({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label htmlFor="assignment-vendor" className="block text-sm font-medium text-slate-300 mb-2">
               Select Vendor
             </label>
             <select
+              id="assignment-vendor"
               value={selectedVendorId}
               onChange={(e) => setSelectedVendorId(e.target.value)}
               className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-100 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-              disabled={loading}
+              disabled={busy}
             >
               <option value="">Choose a vendor...</option>
               {availableVendors.map(vendor => (
@@ -72,37 +79,44 @@ export default function ManualAssignModal({
                 </option>
               ))}
             </select>
+            {loading && <p role="status" className="mt-2 text-xs text-slate-400">Refreshing event-specific eligibility…</p>}
+            {loadError && <p role="alert" className="mt-2 text-xs text-rose-300">{loadError}</p>}
+            {!loading && !loadError && availableVendors.length === 0 && (
+              <p className="mt-2 text-xs text-slate-400">No vendors currently pass the eligibility checks for this event.</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label htmlFor="assignment-reason" className="block text-sm font-medium text-slate-300 mb-2">
               Reason for coordinator override
             </label>
             <textarea
+              id="assignment-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               maxLength={500}
               rows={3}
               placeholder="Why are you choosing this vendor?"
               className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-100 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-              disabled={loading}
+              disabled={busy}
             />
           </div>
 
+          {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
           <div className="flex gap-3 pt-2">
             <button
               onClick={onClose}
-              disabled={loading}
+              disabled={submitting}
               className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 rounded-lg disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleAssign}
-              disabled={loading || !selectedVendorId || !reason.trim()}
+              disabled={busy || Boolean(loadError) || !selectedVendorId || !reason.trim()}
               className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg disabled:opacity-50"
             >
-              {loading ? 'Assigning...' : 'Assign Vendor'}
+              {submitting ? 'Assigning…' : 'Assign Vendor'}
             </button>
           </div>
         </div>

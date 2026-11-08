@@ -13,6 +13,8 @@ const Navbar = () => {
 
   if (!currentUser) return null;
 
+  const displayName = currentUser.fullName || currentUser.username || 'User';
+
   const roleLabel = {
     CLIENT: 'Client',
     VENDOR: 'Vendor',
@@ -45,14 +47,16 @@ const Navbar = () => {
     ],
 
     ADMIN: [
+      { to: '/admin/dashboard', label: 'Dashboard' },
       { to: '/admin/vendors', label: 'Vendors' },
+      { to: '/admin/venues', label: 'Venues' },
     ],
   }[currentUser.role] || [];
 
-  const initials = currentUser.fullName
-    ?.split(' ')
+  const initials = displayName
+    .split(' ')
     .map((w) => w[0])
-    .join('') || '';
+    .join('');
 
   const handleLogout = () => {
     logout();
@@ -110,7 +114,7 @@ const Navbar = () => {
 
               <div className="text-sm leading-tight">
                 <div className="font-medium text-white">
-                  {currentUser.fullName}
+                  {displayName}
                 </div>
                 <div className="text-xs text-slate-400">
                   {roleLabel}
@@ -155,7 +159,7 @@ const Navbar = () => {
 
               <div>
                 <div className="font-medium text-white text-sm">
-                  {currentUser.fullName}
+                  {displayName}
                 </div>
                 <div className="text-xs text-slate-400">
                   {roleLabel}

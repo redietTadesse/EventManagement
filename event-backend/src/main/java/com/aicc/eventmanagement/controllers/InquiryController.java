@@ -8,6 +8,7 @@ import com.aicc.eventmanagement.payload.ConfirmCategoriesRequest;
 import com.aicc.eventmanagement.payload.ConversionPreviewResponse;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.ConvertToEventRequest;
+import com.aicc.eventmanagement.payload.EventResponse;
 import com.aicc.eventmanagement.payload.InquiryResponse;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.payload.TimelineResponse;
@@ -16,6 +17,7 @@ import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
 import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.services.InquiryService;
+import com.aicc.eventmanagement.services.RecordAccessService;
 import com.aicc.eventmanagement.services.QuotePdfService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,6 +52,7 @@ public class InquiryController {
 
     private final InquiryService inquiryService;
     private final QuotePdfService quotePdfService;
+    private final RecordAccessService recordAccessService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
@@ -61,7 +64,10 @@ public class InquiryController {
             @ApiResponse(responseCode = "401", description = "Unauthorized"),
             @ApiResponse(responseCode = "403", description = "Forbidden")
     })
-    public ResponseEntity<InquiryResponse> createInquiry(@Valid @RequestBody CreateInquiryRequest request) {
+    public ResponseEntity<InquiryResponse> createInquiry(
+            @Valid @RequestBody CreateInquiryRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryCreateOwner(request.getClientId(), principal.getUsername());
         log.info("Creating inquiry for client: {}", request.getClientName());
         Inquiry created = inquiryService.createInquiry(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(InquiryResponse.from(created));
@@ -82,7 +88,10 @@ public class InquiryController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get inquiry by ID")
-    public ResponseEntity<InquiryResponse> getInquiryById(@Parameter(description = "Inquiry ID", example = "1") @PathVariable Long id) {
+    public ResponseEntity<InquiryResponse> getInquiryById(
+            @Parameter(description = "Inquiry ID", example = "1") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
         log.info("Fetching inquiry with id: {}", id);
         Inquiry inquiry = inquiryService.getInquiryById(id);
         return ResponseEntity.ok(InquiryResponse.from(inquiry));
@@ -102,7 +111,10 @@ public class InquiryController {
     @GetMapping("/client/{clientId}")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get inquiries by client ID")
-    public ResponseEntity<List<InquiryResponse>> getInquiriesByClient(@PathVariable Long clientId) {
+    public ResponseEntity<List<InquiryResponse>> getInquiriesByClient(
+            @PathVariable Long clientId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireClientInquiryListAccess(clientId, principal.getUsername());
         log.info("Fetching inquiries for client: {}", clientId);
         List<Inquiry> inquiries = inquiryService.getInquiriesByClient(clientId);
         List<InquiryResponse> responses = inquiries.stream()
@@ -134,6 +146,7 @@ public class InquiryController {
         log.info("Updating inquiry {} status to {} by {}", id, status, principal.getUsername());
 
         Role userRole = extractRoleFromPrincipal(principal);
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
         Inquiry updated = inquiryService.updateInquiryStatus(id, status, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
@@ -168,14 +181,14 @@ public class InquiryController {
     @Operation(summary = "Convert inquiry to event", description = "Converts an accepted inquiry into a full event")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Event created successfully",
-                    content = @Content(schema = @Schema(implementation = Event.class))),
+                    content = @Content(schema = @Schema(implementation = EventResponse.class))),
             @ApiResponse(responseCode = "400", description = "Inquiry not in accepted state"),
             @ApiResponse(responseCode = "404", description = "Inquiry not found")
     })
-    public ResponseEntity<Event> convertToEvent(@PathVariable Long id, @Valid @RequestBody ConvertToEventRequest request) {
+    public ResponseEntity<EventResponse> convertToEvent(@PathVariable Long id, @Valid @RequestBody ConvertToEventRequest request) {
         log.info("Converting inquiry {} to event", id);
         Event event = inquiryService.convertToEvent(id, request);
-        return ResponseEntity.ok(event);
+        return ResponseEntity.ok(EventResponse.from(event));
     }
 
     @GetMapping("/{id}/conversion-preview")
@@ -334,6 +347,7 @@ public class InquiryController {
         log.info("Accepting proposal for inquiry {} by {}", id, principal.getUsername());
 
         Role userRole = extractRoleFromPrincipal(principal);
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
         List<String> finalCategories = body != null ? body.getCategories() : null;
 
         Inquiry updated = inquiryService.acceptProposal(id, finalCategories, userRole);
@@ -341,7 +355,7 @@ public class InquiryController {
     }
 
     @PatchMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @PreAuthorize("hasRole('CLIENT')")
     @Operation(summary = "Reject proposal", description = "Client rejects the proposal")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Proposal rejected successfully",
@@ -358,8 +372,11 @@ public class InquiryController {
         log.info("Rejecting proposal for inquiry {} by {}", id, principal.getUsername());
 
         Role userRole = extractRoleFromPrincipal(principal);
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
 
-        Inquiry updated = inquiryService.rejectProposal(id, reason, userRole);
+        Inquiry updated = reason != null && !reason.isBlank()
+                ? inquiryService.requestProposalChanges(id, reason, userRole)
+                : inquiryService.rejectProposal(id, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
@@ -370,7 +387,10 @@ public class InquiryController {
     @GetMapping("/{id}/recommended-vendors")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get recommended vendors for an inquiry")
-    public ResponseEntity<VendorRecommendationResponse> getRecommendedVendors(@PathVariable Long id) {
+    public ResponseEntity<VendorRecommendationResponse> getRecommendedVendors(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
         log.info("Fetching vendor recommendations for inquiry {}", id);
         return ResponseEntity.ok(inquiryService.getRecommendedVendors(id));
     }
@@ -386,6 +406,7 @@ public class InquiryController {
         log.info("Recording vendor preference for inquiry {} by {}", id, principal.getUsername());
 
         Role userRole = extractRoleFromPrincipal(principal);
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
         Inquiry updated = inquiryService.recordVendorPreference(id, request, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
@@ -393,7 +414,10 @@ public class InquiryController {
     @GetMapping("/{id}/timeline")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get visual timeline status for an inquiry")
-    public ResponseEntity<TimelineResponse> getTimeline(@PathVariable Long id) {
+    public ResponseEntity<TimelineResponse> getTimeline(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
         return ResponseEntity.ok(inquiryService.getTimeline(id));
     }
 

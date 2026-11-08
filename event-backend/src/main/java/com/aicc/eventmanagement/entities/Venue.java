@@ -30,6 +30,9 @@ public class Venue {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(columnDefinition = "TEXT")
+    private String resources;
+
     @PositiveOrZero
     private Integer capacity;
 

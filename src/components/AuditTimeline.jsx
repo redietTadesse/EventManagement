@@ -31,13 +31,15 @@ const actorConfig = {
   },
 };
 
-export default function AuditTimeline({ referenceType, referenceId, expandedByDefault = true }) {
+export default function AuditTimeline({ referenceType, referenceId, expandedByDefault = true, refreshKey = 0, title = 'Audit Trail' }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(expandedByDefault);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
+    let active = true;
     const fetchHistory = async () => {
       setLoading(true);
       setError(null);
@@ -46,20 +48,21 @@ export default function AuditTimeline({ referenceType, referenceId, expandedByDe
           ? `/history/event/${referenceId}`
           : `/history/inquiry/${referenceId}`;
         const res = await api.get(endpoint);
-        setEntries(res.data || []);
+        if (active) setEntries(res.data || []);
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load history');
+        if (active) setError(err.response?.data?.message || 'Failed to load history');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     if (referenceType && referenceId) {
       fetchHistory();
     }
-  }, [referenceType, referenceId]);
+    return () => { active = false; };
+  }, [referenceType, referenceId, refreshKey, retryCount]);
 
-  if (loading) {
+  if (loading && entries.length === 0) {
     return (
       <div className="bg-white rounded-xl shadow p-6">
         <div className="animate-pulse space-y-4">
@@ -80,10 +83,10 @@ export default function AuditTimeline({ referenceType, referenceId, expandedByDe
     );
   }
 
-  if (error) {
+  if (error && entries.length === 0) {
     return (
       <div className="bg-white rounded-xl shadow p-6">
-        <p className="text-sm text-red-600">{error}</p>
+        <p role="alert" className="text-sm text-red-600">{error} <button type="button" onClick={() => setRetryCount(value => value + 1)} className="underline">Retry</button></p>
       </div>
     );
   }
@@ -102,7 +105,7 @@ export default function AuditTimeline({ referenceType, referenceId, expandedByDe
         onClick={() => setExpanded(!expanded)}
         className="w-full px-6 py-4 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50 transition-colors"
       >
-        <h3 className="font-medium text-gray-800">Audit Trail</h3>
+        <h3 className="font-medium text-gray-800">{title}</h3>
         {expanded ? (
           <ChevronUpIcon className="w-5 h-5 text-gray-500" />
         ) : (
@@ -112,6 +115,8 @@ export default function AuditTimeline({ referenceType, referenceId, expandedByDe
 
       {expanded && (
         <div className="p-6">
+          {loading && <p role="status" className="mb-3 text-xs text-slate-500">Refreshing history…</p>}
+          {error && <p role="alert" className="mb-3 text-sm text-rose-700">{error} <button type="button" onClick={() => setRetryCount(value => value + 1)} className="underline">Retry</button></p>}
           <div className="flow-root">
             <ul className="-mb-8">
               {entries.map((entry, idx) => {

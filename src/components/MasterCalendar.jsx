@@ -1,115 +1,98 @@
-import React, { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/react/daygrid';
-import interactionPlugin from '@fullcalendar/react/interaction';
-import { useApp } from '../context/AppContext';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import Layout from './Layout';
+import api from '../api/axios';
+import { eventDayCoverage, mapCalendarEvents } from './calendarModel';
 
 export default function MasterCalendar() {
-  const { state } = useApp();
-  const { inquiries } = state;
-
-  // 1. Map inquiries to FullCalendar events
-  const events = useMemo(() => {
-    return inquiries
-      .filter(inq => inq.event) // Only show converted events
-      .map(inq => {
-        const event = inq.event;
-
-        // FullCalendar's end date is EXCLUSIVE.
-        // If event ends Nov 17, we pass Nov 18 so it fills the box for Nov 17.
-        let endStr = inq.endDate || inq.eventDate;
-        const endDateObj = new Date(endStr);
-        endDateObj.setDate(endDateObj.getDate() + 1);
-        const exclusiveEnd = endDateObj.toISOString().split('T')[0];
-
-        // Color coding based on status
-        let backgroundColor = '#4F46E5'; // Indigo (Default)
-        let borderColor = '#4338CA';
-
-        if (event.status === 'CONFIRMED' || event.status === 'COMPLETED') {
-          backgroundColor = '#059669'; // Emerald (Success)
-          borderColor = '#047857';
-        } else if (event.status === 'NEEDS_COORDINATOR') {
-          backgroundColor = '#E11D48'; // Rose (Critical)
-          borderColor = '#BE123C';
-        } else if (event.status === 'AWAITING_VENDORS') {
-          backgroundColor = '#D97706'; // Amber (Warning)
-          borderColor = '#B45309';
-        }
-
-        return {
-          id: event.id,
-          title: `${event.name} (${event.venue || 'TBD'})`,
-          start: inq.eventDate,
-          end: exclusiveEnd,
-          backgroundColor,
-          borderColor,
-          textColor: '#ffffff',
-          extendedProps: {
-            status: event.status,
-            client: inq.clientName,
-          }
-        };
-      });
-  }, [inquiries]);
-
-  // 2. Calculate Utilization for the current month
-  const utilization = useMemo(() => {
+  const navigate = useNavigate();
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState('');
+  const [visibleMonth, setVisibleMonth] = useState(() => {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
+    return { year: today.getFullYear(), month: today.getMonth() };
+  });
+  const requestController = useRef(null);
 
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    let bookedDays = 0;
-
-    // Create a set of all unique days that have a booking
-    const bookedSet = new Set();
-    events.forEach(ev => {
-      let current = new Date(ev.start);
-      const end = new Date(ev.end);
-      while (current < end) {
-        if (current.getMonth() === month && current.getFullYear() === year) {
-          bookedSet.add(current.getDate());
-        }
-        current.setDate(current.getDate() + 1);
+  const loadEvents = useCallback(async () => {
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.get('/events', { signal: controller.signal });
+      if (!Array.isArray(response.data)) throw new Error('The events service returned an unexpected response.');
+      if (!controller.signal.aborted) {
+        setRecords(response.data);
+        setLoaded(true);
       }
-    });
+    } catch (requestError) {
+      if (!controller.signal.aborted) setError(requestError.response?.data?.message || 'Could not load calendar events.');
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, []);
 
-    bookedDays = bookedSet.size;
-    const percentage = Math.round((bookedDays / daysInMonth) * 100);
+  useEffect(() => {
+    loadEvents();
+    return () => requestController.current?.abort();
+  }, [loadEvents]);
 
-    return { percentage, bookedDays, daysInMonth };
-  }, [events]);
+  const { events, omittedCount } = useMemo(() => mapCalendarEvents(records), [records]);
+  const coverage = useMemo(() => eventDayCoverage(events, visibleMonth.year, visibleMonth.month), [events, visibleMonth]);
+  const monthLabel = new Date(visibleMonth.year, visibleMonth.month, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <div className="space-y-6">
-      {/* Utilization Widget */}
+    <Layout title="Calendar">
+    <div className="coordinator-calendar space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h1 className="text-2xl font-bold text-slate-900">Calendar</h1><p className="mt-1 text-sm text-slate-500">Event dates and vendor coordination status.</p></div>
+        <button type="button" onClick={loadEvents} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 disabled:opacity-50">{loading ? 'Loading…' : 'Refresh calendar'}</button>
+      </div>
+      {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}{loaded ? ' Previously loaded events remain visible.' : ''} <button type="button" onClick={loadEvents} disabled={loading} className="font-medium underline">Retry</button></div>}
+      {loading && !loaded && <p role="status" className="py-10 text-center text-sm text-slate-500">Loading calendar events…</p>}
+      {loaded && <>
+      {omittedCount > 0 && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{omittedCount} {omittedCount === 1 ? 'event could' : 'events could'} not be shown because the date range or event ID is missing or invalid. <Link to="/coordinator/events" className="underline">Review events</Link></p>}
+      {!events.length && !omittedCount && <p className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">No events yet. Events created from accepted proposals will appear here.</p>}
+      {/* Event-day summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-center">
-          <p className="text-sm font-medium text-slate-500 mb-1">Monthly Utilization</p>
+          <p className="text-sm font-medium text-slate-500 mb-1">Event days · {monthLabel}</p>
           <div className="flex items-end gap-2">
-            <p className="text-4xl font-bold text-indigo-600">{utilization.percentage}%</p>
-            <p className="text-sm text-slate-500 mb-1">of days booked</p>
+            <p className="text-4xl font-bold text-indigo-600">{coverage.percentage}%</p>
+            <p className="text-sm text-slate-500 mb-1">of days have events</p>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-2 mt-4">
             <div
               className="bg-indigo-600 h-2 rounded-full transition-all duration-1000"
-              style={{ width: `${utilization.percentage}%` }}
+              style={{ width: `${coverage.percentage}%` }}
             />
           </div>
+          <p className="mt-3 text-xs text-slate-500">Unique dates with events; excludes cancelled and closed events.</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <p className="text-sm font-medium text-slate-500 mb-1">Days Booked</p>
-          <p className="text-4xl font-bold text-slate-800">{utilization.bookedDays} <span className="text-lg text-slate-400 font-normal">/ {utilization.daysInMonth}</span></p>
+          <p className="text-sm font-medium text-slate-500 mb-1">Days with events</p>
+          <p className="text-4xl font-bold text-slate-800">{coverage.daysWithEvents} <span className="text-lg text-slate-400 font-normal">/ {coverage.daysInMonth}</span></p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <p className="text-sm font-medium text-slate-500 mb-1">Legend</p>
           <div className="flex flex-col gap-1 mt-2 text-sm">
-             <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-emerald-600"></div> Confirmed</div>
+             <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-emerald-600"></div> Confirmed / Completed</div>
              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-amber-600"></div> Awaiting Vendors</div>
              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-rose-600"></div> Needs Coordinator</div>
+             <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-indigo-600"></div> Event Created</div>
+             <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-slate-500"></div> Cancelled / Closed</div>
           </div>
         </div>
       </div>
@@ -120,25 +103,31 @@ export default function MasterCalendar() {
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           events={events}
+          height="auto"
+          datesSet={({ view }) => {
+            const year = view.currentStart.getFullYear();
+            const month = view.currentStart.getMonth();
+            setVisibleMonth(previous => previous.year === year && previous.month === month ? previous : { year, month });
+          }}
           headerToolbar={{
             left: 'prev,next today',
             center: 'title',
             right: 'dayGridMonth,dayGridWeek'
           }}
-          eventTimeFormat={{
-            hour: 'numeric',
-            minute: '2-digit',
-            meridiem: 'short'
-          }}
           eventClick={(info) => {
-            // Optional: Open a modal or navigate to the event detail page
-            console.log('Event clicked:', info.event.id);
+            info.jsEvent.preventDefault();
+            navigate(`/coordinator/events/${info.event.id}`);
           }}
         />
       </div>
+      </>}
 
       {/* Custom CSS overrides for FullCalendar to match Tailwind theme */}
-      <style jsx="true" global>{`
+      <style>{`
+        .coordinator-calendar .fc-header-toolbar {
+          flex-wrap: wrap;
+          gap: 12px;
+        }
         .fc-theme-standard .fc-scrollgrid {
           border-color: #e2e8f0; /* slate-200 */
         }
@@ -183,5 +172,6 @@ export default function MasterCalendar() {
         }
       `}</style>
     </div>
+    </Layout>
   );
 }

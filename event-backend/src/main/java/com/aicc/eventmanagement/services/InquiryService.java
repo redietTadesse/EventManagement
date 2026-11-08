@@ -1,15 +1,16 @@
 package com.aicc.eventmanagement.services;
 
-import com.aicc.eventmanagement.entities.Checklist;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.User;
+import com.aicc.eventmanagement.entities.Venue;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.EventCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryCreatedEvent;
 import com.aicc.eventmanagement.events.InquiryStatusChangedEvent;
+import com.aicc.eventmanagement.events.ProposalChangeRequestedEvent;
 import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,27 +65,39 @@ public class InquiryService {
     private final VendorRatingService ratingService;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRepository vendorRepository;
+    private final ChecklistService checklistService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final Map<String, List<String>> CHECKLIST_TEMPLATES = Map.of(
-            "conference", List.of("Book main hall", "Arrange AV equipment", "Arrange catering service", "Arrange security", "Set up registration desk"),
-            "wedding", List.of("Book ceremony venue", "Arrange catering service", "Arrange photography", "Book music / DJ", "Order flowers"),
-            "trade_show", List.of("Book exhibition space", "Arrange booth setup", "Arrange security", "Arrange cleaning services", "Confirm exhibitor list"),
-            "exhibition", List.of("Book exhibition space", "Arrange booth setup", "Arrange security", "Arrange cleaning services", "Confirm exhibitor list"),
-            "concert", List.of("Book venue", "Arrange stage setup", "Arrange AV equipment", "Arrange security", "Confirm artist line-up"),
-            "gala", List.of("Book ballroom", "Arrange catering service", "Arrange photography", "Book music / DJ", "Arrange security"),
-            "seminar", List.of("Book meeting room", "Arrange AV equipment", "Arrange catering")
-    );
+    private List<String> canonicalCategories(Collection<String> selected) {
+        if (selected == null) return List.of();
+        List<String> canonical = selected.stream()
+                .filter(category -> category != null && !category.isBlank())
+                .map(CategoryUtils::canonicalize)
+                .distinct()
+                .toList();
+        List<String> unsupported = canonical.stream()
+                .filter(category -> !CategoryUtils.isKnownCategory(category))
+                .toList();
+        if (!unsupported.isEmpty()) {
+            throw new BusinessException("Unsupported event service category: " + String.join(", ", unsupported),
+                    "INVALID_CATEGORY");
+        }
+        return canonical;
+    }
 
     public Inquiry createInquiry(CreateInquiryRequest request) {
         if (request.getEventDate().isBefore(LocalDate.now())) {
             throw new RuntimeException("Event date cannot be in the past");
         }
 
-        List<String> requestedCategories = request.getRequestedCategories() != null && !request.getRequestedCategories().isEmpty()
+        List<String> submittedCategories = request.getRequestedCategories() != null && !request.getRequestedCategories().isEmpty()
                 ? request.getRequestedCategories()
-                : CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(request.getEventType(), List.of());
+                : CategoryUtils.categoriesForEventType(request.getEventType());
+        List<String> requestedCategories = canonicalCategories(submittedCategories);
+        if (requestedCategories.isEmpty()) {
+            throw new BusinessException("Select at least one supported event service", "NO_CATEGORIES");
+        }
 
         Inquiry inquiry = Inquiry.builder()
                 .clientId(request.getClientId())
@@ -213,20 +227,23 @@ public class InquiryService {
         Inquiry inquiry = getInquiryById(inquiryId);
 
         if (inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
-            throw new RuntimeException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()));
+            throw new BusinessException(String.format("Only accepted proposals can be converted to events. Current status: %s", inquiry.getStatus()), "INVALID_STATE");
         }
 
         if (inquiry.getEvent() != null) {
-            throw new RuntimeException("This inquiry already has an event associated.");
+            throw new BusinessException("This inquiry already has an event associated.", "ALREADY_CONVERTED");
         }
 
-        String resolvedCategories = request.getCategories() != null && !request.getCategories().isEmpty()
-                ? CategoryUtils.join(request.getCategories())
+        List<String> selectedCategories = request.getCategories() != null && !request.getCategories().isEmpty()
+                ? request.getCategories()
                 : inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
-                ? inquiry.getCategories()
+                ? CategoryUtils.split(inquiry.getCategories())
                 : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
-                ? inquiry.getRequestedCategories()
-                : CategoryUtils.join(CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of()));
+                ? CategoryUtils.split(inquiry.getRequestedCategories())
+                : CategoryUtils.categoriesForEventType(inquiry.getEventType());
+        selectedCategories = canonicalCategories(selectedCategories);
+        String resolvedCategories = CategoryUtils.join(
+                CategoryUtils.externalVendorCategories(inquiry.getEventType(), selectedCategories));
 
         Event event = Event.builder()
                 .inquiry(inquiry)
@@ -238,10 +255,9 @@ public class InquiryService {
                 .requiredCategories(resolvedCategories)
                 .build();
 
-        List<Checklist> checklistItems = generateChecklistForEventType(inquiry.getEventType());
-        checklistItems.forEach(event::addChecklistItem);
-
         Event savedEvent = eventRepository.save(event);
+        List<com.aicc.eventmanagement.entities.Checklist> checklistItems =
+                checklistService.generateMissingTemplateTasks(savedEvent.getId());
 
         // Book venue without catching the exception so that conflicts roll back the whole transaction.
         if (request.getVenueId() != null) {
@@ -264,13 +280,8 @@ public class InquiryService {
         inquiryRepository.save(inquiry);
 
         eventPublisher.publishEvent(new EventCreatedEvent(this, savedEvent));
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(
-                this,
-                EventStatus.PROPOSAL_ACCEPTED,
-                EventStatus.EVENT_CREATED,
-                String.valueOf(inquiryId),
-                Role.COORDINATOR
-        ));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_ACCEPTED,
+                EventStatus.EVENT_CREATED, String.valueOf(inquiryId), Role.COORDINATOR));
 
         log.info("Converted inquiry {} to event {} ({} checklist items)", inquiryId, savedEvent.getId(), checklistItems.size());
         return savedEvent;
@@ -293,10 +304,11 @@ public class InquiryService {
 
         List<ConversionPreviewResponse.CategoryPreview> categoryPreviews = new ArrayList<>();
         for (String category : requiredCategories) {
-            List<VendorRankingService.Ranked> ranked = rankingService.rank(category, eventDate, Set.of());
+            VendorRankingService.DecisionPreview decision = rankingService.preview(
+                    category, eventDate, inquiry.getEventType());
             List<ConversionPreviewResponse.VendorCandidate> candidates = new ArrayList<>();
-            for (int i = 0; i < Math.min(3, ranked.size()); i++) {
-                VendorRankingService.Ranked r = ranked.get(i);
+            for (int i = 0; i < Math.min(3, decision.eligible().size()); i++) {
+                VendorRankingService.Ranked r = decision.eligible().get(i);
                 var v = r.vendor();
                 boolean hasDeclined = hasRecentDecline(v.getId(), category);
                 long load = assignmentRepository.countActiveAndPendingByVendor(v.getId());
@@ -307,10 +319,20 @@ public class InquiryService {
                         .rating(r.rating())
                         .currentLoad(load)
                         .score(r.score())
+                        .qualityScore(r.qualityScore())
+                        .workloadScore(r.workloadScore())
+                        .rotationScore(r.rotationScore())
                         .rank(i + 1)
                         .hasRecentDecline(hasDeclined)
                         .build());
             }
+            List<ConversionPreviewResponse.ExcludedCandidate> excluded = decision.excluded().stream()
+                    .map(candidate -> ConversionPreviewResponse.ExcludedCandidate.builder()
+                            .vendorId(candidate.vendorId())
+                            .companyName(candidate.vendorName())
+                            .reason(candidate.reason())
+                            .build())
+                    .toList();
 
             String warning = null;
             if (candidates.isEmpty()) {
@@ -322,6 +344,7 @@ public class InquiryService {
             categoryPreviews.add(ConversionPreviewResponse.CategoryPreview.builder()
                     .category(category)
                     .candidates(candidates)
+                    .excludedCandidates(excluded)
                     .warning(warning)
                     .build());
         }
@@ -339,9 +362,12 @@ public class InquiryService {
     }
 
     private List<String> resolvePreviewCategories(Inquiry inquiry) {
-        if (inquiry.getCategories() != null && !inquiry.getCategories().isBlank()) return CategoryUtils.split(inquiry.getCategories());
-        if (inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()) return CategoryUtils.split(inquiry.getRequestedCategories());
-        return CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of());
+        List<String> selected = inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
+                ? CategoryUtils.split(inquiry.getCategories())
+                : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
+                ? CategoryUtils.split(inquiry.getRequestedCategories())
+                : CategoryUtils.categoriesForEventType(inquiry.getEventType());
+        return CategoryUtils.externalVendorCategories(inquiry.getEventType(), selected);
     }
 
     private ConversionPreviewResponse.VenuePreview buildVenuePreview(Inquiry inquiry, LocalDate eventDate) {
@@ -354,13 +380,32 @@ public class InquiryService {
             String venueName = (String) proposal.get("venue");
 
             if (venueId == null) {
-                return ConversionPreviewResponse.VenuePreview.builder().venueName(venueName).available(false).message("No specific venue selected in proposal").build();
+                String message = "No specific venue selected in proposal";
+                return ConversionPreviewResponse.VenuePreview.builder().venueName(venueName).available(false)
+                        .message(message).explanation(List.of(message)).build();
             }
 
-            boolean available = venueService.isVenueAvailable(venueId, eventDate);
-            String message = available ? "Available on " + eventDate : "Already booked on " + eventDate;
+            Venue venue = venueService.getById(venueId);
+            LocalDate endDate = inquiry.getEndDate() != null ? inquiry.getEndDate() : eventDate;
+            var fit = venueService.explainVenueFit(eventDate, endDate,
+                            inquiry.getExpectedAttendees(), null).stream()
+                    .filter(option -> option.venueId().equals(venueId))
+                    .findFirst()
+                    .orElse(null);
+            boolean available = fit != null && fit.eligible();
+            List<String> explanation = fit != null ? fit.explanation()
+                    : List.of("Venue is no longer present in the configured venue list.");
+            String message = available ? "Eligible for the event date and attendance"
+                    : String.join(" ", explanation);
 
-            return ConversionPreviewResponse.VenuePreview.builder().venueId(venueId).venueName(venueName).available(available).message(message).build();
+            return ConversionPreviewResponse.VenuePreview.builder()
+                    .venueId(venueId)
+                    .venueName(venue.getName() != null ? venue.getName() : venueName)
+                    .capacity(venue.getCapacity())
+                    .available(available)
+                    .message(message)
+                    .explanation(explanation)
+                    .build();
         } catch (Exception e) {
             log.warn("Failed to build venue preview for inquiry {}: {}", inquiry.getId(), e.getMessage());
             return ConversionPreviewResponse.VenuePreview.builder().available(false).message("Could not parse proposal venue details").build();
@@ -369,19 +414,6 @@ public class InquiryService {
 
     private boolean hasRecentDecline(Long vendorId, String category) {
         return assignmentRepository.existsRecentDeclineByVendorAndCategory(vendorId, category, LocalDateTime.now().minusDays(30));
-    }
-
-    private List<Checklist> generateChecklistForEventType(String eventType) {
-        List<String> items = CHECKLIST_TEMPLATES.getOrDefault(eventType, List.of("Book venue", "Arrange services"));
-        List<Checklist> checklist = new ArrayList<>();
-        for (String itemName : items) {
-            checklist.add(Checklist.builder()
-                    .itemName(itemName)
-                    .isComplete(false)
-                    .dueDate(LocalDate.now().plusDays(7))
-                    .build());
-        }
-        return checklist;
     }
 
     @Transactional
@@ -395,7 +427,7 @@ public class InquiryService {
         String proposalJson = buildProposalJson(request, inquiry);
 
         inquiry.setCategories(request.getCategories() != null && !request.getCategories().isEmpty()
-                ? CategoryUtils.join(request.getCategories())
+                ? CategoryUtils.join(canonicalCategories(request.getCategories()))
                 : inquiry.getCategories() != null && !inquiry.getCategories().isBlank() ? inquiry.getCategories() : inquiry.getRequestedCategories());
         inquiry.setProposal(proposalJson);
         inquiry.setStatus(EventStatus.PROPOSAL_SENT);
@@ -403,7 +435,8 @@ public class InquiryService {
         Inquiry saved = inquiryRepository.save(inquiry);
 
         eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.INQUIRY_SUBMITTED, EventStatus.PROPOSAL_SENT));
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.INQUIRY_SUBMITTED, EventStatus.PROPOSAL_SENT, String.valueOf(id), userRole));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.INQUIRY_SUBMITTED,
+                EventStatus.PROPOSAL_SENT, String.valueOf(id), userRole));
 
         try {
             emailService.sendProposalNotification(inquiry, getUserEmail(inquiry.getClientId()));
@@ -424,37 +457,56 @@ public class InquiryService {
         Inquiry inquiry = getInquiryById(id);
 
         workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_ACCEPTED, userRole);
-        if (finalCategories != null && !finalCategories.isEmpty()) inquiry.setCategories(CategoryUtils.join(finalCategories));
+        if (finalCategories != null && !finalCategories.isEmpty()) {
+            inquiry.setCategories(CategoryUtils.join(canonicalCategories(finalCategories)));
+        }
 
         inquiry.setStatus(EventStatus.PROPOSAL_ACCEPTED);
         Inquiry saved = inquiryRepository.save(inquiry);
 
-        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_ACCEPTED, String.valueOf(id), userRole));
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT,
+                EventStatus.PROPOSAL_ACCEPTED, String.valueOf(id), userRole));
         eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_ACCEPTED));
 
         return saved;
     }
 
     @Transactional
-    public Inquiry rejectProposal(Long id, String reason, Role userRole) {
-        Inquiry inquiry = getInquiryById(id);
-
-        // If a reason is provided (change request), keep status as PROPOSAL_SENT
-        // Otherwise, transition to PROPOSAL_REJECTED (full rejection)
-        if (reason != null && !reason.trim().isEmpty()) {
-            // Keep status as PROPOSAL_SENT for change requests
-            inquiry.setRequirements((inquiry.getRequirements() != null ? inquiry.getRequirements() + "\n" : "") + "Proposal rejected on " + LocalDateTime.now() + ": " + reason);
-            Inquiry saved = inquiryRepository.save(inquiry);
-            eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_SENT));
-            return saved;
-        } else {
-            // Full rejection without reason
-            workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_REJECTED, userRole);
-            inquiry.setStatus(EventStatus.PROPOSAL_REJECTED);
-            Inquiry saved = inquiryRepository.save(inquiry);
-            eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
-            return saved;
+    public Inquiry requestProposalChanges(Long id, String feedback, Role userRole) {
+        if (userRole != Role.CLIENT) {
+            throw new SecurityException("Only the client can request proposal changes");
         }
+        Inquiry inquiry = getInquiryById(id);
+        if (inquiry.getStatus() != EventStatus.PROPOSAL_SENT) {
+            throw new BusinessException("Change requests are only allowed while a proposal is pending", "INVALID_STATE");
+        }
+        if (feedback == null || feedback.isBlank()) {
+            throw new BusinessException("Change request feedback is required", "INVALID_FEEDBACK");
+        }
+        String normalizedFeedback = feedback.trim();
+        if (normalizedFeedback.length() > 2000) {
+            throw new BusinessException("Change request feedback cannot exceed 2000 characters", "INVALID_FEEDBACK");
+        }
+
+        String existingRequirements = inquiry.getRequirements();
+        inquiry.setRequirements((existingRequirements == null || existingRequirements.isBlank()
+                ? "" : existingRequirements + "\n")
+                + "Proposal change requested on " + LocalDateTime.now() + ": " + normalizedFeedback);
+        Inquiry saved = inquiryRepository.save(inquiry);
+        eventPublisher.publishEvent(new ProposalChangeRequestedEvent(this, saved));
+        log.info("Client requested proposal changes for inquiry {}", id);
+        return saved;
+    }
+
+    @Transactional
+    public Inquiry rejectProposal(Long id, Role userRole) {
+        Inquiry inquiry = getInquiryById(id);
+        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_REJECTED, userRole);
+        inquiry.setStatus(EventStatus.PROPOSAL_REJECTED);
+        Inquiry saved = inquiryRepository.save(inquiry);
+        eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT,
+                EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
+        return saved;
     }
 
     @Transactional
@@ -469,7 +521,7 @@ public class InquiryService {
                 request.getVendorShortlist(), inquiry);
 
         inquiry.setCategories(request.getCategories() != null && !request.getCategories().isEmpty()
-                ? CategoryUtils.join(request.getCategories())
+                ? CategoryUtils.join(canonicalCategories(request.getCategories()))
                 : inquiry.getCategories() != null && !inquiry.getCategories().isBlank() ? inquiry.getCategories() : inquiry.getRequestedCategories());
         inquiry.setProposal(proposalJson);
 
@@ -485,12 +537,14 @@ public class InquiryService {
         Inquiry inquiry = getInquiryById(inquiryId);
         List<String> categories = CategoryUtils.split(inquiry.getCategories());
         if (categories.isEmpty()) categories = CategoryUtils.split(inquiry.getRequestedCategories());
-        if (categories.isEmpty()) categories = CategoryUtils.EVENT_TYPE_DEFAULTS.getOrDefault(inquiry.getEventType(), List.of());
+        if (categories.isEmpty()) categories = CategoryUtils.categoriesForEventType(inquiry.getEventType());
+        categories = CategoryUtils.externalVendorCategories(inquiry.getEventType(), categories);
         if (categories.isEmpty()) throw new BusinessException("No categories defined for this inquiry", "NO_CATEGORIES");
 
         List<VendorRecommendationResponse.CategoryRecommendation> categoryResults = new ArrayList<>();
         for (String category : categories) {
-            List<VendorRankingService.Ranked> ranked = rankingService.rank(category, inquiry.getEventDate(), Set.of());
+            List<VendorRankingService.Ranked> ranked = rankingService.rank(
+                    category, inquiry.getEventDate(), Set.of(), inquiry.getEventType());
             List<VendorRecommendationResponse.VendorOption> options = ranked.stream()
                     .limit(5)
                     .map(r -> VendorRecommendationResponse.VendorOption.builder()

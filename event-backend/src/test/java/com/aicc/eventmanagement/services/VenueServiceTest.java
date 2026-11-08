@@ -6,6 +6,7 @@ import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.VenueBookingRepository;
 import com.aicc.eventmanagement.repositories.VenueRepository;
+import com.aicc.eventmanagement.repositories.VenueUnavailableDateRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -13,12 +14,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +30,7 @@ class VenueServiceTest {
     @Mock private VenueRepository venueRepository;
     @Mock private EventRepository eventRepository;
     @Mock private VenueBookingRepository venueBookingRepository;
+    @Mock private VenueUnavailableDateRepository unavailableDateRepository;
     @InjectMocks private VenueService venueService;
 
     private Venue venue() {
@@ -39,18 +41,20 @@ class VenueServiceTest {
     void confirmedBookingMakesVenueUnavailable() {
         LocalDate date = LocalDate.of(2027, 1, 10);
         when(venueRepository.findById(7L)).thenReturn(Optional.of(venue()));
-        when(venueBookingRepository.findBookedVenueIdsOn(date)).thenReturn(List.of(7L));
+        when(venueBookingRepository.countConfirmedBookingsInRangeExcludingEvent(
+                7L, date, date, -1L)).thenReturn(1L);
 
         assertThat(venueService.isVenueAvailable(7L, date)).isFalse();
-        verify(eventRepository, never()).isVenueBookedOn(any(), any(), any());
+        verify(eventRepository, never()).countVenueEventsInRangeExcludingEvent(
+                any(), any(), any(), any(), anyLong());
     }
 
     @Test
     void fallsBackToLegacyEventBookingsWhenNoBookingRowExists() {
         LocalDate date = LocalDate.of(2027, 1, 10);
         when(venueRepository.findById(7L)).thenReturn(Optional.of(venue()));
-        when(venueBookingRepository.findBookedVenueIdsOn(date)).thenReturn(List.of());
-        when(eventRepository.isVenueBookedOn(any(), any(), any())).thenReturn(true);
+        when(eventRepository.countVenueEventsInRangeExcludingEvent(
+                any(), any(), any(), any(), anyLong())).thenReturn(1L);
 
         assertThat(venueService.isVenueAvailable(7L, date)).isFalse();
     }
@@ -58,7 +62,7 @@ class VenueServiceTest {
     @Test
     void refusesToCreateASecondConfirmedBooking() {
         LocalDate date = LocalDate.of(2027, 1, 10);
-        when(venueRepository.findById(7L)).thenReturn(Optional.of(venue()));
+        when(venueRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(venue()));
         when(eventRepository.findById(11L)).thenReturn(Optional.of(Event.builder().id(11L).build()));
         when(venueBookingRepository.countConfirmedBookingsInRange(7L, date, date)).thenReturn(1L);
 

@@ -5,6 +5,7 @@ import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
+import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class ConflictResolutionService {
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorBookedDateRepository bookedDateRepository;
     private final VendorRankingService rankingService;
+    private final EventRepository eventRepository;
 
     // ============ CONFLICT DETECTION ============
 
@@ -119,7 +121,8 @@ public class ConflictResolutionService {
         String category = assignment.getServiceCategory();
         Long declinedVendorId = assignment.getVendor().getId();
 
-        return suggestAlternatives(category, eventDate, declinedVendorId);
+        return suggestAlternativesForEvent(category, eventDate, assignment.getEvent().getId(),
+                assignment.getEvent().getInquiry().getEventType(), declinedVendorId);
     }
 
     /**
@@ -148,7 +151,12 @@ public class ConflictResolutionService {
             Long eventId) {
 
         List<Conflict> conflicts = getVendorConflicts(vendorId, date);
-        List<AlternativeVendor> alternatives = suggestAlternatives(category, date, vendorId);
+        String eventType = eventRepository.findById(eventId)
+                .map(event -> event.getInquiry().getEventType())
+                .orElse(null);
+        List<AlternativeVendor> alternatives = eventId == null
+                ? suggestAlternatives(category, date, vendorId)
+                : suggestAlternativesForEvent(category, date, eventId, eventType, vendorId);
 
         // Determine next steps
         String suggestedAction;
@@ -170,6 +178,21 @@ public class ConflictResolutionService {
             suggestedAction,
             !alternatives.isEmpty()
         );
+    }
+
+    private List<AlternativeVendor> suggestAlternativesForEvent(
+            String category, LocalDate date, Long eventId, String eventType, Long excludedVendorId) {
+        return rankingService.rankForEvent(eventId, eventType, category, date).stream()
+                .filter(result -> !result.vendor().getId().equals(excludedVendorId))
+                .map(result -> toAlternative(result))
+                .toList();
+    }
+
+    private AlternativeVendor toAlternative(VendorRankingService.Ranked result) {
+        Vendor vendor = result.vendor();
+        long activeCount = assignmentRepository.countActiveAndPendingByVendor(vendor.getId());
+        return new AlternativeVendor(vendor.getId(), vendor.getCompanyName(), vendor.getServiceCategory(),
+                result.rating(), activeCount, result.score() * 100.0, vendor.getPhone(), vendor.getEmail());
     }
 
     // ============ INNER CLASSES ============

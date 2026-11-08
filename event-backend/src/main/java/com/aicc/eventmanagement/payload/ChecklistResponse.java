@@ -1,12 +1,14 @@
 package com.aicc.eventmanagement.payload;
 
 import com.aicc.eventmanagement.entities.Checklist;
+import com.aicc.eventmanagement.enums.Role;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -19,6 +21,9 @@ public class ChecklistResponse {
     private String itemName;
     private Boolean isComplete;
     private String dueDate;
+    private String ownerRole;
+    private List<Long> dependencyIds;
+    private boolean generated;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     
@@ -29,6 +34,11 @@ public class ChecklistResponse {
                 .itemName(checklist.getItemName())
                 .isComplete(checklist.isComplete())
                 .dueDate(checklist.getDueDate() != null ? checklist.getDueDate().toString() : null)
+                .ownerRole((checklist.getOwnerRole() != null ? checklist.getOwnerRole() : Role.COORDINATOR).name())
+                .dependencyIds(checklist.getDependencies() != null
+                        ? checklist.getDependencies().stream().map(Checklist::getId).toList()
+                        : List.of())
+                .generated(checklist.getTemplateKey() != null)
                 .createdAt(checklist.getCreatedAt())
                 .updatedAt(checklist.getUpdatedAt())
                 .build();

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import ResponsiveTable from '../components/ResponsiveTable';
 import api from '../api/axios';
+import { normalizeVendor } from '../utils/vendors';
 
 export default function VendorManagement() {
     const [vendors, setVendors] = useState([]);
@@ -23,9 +24,10 @@ export default function VendorManagement() {
 
     const fetchVendors = async () => {
         setLoading(true);
+        setError('');
         try {
             const res = await api.get('/vendors');
-            setVendors(res.data);
+            setVendors(res.data.map(normalizeVendor));
         } catch (err) {
             setError('Failed to load vendors');
             console.error(err);

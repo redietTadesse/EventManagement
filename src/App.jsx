@@ -5,6 +5,7 @@ import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
 import PortalSelect from './components/PortalSelect';
+import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
 import VendorApplication from './components/VendorApplication';
 
@@ -24,6 +25,7 @@ import Venues from './coordinator/Venues';
 import VenueDetail from './coordinator/VenueDetail';
 import MasterCalendar from './components/MasterCalendar';
 import AvailabilityGrid from './coordinator/AvailabilityGrid';
+import CoordinatorVendors from './coordinator/CoordinatorVendors';
 
 import VendorDashboard from './vendor/VendorDashboard';
 import MyAssignments from './vendor/MyAssignments';
@@ -34,6 +36,7 @@ import AdminDashboard from './admin/Dashboard';
 import VendorManagement from './admin/VendorManagement';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
+import AdminVenues from './admin/Venues';
 
 function AppRoutes() {
   return (
@@ -62,10 +65,7 @@ function AppRoutes() {
         <Route path="/coordinator/venues/:id" element={<VenueDetail />} />
         <Route path="/coordinator/calendar" element={<MasterCalendar />} />
         <Route path="/coordinator/availability" element={<AvailabilityGrid />} />
-        {/* Uncomment only if the backend authorizes COORDINATOR on
-            PATCH /vendors/{id}/toggle-active:
-        <Route path="/coordinator/vendors" element={<VendorManagement />} />
-        */}
+        <Route path="/coordinator/vendors" element={<CoordinatorVendors />} />
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
@@ -81,6 +81,7 @@ function AppRoutes() {
         <Route path="/admin/vendors/new" element={<VendorForm />} />
         <Route path="/admin/vendors/:id/edit" element={<VendorForm />} />
         <Route path="/admin/vendors/:id" element={<VendorDetail />} />
+        <Route path="/admin/venues" element={<AdminVenues />} />
       </Route>
 
       <Route path="*" element={<RootRedirect />} />
@@ -93,7 +94,7 @@ function App() {
     <ToastProvider>
       <AppProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <PageErrorBoundary><AppRoutes /></PageErrorBoundary>
         </BrowserRouter>
       </AppProvider>
     </ToastProvider>

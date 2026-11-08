@@ -15,6 +15,7 @@ import com.aicc.eventmanagement.services.ConflictResolutionService.ResolutionSug
 import com.aicc.eventmanagement.services.VendorRatingService;
 import com.aicc.eventmanagement.services.VendorRatingService.RatingStats;
 import com.aicc.eventmanagement.services.VendorService;
+import com.aicc.eventmanagement.util.CategoryUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,15 @@ public class VendorController {
     private final VendorRatingService ratingService;
     private final ConflictResolutionService conflictService;
     private final UserRepository userRepository;
+
+    @GetMapping("/service-categories")
+    @Operation(summary = "Get canonical vendor service categories")
+    public ResponseEntity<List<String>> getServiceCategories(
+            @RequestParam(required = false) String eventType) {
+        return ResponseEntity.ok(eventType == null || eventType.isBlank()
+                ? CategoryUtils.allCategories()
+                : CategoryUtils.categoriesForEventType(eventType));
+    }
 
     @GetMapping("/availability-grid")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
