@@ -682,6 +682,39 @@ class EventLifecycleApiIntegrationTest {
         assertThat(nodes(call(GET, path + "/coordinator", coordinator, null, 200).path("history"))).hasSize(1);
     }
 
+    @Test
+    void clientCalendarShowsCapacityBlackoutsAndBookingBuffersWithoutBookingDetails() throws Exception {
+        venue.setCapacity(900);
+        venues.saveAndFlush(venue);
+        User admin = user("calendar-admin", Role.ADMIN);
+        call(POST, "/venues/" + venue.getId() + "/unavailable-dates", admin,
+                Map.of("date", date.minusDays(5).toString(), "reason", "Private maintenance note"), 201);
+        convert(acceptedInquiry(), 200);
+
+        String calendar = "/venues/availability/calendar?start=" + date.minusDays(4)
+                + "&end=" + date.minusDays(2);
+        List<JsonNode> days = nodes(call(GET, calendar + "&attendees=850", client, null, 200));
+        assertThat(days).hasSize(3);
+        assertThat(days.stream().map(day -> day.path("available").asBoolean()))
+                .containsExactly(false, true, false);
+        assertThat(days).allSatisfy(day -> {
+            assertThat(day.size()).isEqualTo(2);
+            assertThat(day.hasNonNull("date")).isTrue();
+        });
+        assertThat(nodes(call(GET, calendar + "&attendees=901", client, null, 200)))
+                .allSatisfy(day -> assertThat(day.path("available").asBoolean()).isFalse());
+        for (var expected : Map.of(date.minusDays(4), "administrator-blocked",
+                date.minusDays(2), "confirmed venue booking").entrySet()) {
+            JsonNode fit = nodes(call(GET, "/venues/availability/reasons?date=" + expected.getKey()
+                    + "&attendees=901", client, null, 200)).stream()
+                    .filter(row -> row.path("venueId").asLong() == venue.getId()).findFirst().orElseThrow();
+            assertThat(fit.path("available").asBoolean()).isFalse();
+            assertThat(fit.path("reasons").toString()).contains("Capacity 900 is below 901", expected.getValue())
+                    .doesNotContain("Private maintenance note");
+        }
+        call(GET, "/venues/availability/calendar?start=" + date + "&end=" + date.plusDays(31), client, null, 400);
+    }
+
     private long submittedInquiry() throws Exception {
         return call(POST, "/inquiries", client, Map.of("clientId", client.getId(), "clientName", client.getFullName(),
                 "eventType", "conference", "eventDate", date.toString(), "endDate", date.plusDays(1).toString(),

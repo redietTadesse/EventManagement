@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
+import InquiryDateCalendar from './InquiryDateCalendar';
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
@@ -124,33 +125,6 @@ export default function NewInquiry() {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event Start Date
-            </label>
-            <input
-              type="date"
-              name="eventDate"
-              value={form.eventDate}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-              required
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event End Date (Optional - for multi-day events)
-            </label>
-            <input
-              type="date"
-              name="endDate"
-              value={form.endDate || ''}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
               Expected Attendees
             </label>
             <input
@@ -163,6 +137,9 @@ export default function NewInquiry() {
               min="1"
             />
           </div>
+
+          <InquiryDateCalendar start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
+            onChange={(eventDate, endDate) => setForm((previous) => ({ ...previous, eventDate, endDate }))} />
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -181,7 +158,7 @@ export default function NewInquiry() {
               ))}
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Pre-selected based on the event type. Uncheck anything you do not need.
+              The event type sets the default services. Leave all boxes clear to use those defaults.
             </p>
           </div>
 

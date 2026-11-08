@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import VendorSuggestions from './VendorSuggestions';
 import api from '../api/axios';
 import { proposalDraft } from '../utils/proposals';
+import InquiryDateCalendar from '../client/InquiryDateCalendar';
 
 /**
  * Coordinator proposal composer.
@@ -227,13 +228,17 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                   </option>
                 ))}
               </select>
-              {!loading && venues.length === 0 && (
+              {!loading && !error && venues.length === 0 && (
                 <p className="text-sm text-amber-700 mt-1">
-                  No venues are available on {inquiry?.eventDate}. Every venue is either booked
-                  or none are registered.
+                  No suitable venue is available for the requested dates and attendance.
                 </p>
               )}
             </div>
+
+            {inquiry?.eventDate && (
+              <InquiryDateCalendar key={inquiry.id} readOnly start={inquiry.eventDate}
+                end={inquiry.endDate || ''} attendees={inquiry.expectedAttendees} />
+            )}
 
             {selectedVenue && (
               <div className="p-3 bg-ice/10 rounded-lg">

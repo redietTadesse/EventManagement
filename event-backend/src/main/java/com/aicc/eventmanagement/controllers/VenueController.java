@@ -84,6 +84,28 @@ public class VenueController {
         return ResponseEntity.ok(venues);
     }
 
+    @GetMapping("/availability/calendar")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
+    public List<VenueService.DayAvailability> availabilityCalendar(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
+            @RequestParam(required = false) Integer attendees) {
+        return venueService.getAvailabilityCalendar(start, end, attendees);
+    }
+
+    public record VenueAvailabilityReason(Long venueId, String name, boolean available, List<String> reasons) {}
+
+    @GetMapping("/availability/reasons")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
+    public List<VenueAvailabilityReason> availabilityReasons(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Integer attendees) {
+        return venueService.explainVenueFit(date, endDate, attendees, null).stream()
+                .map(venue -> new VenueAvailabilityReason(venue.venueId(), venue.name(), venue.eligible(), venue.blockers()))
+                .toList();
+    }
+
     @GetMapping("/availability/explanations")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Explain venue fit for an event date and attendance")

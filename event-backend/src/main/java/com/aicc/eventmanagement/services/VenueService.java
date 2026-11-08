@@ -209,6 +209,28 @@ public class VenueService {
                 .toList();
     }
 
+    public record DayAvailability(LocalDate date, boolean available) {}
+
+    @Transactional(readOnly = true)
+    public List<DayAvailability> getAvailabilityCalendar(LocalDate start, LocalDate end, Integer attendees) {
+        if (end.isBefore(start) || end.isAfter(start.plusDays(30))) {
+            throw new BusinessException("Choose a calendar range of up to 31 days", "INVALID_DATE_RANGE");
+        }
+        if (attendees != null && attendees < 1) {
+            throw new BusinessException("Attendee count must be at least one", "INVALID_ATTENDEE_COUNT");
+        }
+        List<Venue> candidates = venueRepository.findAll().stream()
+                .filter(Venue::isActive)
+                .filter(venue -> !exceedsCapacity(venue, attendees))
+                .toList();
+        LocalDate today = LocalDate.now();
+        return start.datesUntil(end.plusDays(1))
+                .filter(date -> date.isAfter(today))
+                .map(date -> new DayAvailability(date, candidates.stream()
+                        .anyMatch(venue -> isVenueAvailableForRange(venue, date, date, -1L, attendees))))
+                .toList();
+    }
+
     /**
      * Evaluates every configured venue and explains the capacity and calendar
      * checks used for this event. The current event is excluded from conflict
@@ -238,17 +260,18 @@ public class VenueService {
         LocalDate blockedFrom = startDate.minusDays(venue.getSetupBufferDays());
         LocalDate blockedThrough = endDate.plusDays(venue.getTeardownBufferDays());
         List<String> explanation = new ArrayList<>();
+        List<String> blockers = new ArrayList<>();
 
         if (venue.isActive()) {
             explanation.add("Venue is active.");
         } else {
-            explanation.add("Venue is inactive and cannot be booked.");
+            blockers.add("Venue is inactive and cannot be booked.");
         }
 
         if (expectedAttendees == null) {
             explanation.add("No attendee count was supplied, so capacity was not checked.");
         } else if (exceedsCapacity(venue, expectedAttendees)) {
-            explanation.add("Capacity " + venue.getCapacity() + " is below "
+            blockers.add("Capacity " + venue.getCapacity() + " is below "
                     + expectedAttendees + " expected attendees.");
         } else if (venue.getCapacity() == null) {
             explanation.add("No capacity limit is configured.");
@@ -259,7 +282,7 @@ public class VenueService {
         boolean blockedDate = unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(
                 venue.getId(), blockedFrom, blockedThrough);
         if (blockedDate) {
-            explanation.add("An administrator-blocked date overlaps the setup, event, or teardown window.");
+            blockers.add("An administrator-blocked date overlaps the setup, event, or teardown window.");
         } else {
             explanation.add("No administrator-blocked date overlaps " + blockedFrom + " through " + blockedThrough + ".");
         }
@@ -267,23 +290,19 @@ public class VenueService {
         long confirmedBookings = venueBookingRepository.countConfirmedBookingsInRangeExcludingEvent(
                 venue.getId(), blockedFrom, blockedThrough, excludedEventId);
         if (confirmedBookings > 0) {
-            explanation.add("Another confirmed venue booking overlaps the setup, event, or teardown window.");
+            blockers.add("Another confirmed venue booking overlaps the setup, event, or teardown window.");
         }
 
         long scheduledEvents = eventRepository.countVenueEventsInRangeExcludingEvent(
                 venue.getId(), blockedFrom, blockedThrough, DEAD_STATUSES, excludedEventId);
         if (scheduledEvents > 0) {
-            explanation.add("Another active event uses this venue during the setup, event, or teardown window.");
+            blockers.add("Another active event uses this venue during the setup, event, or teardown window.");
         }
 
-        boolean eligible = venue.isActive()
-                && !exceedsCapacity(venue, expectedAttendees)
-                && confirmedBookings == 0
-                && scheduledEvents == 0
-                && !blockedDate;
+        explanation.addAll(blockers);
         return new VenueFitResponse(venue.getId(), venue.getName(), venue.getLocation(),
-                venue.getCapacity(), venue.isActive(), eligible, blockedFrom, blockedThrough,
-                List.copyOf(explanation));
+                venue.getCapacity(), venue.isActive(), blockers.isEmpty(), blockedFrom, blockedThrough,
+                List.copyOf(explanation), List.copyOf(blockers));
     }
 
     /**
