@@ -2,6 +2,36 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import api from '../api/axios';
+import useApiResource from '../hooks/useApiResource';
+
+function EmailDiagnostics() {
+  const status = useApiResource('/admin/emails/status');
+  const log = useApiResource('/admin/emails/log');
+
+  return (
+    <section className="rounded-xl border bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-slate-900">Proposal email diagnostics</h2>
+        <button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { status.reload(); log.reload(); }}>
+          Refresh email diagnostics
+        </button>
+      </div>
+      {status.error && <p role="alert" className="text-rose-700">{status.error}</p>}
+      {status.loading && <p>Loading email status…</p>}
+      {typeof status.data.enabled === 'boolean' && (
+        <p className="mt-2 text-sm text-slate-600">Email delivery is {status.data.enabled ? 'enabled' : 'disabled'}.</p>
+      )}
+      {log.error && <p role="alert" className="text-rose-700">{log.error}</p>}
+      {log.loading && <p>Loading email log…</p>}
+      {!log.loading && !log.error && log.data.length === 0 && <p className="mt-2 text-sm text-slate-600">No email log entries.</p>}
+      {log.data.length > 0 && (
+        <ul className="mt-3 max-h-64 divide-y overflow-auto text-sm text-slate-700">
+          {log.data.map((entry, index) => <li key={index} className="whitespace-pre-wrap break-words py-2">{entry}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -24,5 +54,6 @@ export default function AdminDashboard() {
     </div>
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[['Total users', 'totalUsers'], ['Active users', 'activeUsers'], ['Active vendors', 'activeVendors'], ['Events', 'totalEvents']].map(([label, key]) => <section key={key} className="rounded-xl border bg-white p-5"><h2 className="text-sm text-slate-500">{label}</h2><p className="mt-2 text-3xl font-bold">{stats?.[key] ?? '—'}</p></section>)}</div>
     <div className="grid gap-4 sm:grid-cols-2"><Link to="/admin/vendors" className="rounded-xl border bg-white p-6 hover:border-indigo-400"><h2 className="font-semibold text-indigo-700">Vendor management →</h2><p className="mt-2 text-sm text-slate-500">Review applications, edit profiles, and activate vendor accounts.</p></Link><Link to="/admin/venues" className="rounded-xl border bg-white p-6 hover:border-indigo-400"><h2 className="font-semibold text-indigo-700">Venue management →</h2><p className="mt-2 text-sm text-slate-500">Maintain venue capacity, resources, buffers, and blocked dates.</p></Link></div>
+    <EmailDiagnostics />
   </div></Layout>;
 }
