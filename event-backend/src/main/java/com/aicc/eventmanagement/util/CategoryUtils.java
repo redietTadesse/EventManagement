@@ -60,9 +60,7 @@ public final class CategoryUtils {
     }
 
     public static List<String> externalVendorCategories(String eventType, Collection<String> selected) {
-        Collection<String> source = selected == null || selected.isEmpty()
-                ? categoriesForEventType(eventType)
-                : selected;
+        Collection<String> source = selected == null ? List.of() : selected;
         return source.stream()
                 .map(CategoryUtils::canonicalize)
                 .filter(category -> category != null && !category.isBlank())
@@ -96,7 +94,7 @@ public final class CategoryUtils {
     }
 
     public static String join(List<String> categories) {
-        if (categories == null || categories.isEmpty()) return null;
+        if (categories == null || categories.isEmpty()) return "[]";
         return categories.stream()
                 .filter(s -> s != null && !s.isBlank())
                 .map(CategoryUtils::canonicalize)

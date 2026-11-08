@@ -94,10 +94,9 @@ public class InquiryService {
             throw new RuntimeException("Event date cannot be in the past");
         }
 
-        List<String> submittedCategories = request.getRequestedCategories() != null && !request.getRequestedCategories().isEmpty()
-                ? request.getRequestedCategories()
-                : CategoryUtils.categoriesForEventType(request.getEventType());
-        List<String> requestedCategories = canonicalCategories(submittedCategories);
+        List<String> submitted = request.getRequestedCategories();
+        List<String> requestedCategories = canonicalCategories(submitted == null || submitted.isEmpty()
+                ? CategoryUtils.categoriesForEventType(request.getEventType()) : submitted);
         if (requestedCategories.isEmpty()) {
             throw new BusinessException("Select at least one supported event service", "NO_CATEGORIES");
         }
@@ -239,11 +238,7 @@ public class InquiryService {
 
         List<String> selectedCategories = request.getCategories() != null && !request.getCategories().isEmpty()
                 ? request.getCategories()
-                : inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
-                ? CategoryUtils.split(inquiry.getCategories())
-                : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
-                ? CategoryUtils.split(inquiry.getRequestedCategories())
-                : CategoryUtils.categoriesForEventType(inquiry.getEventType());
+                : resolveConversionCategories(inquiry);
         selectedCategories = canonicalCategories(selectedCategories);
         String resolvedCategories = CategoryUtils.join(
                 CategoryUtils.externalVendorCategories(inquiry.getEventType(), selectedCategories));
@@ -365,12 +360,20 @@ public class InquiryService {
     }
 
     private List<String> resolvePreviewCategories(Inquiry inquiry) {
-        List<String> selected = inquiry.getCategories() != null && !inquiry.getCategories().isBlank()
-                ? CategoryUtils.split(inquiry.getCategories())
-                : inquiry.getRequestedCategories() != null && !inquiry.getRequestedCategories().isBlank()
-                ? CategoryUtils.split(inquiry.getRequestedCategories())
-                : CategoryUtils.categoriesForEventType(inquiry.getEventType());
-        return CategoryUtils.externalVendorCategories(inquiry.getEventType(), selected);
+        return CategoryUtils.externalVendorCategories(inquiry.getEventType(), resolveConversionCategories(inquiry));
+    }
+
+    private List<String> resolveProposalCategories(Inquiry inquiry, List<String> selection) {
+        if (selection != null && !selection.isEmpty()) {
+            return canonicalCategories(selection);
+        }
+        List<String> stored = CategoryUtils.split(inquiry.getCategories());
+        return stored.isEmpty() ? CategoryUtils.split(inquiry.getRequestedCategories()) : stored;
+    }
+
+    private List<String> resolveConversionCategories(Inquiry inquiry) {
+        List<String> selected = resolveProposalCategories(inquiry, null);
+        return selected.isEmpty() ? CategoryUtils.categoriesForEventType(inquiry.getEventType()) : selected;
     }
 
     private ConversionPreviewResponse.VenuePreview buildVenuePreview(Inquiry inquiry, LocalDate eventDate) {
@@ -427,11 +430,11 @@ public class InquiryService {
         }
 
         workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_SENT, userRole);
-        String proposalJson = buildProposalJson(request, inquiry);
-
-        inquiry.setCategories(request.getCategories() != null && !request.getCategories().isEmpty()
-                ? CategoryUtils.join(canonicalCategories(request.getCategories()))
-                : inquiry.getCategories() != null && !inquiry.getCategories().isBlank() ? inquiry.getCategories() : inquiry.getRequestedCategories());
+        List<String> categories = resolveProposalCategories(inquiry, request.getCategories());
+        String proposalJson = buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
+                request.getPrice(), request.getTerms(), categories, request.getPricingTier(),
+                request.getVendorShortlist(), inquiry);
+        inquiry.setCategories(CategoryUtils.join(categories));
         inquiry.setProposal(proposalJson);
         inquiry.setStatus(EventStatus.PROPOSAL_SENT);
 
@@ -519,13 +522,12 @@ public class InquiryService {
             throw new BusinessException(String.format("Cannot update proposal. Inquiry status is: %s (expected: PROPOSAL_SENT)", inquiry.getStatus()), "INVALID_STATE");
         }
 
+        List<String> categories = resolveProposalCategories(inquiry, request.getCategories());
         String proposalJson = buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
-                request.getPrice(), request.getTerms(), request.getCategories(), request.getPricingTier(),
+                request.getPrice(), request.getTerms(), categories, request.getPricingTier(),
                 request.getVendorShortlist(), inquiry);
 
-        inquiry.setCategories(request.getCategories() != null && !request.getCategories().isEmpty()
-                ? CategoryUtils.join(canonicalCategories(request.getCategories()))
-                : inquiry.getCategories() != null && !inquiry.getCategories().isBlank() ? inquiry.getCategories() : inquiry.getRequestedCategories());
+        inquiry.setCategories(CategoryUtils.join(categories));
         inquiry.setProposal(proposalJson);
 
         Inquiry saved = inquiryRepository.save(inquiry);
@@ -538,10 +540,7 @@ public class InquiryService {
 
     public VendorRecommendationResponse getRecommendedVendors(Long inquiryId) {
         Inquiry inquiry = getInquiryById(inquiryId);
-        List<String> categories = CategoryUtils.split(inquiry.getCategories());
-        if (categories.isEmpty()) categories = CategoryUtils.split(inquiry.getRequestedCategories());
-        if (categories.isEmpty()) categories = CategoryUtils.categoriesForEventType(inquiry.getEventType());
-        categories = CategoryUtils.externalVendorCategories(inquiry.getEventType(), categories);
+        List<String> categories = resolvePreviewCategories(inquiry);
         if (categories.isEmpty()) throw new BusinessException("No categories defined for this inquiry", "NO_CATEGORIES");
 
         List<VendorRecommendationResponse.CategoryRecommendation> categoryResults = new ArrayList<>();
@@ -593,12 +592,6 @@ public class InquiryService {
         Inquiry saved = inquiryRepository.save(inquiry);
         log.info("Client recorded preference for inquiry {}: vendors={}", inquiryId, request.getVendorIds());
         return saved;
-    }
-
-    private String buildProposalJson(SendProposalRequest request, Inquiry inquiry) {
-        return buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
-                request.getPrice(), request.getTerms(), request.getCategories(), request.getPricingTier(),
-                request.getVendorShortlist(), inquiry);
     }
 
     private String buildProposalJsonInternal(String venue, Long venueId, String venueDetails, Integer price,

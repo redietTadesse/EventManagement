@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import EventTimeline from '../components/EventTimeline';
+import useApiResource from '../hooks/useApiResource';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 
@@ -19,6 +20,66 @@ const requestProgress = {
   COMPLETED: ['Event completed', 'Your event details are available in My Events.'],
   CANCELLED: ['Event cancelled', 'This event has been cancelled.'],
 };
+
+function VendorPreferences({ inquiry, onSaved }) {
+  const path = `/inquiries/${inquiry.id}`;
+  const { data, loading, error, reload } = useApiResource(`${path}/recommended-vendors`);
+  const [selected, setSelected] = useState(inquiry.preferredVendorIds ?? []);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const categories = (data.categories ?? []).filter(({ options }) => options.length);
+
+  const save = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setNotice('');
+    setSaveError('');
+    try {
+      const response = await api.post(`${path}/vendor-preference`, { vendorIds: selected });
+      onSaved(response.data);
+      setNotice('Vendor preferences saved.');
+    } catch (err) {
+      setSaveError(err.response?.data?.message || 'Could not save vendor preferences.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white p-4">
+      <summary className="cursor-pointer font-semibold">Vendor preferences</summary>
+      <p className="my-2 text-sm text-slate-600">Select vendors you would prefer for your event.</p>
+      {loading && <p>Loading vendor options…</p>}
+      {error && <p role="alert">{error} <button onClick={reload} className="underline">Retry</button></p>}
+      {!loading && !error && categories.length === 0 && <p>No vendor options are currently available.</p>}
+      {categories.length > 0 && (
+        <form onSubmit={save} className="space-y-3">
+          {categories.map(({ category, options }) => (
+            <fieldset key={category} disabled={saving}>
+              <legend className="font-medium capitalize">{category.replace(/_/g, ' ')}</legend>
+              {options.map(({ vendorId, companyName }) => (
+                <label key={vendorId} className="flex items-center gap-2 py-1 text-sm">
+                  <input type="checkbox" checked={selected.includes(vendorId)} onChange={(event) => {
+                    const checked = event.target.checked;
+                    setNotice('');
+                    setSelected((ids) => checked ? [...ids, vendorId] : ids.filter((id) => id !== vendorId));
+                  }} />
+                  {companyName}
+                </label>
+              ))}
+            </fieldset>
+          ))}
+          <button type="submit" disabled={saving || selected.length === 0} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save preferences'}
+          </button>
+          {notice && <p role="status">{notice}</p>}
+          {saveError && <p role="alert" className="text-rose-700">{saveError}</p>}
+        </form>
+      )}
+    </details>
+  );
+}
 
 export default function ClientInquiryDetail() {
   const { id } = useParams();
@@ -150,6 +211,9 @@ export default function ClientInquiryDetail() {
         {responseNotice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{responseNotice}</p>}
         {error && <div role="alert" className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
         {timeline && <EventTimeline timeline={{ ...timeline, proposalSent: Boolean(parsedProposal) }} />}
+        {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
+          <VendorPreferences key={inquiry.id} inquiry={inquiry} onSaved={setInquiry} />
+        )}
 
         <section className="space-y-4 rounded-xl bg-white p-6 shadow">
           <h2 className="font-semibold text-gray-800">Inquiry details</h2>

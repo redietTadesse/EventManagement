@@ -416,6 +416,28 @@ class EventLifecycleApiIntegrationTest {
         assertThat(call(GET, "/inquiries/" + inquiry, client, null, 200).path("status").asText()).isEqualTo("PROPOSAL_REJECTED");
     }
 
+    @Test
+    void emptySelectionsUseInquiryDefaultsAndPreserveProposalAndConversionCategories() throws Exception {
+        vendor("Fallback AV", "av", 4.0, date.plusYears(1));
+        JsonNode inquiry = call(POST, "/inquiries", client, Map.of(
+                "clientId", client.getId(), "clientName", client.getFullName(), "eventType", "conference",
+                "eventDate", date.toString(), "expectedAttendees", 150, "requestedCategories", List.of()), 201);
+        assertThat(nodes(inquiry.path("requestedCategories")).stream().map(JsonNode::asText))
+                .containsExactly("venue", "av", "catering", "security", "registration");
+
+        String path = "/inquiries/" + inquiry.path("id").asLong();
+        var proposalWithEmptySelection = new java.util.HashMap<>(proposal());
+        proposalWithEmptySelection.put("categories", List.of());
+        JsonNode sent = call(POST, path + "/proposal", coordinator, proposalWithEmptySelection, 200);
+        assertThat(sent.path("proposal").path("categories")).isEqualTo(inquiry.path("requestedCategories"));
+
+        call(PATCH, path + "/accept", client, Map.of("categories", List.of("av")), 200);
+        JsonNode converted = call(POST, path + "/convert", coordinator,
+                Map.of("name", "Category fallback event", "categories", List.of()), 200);
+        assertThat(nodes(offers(converted.path("id").asLong())).stream()
+                .map(offer -> offer.path("serviceCategory").asText())).containsExactly("av");
+    }
+
     private long proposedInquiry() throws Exception {
         long inquiry = call(POST, "/inquiries", client, Map.of("clientId", client.getId(), "clientName", client.getFullName(),
                 "eventType", "conference", "eventDate", date.toString(), "endDate", date.plusDays(1).toString(),

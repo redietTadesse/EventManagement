@@ -348,7 +348,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           <div className="space-y-4">
             {categories.length === 0 && (
               <p className="text-sm text-amber-700">
-                No service categories are mapped for event type “{inquiry?.eventType}”.
+                An empty selection keeps the inquiry’s existing service categories.
               </p>
             )}
             {categories.map(cat => {
