@@ -23,6 +23,8 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const container = useRef(null);
   const { current } = row;
+  const previous = row.attempts.slice(0, -1).reverse()
+    .find(attempt => ['DECLINED', 'EXPIRED'].includes(attempt.status));
   const { snapshot, selected } = parseSelection(current);
   const assignable = canAssign && row.state === 'exhausted';
 
@@ -60,7 +62,12 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
             </div>}
           </div>}
         </div>
-        <div><p className="text-xs text-slate-500 md:hidden">Offer status</p>{current ? <StatusBadge status={current.status} /> : <span className="text-sm text-rose-700">No offer</span>}</div>
+        <div className="space-y-1">
+          <p className="text-xs text-slate-500 md:hidden">Offer status</p>
+          {current ? <StatusBadge status={current.status} /> : <span className="text-sm text-rose-700">No offer</span>}
+          {current?.status === 'OPEN' && <p className="text-xs font-medium text-rose-800">No eligible replacement was found. The offer is open to the vendor pool.</p>}
+          {previous && <p className="text-xs text-slate-600">Previous offer: {previous.vendorName || 'Vendor'} · {previous.status.toLowerCase()}</p>}
+        </div>
         <div className="text-sm text-slate-600"><p className="text-xs text-slate-500 md:hidden">Response deadline</p>
           {current?.status === 'PENDING' ? current.expiresAt ? <><time dateTime={current.expiresAt}>{new Date(current.expiresAt).toLocaleString()}</time>{new Date(current.expiresAt) < new Date() && <p className="mt-1 text-xs text-amber-700">Deadline passed; refresh for the latest outcome.</p>}</> : 'No deadline recorded' : '—'}
         </div>

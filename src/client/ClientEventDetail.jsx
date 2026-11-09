@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import VendorRatingForm from '../components/VendorRatingForm';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 
@@ -68,6 +69,7 @@ export default function ClientEventDetail() {
 
   const acceptedAssignments = assignments.filter(a => a.status === 'ACCEPTED');
   const completedAssignments = assignments.filter(a => a.status === 'COMPLETED');
+  const reviewableAssignments = completedAssignments.filter(assignment => assignment.vendorId);
   const pendingAssignments = assignments.filter(a => a.status === 'PENDING');
 
   return (
@@ -117,6 +119,17 @@ export default function ClientEventDetail() {
             </div>
           )}
         </div>
+
+        {reviewableAssignments.length > 0 && <section className="surface space-y-4 p-5 sm:p-6" aria-labelledby="vendor-reviews-title">
+          <div>
+            <h2 id="vendor-reviews-title" className="font-semibold text-slate-900">Review completed services</h2>
+            <p className="mt-1 text-sm text-slate-600">Rate the vendors who delivered services for this event.</p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {reviewableAssignments.map(assignment => <VendorRatingForm key={assignment.id} assignment={assignment}
+              onSaved={saved => setAssignments(items => items.map(item => item.id === saved.id ? saved : item))} />)}
+          </div>
+        </section>}
 
         {/* Assignment Summary */}
         <div className="grid grid-cols-3 gap-4">

@@ -676,7 +676,12 @@ useEffect(() => {
           </>}
 
           {activeTab === 'vendors' && <>
-            <div><h2 className="font-semibold text-slate-900">Required vendor services</h2><p className="mt-1 text-sm text-slate-500">Each row shows the latest offer for one required external service. Earlier attempts remain in History.</p></div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><h2 className="font-semibold text-slate-900">Required vendor services</h2><p className="mt-1 text-sm text-slate-500">See the latest offer, previous outcomes, and current alternatives for each service.</p></div>
+              <button type="button" className="btn-outline" disabled={refreshingOperations} onClick={handleRefreshOperations}>
+                {refreshingOperations ? 'Refreshing…' : 'Refresh offers and eligibility'}
+              </button>
+            </div>
             {(assignmentsError || categoriesError) && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{assignmentsError || categoriesError} <button type="button" onClick={handleRefreshOperations} className="underline">Retry</button></p>}
             {assignmentsLoaded && categoriesLoaded && <EventVendorTable rows={services} alternatives={alternativesByCategory} excluded={excludedVendorsByCategory} loading={decisionLoadingByCategory} errors={decisionErrorByCategory} highlightedCategory={highlightedCategory} reviewVersion={vendorReviewVersion} canAssign={actions.assign && vendorsKnown && !assignmentSaving && !lifecycleSaving} feedbackByCategory={vendorFeedback} onAssign={row => {
               setSelectedAssignment(row.current || { serviceCategory: row.category });

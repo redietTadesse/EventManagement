@@ -269,6 +269,16 @@ class EventLifecycleApiIntegrationTest {
         call(PATCH, "/events/" + event + "/status?status=COMPLETED", coordinator, null, 200);
         assertThat(currentOffer(event, "av").path("status").asText()).isEqualTo("COMPLETED");
         assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("COMPLETED");
+        long reviewedAssignment = currentOffer(event, "av").path("id").asLong();
+        String ratePath = "/assignments/" + reviewedAssignment + "/rate";
+        call(POST, ratePath, user("unrelated-reviewer", Role.CLIENT), Map.of("rating", 5), 403);
+        JsonNode review = call(POST, ratePath, client, Map.of("rating", 4, "comment", "Clear audio throughout"), 200);
+        assertThat(review.path("vendorRating").asInt()).isEqualTo(4);
+        assertThat(nodes(call(GET, "/assignments/event/" + event, client, null, 200))).anySatisfy(row -> {
+            assertThat(row.path("id").asLong()).isEqualTo(reviewedAssignment);
+            assertThat(row.path("vendorRating").asInt()).isEqualTo(4);
+            assertThat(row.path("vendorRatingComment").asText()).isEqualTo("Clear audio throughout");
+        });
         call(PATCH, "/events/" + event + "/status?status=CANCELLED", coordinator, null, 400);
         assertEventStatus(event, "COMPLETED");
         JsonNode history = call(GET, "/history/event/" + event, coordinator, null, 200);

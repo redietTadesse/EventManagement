@@ -42,6 +42,7 @@ public class VendorAssignmentResponse {
     private LocalDateTime respondedAt;
     private String declineReason;
     private Double vendorRating;
+    private String vendorRatingComment;
     private String serviceOrder;
     private String decisionSnapshot;
 
@@ -76,6 +77,7 @@ public class VendorAssignmentResponse {
             .respondedAt(assignment.getRespondedAt())
             .declineReason(assignment.getDeclineReason())
             .vendorRating(assignment.getVendorRating())
+            .vendorRatingComment(assignment.getVendorRatingComment())
             .serviceOrder(inquiry != null ? inquiry.getRequirements() : null)
             .decisionSnapshot(includeDecisionSnapshot ? assignment.getDecisionSnapshot() : null)
             .build();
