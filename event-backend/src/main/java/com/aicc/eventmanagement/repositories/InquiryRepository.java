@@ -20,6 +20,11 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
 
     List<Inquiry> findByStatus(EventStatus status);
 
+    @Query("select i.status, count(i) from Inquiry i left join i.event e where e.id is null group by i.status")
+    List<Object[]> countUnconvertedByStatus();
+
+    long countByStatusAndUpdatedAtBeforeAndEventIsNull(EventStatus status, LocalDateTime cutoff);
+
     List<Inquiry> findByClientId(Long clientId);
 
     List<Inquiry> findByClientIdAndStatus(Long clientId, EventStatus status);

@@ -787,6 +787,14 @@ class EventLifecycleApiIntegrationTest {
         String path = agreementPath(inquiry);
         User outsider = user("other-coordinator", Role.COORDINATOR);
         User admin = user("booking-admin", Role.ADMIN);
+        String report = "/admin/dashboard/revenue?months=3";
+        String lifecycle = "/admin/dashboard/lifecycle";
+        call(GET, lifecycle, coordinator, null, 403);
+        JsonNode stagesBefore = call(GET, lifecycle, admin, null, 200);
+        assertThat(stagesBefore.path("inquiries").path("PROPOSAL_ACCEPTED").asLong()).isPositive();
+        call(GET, report, coordinator, null, 403);
+        JsonNode before = call(GET, report, admin, null, 200);
+        assertThat(before.path("monthly").size()).isEqualTo(3);
         assertThat(call(POST, "/inquiries/" + inquiry + "/convert", coordinator, Map.of("name", "Bypass"), 400)
                 .path("code").asText()).isEqualTo("BOOKING_AGREEMENT_REQUIRED");
         call(PATCH, "/inquiries/" + inquiry + "/status?status=EVENT_CREATED", coordinator, null, 400);
@@ -801,7 +809,15 @@ class EventLifecycleApiIntegrationTest {
         uploadReceipt(inquiry, 400);
         call(POST, path + "/signature", outsider, Map.of("name", "Other", "revision", revision, "consent", true), 403);
         call(POST, path + "/signature", coordinator, Map.of("name", "Coordinator", "revision", revision, "consent", true), 200);
+        JsonNode signed = call(GET, report, admin, null, 200);
+        assertThat(signed.path("awaitingReceipt").path("totalEtb").asLong())
+                .isEqualTo(before.path("awaitingReceipt").path("totalEtb").asLong() + 120000);
         JsonNode uploaded = uploadReceipt(inquiry, 200);
+        JsonNode pending = call(GET, report, admin, null, 200);
+        assertThat(pending.path("verified")).isEqualTo(before.path("verified"));
+        assertThat(pending.path("awaitingReceipt")).isEqualTo(before.path("awaitingReceipt"));
+        assertThat(pending.path("awaitingReview").path("totalEtb").asLong())
+                .isEqualTo(before.path("awaitingReview").path("totalEtb").asLong() + 120000);
         var verification = Map.of("receiptUploadedAt", uploaded.path("receiptUploadedAt").asText());
         call(POST, path + "/receipt/verify", outsider, verification, 403);
         call(POST, path + "/receipt/verify", admin, verification, 403);
@@ -814,12 +830,29 @@ class EventLifecycleApiIntegrationTest {
                 Map.of("receiptUploadedAt", replacement.path("receiptUploadedAt").asText()), 200);
         assertThat(bookings.findByVenueId(venue.getId())).hasSize(4);
         assertThat(call(GET, path, client, null, 200).path("state").asText()).isEqualTo("BOOKED");
-
+        JsonNode stagesAfter = call(GET, lifecycle, admin, null, 200);
+        assertThat(stagesAfter.path("inquiries").path("PROPOSAL_ACCEPTED").asLong())
+                .isEqualTo(stagesBefore.path("inquiries").path("PROPOSAL_ACCEPTED").asLong() - 1);
+        assertThat(nodes(stagesAfter.path("events")).stream().mapToLong(JsonNode::asLong).sum())
+                .isEqualTo(nodes(stagesBefore.path("events")).stream().mapToLong(JsonNode::asLong).sum() + 1);
+        JsonNode after = call(GET, report, admin, null, 200);
+        assertThat(after.path("awaitingReview")).isEqualTo(before.path("awaitingReview"));
+        assertThat(after.path("verified").path("totalEtb").asLong())
+                .isEqualTo(before.path("verified").path("totalEtb").asLong() + 120000);
+        assertThat(after.path("monthly").get(2).path("totalEtb").asLong())
+                .isEqualTo(before.path("monthly").get(2).path("totalEtb").asLong() + 120000);
+        assertThat(nodes(after.path("byVenue"))).anySatisfy(row -> {
+            assertThat(row.path("label").asText()).isEqualTo(venue.getName());
+            assertThat(row.path("totalEtb").asLong()).isEqualTo(120000);
+        });
     }
 
     @Test
     void exhibitionAndMeetingWindowsAreUsedForTheContractAndEveryBookedDay() throws Exception {
         date = LocalDate.now().plusDays(14);
+        User admin = user("outlook-admin", Role.ADMIN);
+        String outlookPath = "/admin/dashboard/outlook";
+        call(GET, outlookPath, coordinator, null, 403);
         for (String type : List.of("exhibition", "meeting")) {
             int venueBuffer = type.equals("meeting") ? 2 : 0;
             Venue hall = venues.save(Venue.builder().name(type + " hall " + run).capacity(300)
@@ -838,6 +871,11 @@ class EventLifecycleApiIntegrationTest {
             convert(inquiry, 200);
             assertThat(bookings.findByVenueId(hall.getId())).extracting(VenueBooking::getBookingDate)
                     .containsExactlyInAnyOrderElementsOf(from.datesUntil(from.plusDays(days)).toList());
+            JsonNode outlook = call(GET, outlookPath, admin, null, 200);
+            assertThat(nodes(outlook.path("venues"))).anySatisfy(row -> {
+                assertThat(row.path("id").asLong()).isEqualTo(hall.getId());
+                assertThat(row.path("reservedDays").asLong()).isEqualTo(days);
+            });
         }
     }
 

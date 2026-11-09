@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import api from '../api/axios';
 import useApiResource from '../hooks/useApiResource';
+import LifecycleDashboard from './LifecycleDashboard';
+import ManagementOutlook from './ManagementOutlook';
+const RevenueDashboard = lazy(() => import('./RevenueDashboard'));
 
 function EmailDiagnostics() {
   const status = useApiResource('/admin/emails/status');
@@ -46,6 +49,11 @@ export default function AdminDashboard() {
   }, []);
   useEffect(() => { load(); }, [load]);
   return <Layout title="Administration"><div className="space-y-6">
+    <Suspense fallback={<p role="status" className="rounded-2xl border bg-white p-5 text-sm text-slate-600">Loading revenue dashboard…</p>}>
+      <RevenueDashboard />
+    </Suspense>
+    <LifecycleDashboard />
+    <ManagementOutlook />
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold text-slate-900">System Administration</h1><p className="mt-1 text-sm text-slate-500">Manage vendor accounts, venue details, and availability.</p></div><button onClick={load} disabled={loading} className="rounded-lg border bg-white px-4 py-2 disabled:opacity-50">{loading ? 'Loading…' : 'Refresh summary'}</button></div>
     {error && <p role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{error}</p>}
     <div className="flex flex-wrap gap-3">

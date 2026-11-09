@@ -13,6 +13,13 @@ import java.util.Optional;
 @Repository
 public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long> {
 
+    @Query("""
+           select vb.venue.id, count(vb) from VenueBooking vb
+           where vb.status = 'CONFIRMED' and vb.bookingDate between :start and :end
+           group by vb.venue.id
+           """)
+    List<Object[]> countReservedDaysByVenue(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
     @Query("SELECT vb FROM VenueBooking vb WHERE vb.venue.id = :venueId AND vb.bookingDate = :date")
     Optional<VenueBooking> findByVenueAndDate(@Param("venueId") Long venueId, @Param("date") LocalDate date);
 
