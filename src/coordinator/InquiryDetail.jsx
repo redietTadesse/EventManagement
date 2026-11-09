@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import AuditTimeline from '../components/AuditTimeline';
 import StatusBadge from '../components/StatusBadge';
 import RichProposalForm from '../components/RichProposalForm';
 import ConversionPreviewModal from '../components/ConversionPreviewModal';
@@ -316,6 +317,10 @@ export default function InquiryDetail() {
           submitting={submitting}
         />
       )}
+      <div className="mt-6">
+        <AuditTimeline key={inquiry.id} referenceType="INQUIRY" referenceId={inquiry.id}
+          refreshKey={inquiry.updatedAt || inquiry.status} title="Inquiry history" expandedByDefault={false} />
+      </div>
     </Layout>
   );
 }

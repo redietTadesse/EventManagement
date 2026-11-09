@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
+import AuditTimeline from '../components/AuditTimeline';
 import StatusBadge from '../components/StatusBadge';
 import EventTimeline from '../components/EventTimeline';
 import useApiResource from '../hooks/useApiResource';
@@ -342,6 +343,8 @@ export default function ClientInquiryDetail() {
             ) : null}
           </section>
         ) : null}
+        <AuditTimeline key={inquiry.id} referenceType="INQUIRY" referenceId={inquiry.id}
+          refreshKey={inquiry.updatedAt || inquiry.status} title="Inquiry history" expandedByDefault={false} />
       </div>
     </Layout>
   );
