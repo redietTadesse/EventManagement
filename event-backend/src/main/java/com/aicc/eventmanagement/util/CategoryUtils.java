@@ -66,6 +66,7 @@ public final class CategoryUtils {
                 .map(CategoryUtils::canonicalize)
                 .filter(category -> category != null && !category.isBlank())
                 .filter(ALL_CATEGORIES::contains)
+                .filter(category -> !"venue".equals(category))
                 .filter(category -> !"catering".equals(category) || "wedding".equals(normalizeEventType(eventType)))
                 .distinct()
                 .toList();

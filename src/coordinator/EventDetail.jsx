@@ -313,7 +313,9 @@ useEffect(() => {
   const blockedServices = services.filter(service => service.state === 'exhausted').length;
   const completedTasks = checklist.filter(task => task.isComplete).length;
   const reservation = venueReservation(venueBookings, event?.id, event?.date, event?.endDate);
-  const actions = eventActions(event?.status, state.currentUser?.role);
+  const readOnly = state.currentUser?.role === 'COORDINATOR' && event?.coordinator != null
+    && String(event.coordinator.id) !== String(state.currentUser.id);
+  const actions = eventActions(event?.status, readOnly ? null : state.currentUser?.role);
   const nextAction = nextEventAction({
     status: event?.status, rows: services, vendorsKnown,
     venueNeedsAttention: !event?.venueId || (venueBookingsLoaded && !venueBookingsError && !reservation.complete),
@@ -609,6 +611,9 @@ useEffect(() => {
           </div>
         </header>
 
+        {readOnly && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Read only. {event.coordinator.name} is the lead coordinator. An administrator can reassign this event.
+        </p>}
         <section aria-labelledby="next-action-title" className={`rounded-xl border p-4 md:p-5 ${['intervene', 'venue'].includes(nextAction.kind) ? 'border-amber-200 bg-amber-50' : 'border-indigo-100 bg-indigo-50'}`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-4xl">
@@ -697,7 +702,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={startChecklistCreate}
-                    disabled={!checklistLoaded}
+                    disabled={readOnly || !checklistLoaded}
                     className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg disabled:opacity-50"
                   >
                     Add task
@@ -705,7 +710,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={handleChecklistRegenerate}
-                    disabled={checklistGenerating}
+                    disabled={readOnly || checklistGenerating}
                     className="text-sm border border-gray-300 hover:bg-gray-50 disabled:opacity-50 px-3 py-2 rounded-lg"
                   >
                     {checklistGenerating ? 'Checking templates…' : 'Add missing template tasks'}
@@ -751,14 +756,14 @@ useEffect(() => {
                       const hasCompletedDependents = checklist.some(task =>
                         task.isComplete && (task.dependencyIds || []).includes(item.id)
                       );
-                      const isEditing = checklistEditor === item.id;
+                      const isEditing = !readOnly && checklistEditor === item.id;
                       return (
                         <li key={item.id} className="rounded-lg border border-gray-200 p-3">
                           <div className="flex items-start gap-3">
                             <input
                               type="checkbox"
                               checked={Boolean(item.isComplete)}
-                              disabled={taskSavingId != null || (!item.isComplete && incompletePrerequisites.length > 0) || (item.isComplete && hasCompletedDependents)}
+                              disabled={readOnly || taskSavingId != null || (!item.isComplete && incompletePrerequisites.length > 0) || (item.isComplete && hasCompletedDependents)}
                               onChange={() => handleChecklistToggle(item)}
                               aria-label={`${item.isComplete ? 'Mark incomplete' : 'Mark complete'}: ${item.itemName}`}
                               className="mt-1 w-4 h-4 text-emerald-600 rounded disabled:opacity-40"
@@ -774,6 +779,7 @@ useEffect(() => {
                                   </span>
                                   <button
                                     type="button"
+                                    disabled={readOnly}
                                     onClick={() => isEditing ? setChecklistEditor(null) : startChecklistEdit(item)}
                                     className="text-xs text-indigo-700 hover:underline"
                                   >
@@ -868,7 +874,7 @@ useEffect(() => {
                   </ul>
                 )}
 
-                {checklistEditor === 'new' && (
+                {!readOnly && checklistEditor === 'new' && (
                   <form onSubmit={handleChecklistSave} className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 md:grid-cols-2">
                     <h4 className="text-sm font-semibold text-gray-800 md:col-span-2">New checklist task</h4>
                     <label className="text-xs font-medium text-gray-600 md:col-span-2">
@@ -907,7 +913,7 @@ useEffect(() => {
               </div>
           </section>}
 
-          {activeTab === 'issues' && <EventIssues key={id} eventId={id} staff assignments={assignments} tasks={checklist} canReport={!['CANCELLED', 'CLOSED', 'COMPLETED'].includes(event.status)} />}
+          {activeTab === 'issues' && <EventIssues key={id} eventId={id} staff={!readOnly} readOnly={readOnly} assignments={assignments} tasks={checklist} canReport={!readOnly && !['CANCELLED', 'CLOSED', 'COMPLETED'].includes(event.status)} />}
           {activeTab === 'history' && <>
             <AuditTimeline referenceType="EVENT" referenceId={id} refreshKey={historyRefresh} title="Lifecycle history" />
             <VendorDecisionHistory eventId={id} refreshKey={historyRefresh} expandedCategory={historyCategory} />
@@ -916,7 +922,7 @@ useEffect(() => {
       </div>
 
       <ManualAssignModal
-        isOpen={forceAssignModal}
+        isOpen={!readOnly && forceAssignModal}
         onClose={() => { if (!assignmentSaving) { setForceAssignModal(false); setSelectedAssignment(null); } }}
         onAssign={(vendorId, reason) => handleForceAssign(selectedAssignment?.id, vendorId, selectedAssignment?.serviceCategory, reason)}
         availableVendors={selectedAssignment ? alternativesByCategory[selectedAssignment.serviceCategory] || [] : []}
@@ -926,7 +932,7 @@ useEffect(() => {
         loadError={selectedAssignment ? decisionErrorByCategory[selectedAssignment.serviceCategory] || '' : ''}
         serviceCategory={selectedAssignment?.serviceCategory}
       />
-      <ChangeDateModal isOpen={showDateModal} onClose={() => setShowDateModal(false)} eventId={id} currentDate={event.date} onDateChanged={async (newDate, record) => {
+      <ChangeDateModal isOpen={!readOnly && showDateModal} onClose={() => setShowDateModal(false)} eventId={id} currentDate={event.date} onDateChanged={async (newDate, record) => {
         setEvent(previous => ({ ...previous, status: record?.status || previous.status, date: record?.eventDate || newDate, endDate: record?.endDate || previous.endDate }));
         setDateFeedback(`Event rescheduled to ${formatEventDate(newDate)}. Template task deadlines were refreshed where applicable.`);
         await refreshAfterAction();

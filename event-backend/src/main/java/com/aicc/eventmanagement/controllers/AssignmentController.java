@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -64,16 +65,20 @@ public class AssignmentController {
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 
+    @Transactional
     @PostMapping("/event/{eventId}/auto")
     @PreAuthorize("hasRole('COORDINATOR')")
     @Operation(summary = "Auto-assign vendors for an event")
-    public ResponseEntity<List<VendorAssignmentResponse>> autoAssign(@PathVariable Long eventId) {
+    public ResponseEntity<List<VendorAssignmentResponse>> autoAssign(@PathVariable Long eventId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventWriteOwnership(eventId, principal.getUsername());
         List<VendorAssignment> assignments = vendorService.autoAssignForEvent(eventId);
         return ResponseEntity.ok(assignments.stream()
             .map(VendorAssignmentResponse::from)
             .collect(Collectors.toList()));
     }
 
+    @Transactional
     @PostMapping("/event/{eventId}/manual")
     @PreAuthorize("hasRole('COORDINATOR')")
     @Operation(summary = "Manually assign a vendor to an event")
@@ -83,6 +88,7 @@ public class AssignmentController {
             @AuthenticationPrincipal UserDetails principal) {
         var actor = userRepository.findByUsername(principal.getUsername())
             .orElseThrow(() -> new BusinessException("Coordinator account not found", "ACCESS_DENIED"));
+        recordAccessService.requireEventWriteOwnership(eventId, principal.getUsername());
         VendorAssignment assignment = vendorService.manualAssign(
             eventId,
             request.getCategory(),
@@ -176,6 +182,7 @@ public class AssignmentController {
 
     // ============ COORDINATOR FALLBACK ============
 
+    @Transactional
     @PostMapping("/{id}/force-assign")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Coordinator force-assigns a vendor to an open/unclaimed assignment")
@@ -185,6 +192,7 @@ public class AssignmentController {
             @AuthenticationPrincipal UserDetails principal) {
         var actor = userRepository.findByUsername(principal.getUsername())
             .orElseThrow(() -> new BusinessException("Coordinator account not found", "ACCESS_DENIED"));
+        recordAccessService.requireAssignmentWriteOwnership(id, principal.getUsername());
         VendorAssignment assignment = vendorService.forceAssignToOpenAssignment(
             id,
             request.getVendorId(),

@@ -25,6 +25,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -97,12 +98,15 @@ public class EventController {
         return ResponseEntity.ok(eventService.analyzeDateChangeImpact(id, newDate));
     }
 
+    @Transactional
     @PutMapping("/{id}/date")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Reschedule an event after validating date impact")
     public ResponseEntity<EventResponse> changeEventDate(
             @PathVariable Long id,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate newDate) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate newDate,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventWriteOwnership(id, principal.getUsername());
         return ResponseEntity.ok(eventService.changeEventDateResponse(id, newDate));
     }
 
@@ -125,17 +129,21 @@ public class EventController {
         return ResponseEntity.ok(eventService.getEventResponseByInquiryId(inquiryId));
     }
 
+    @Transactional
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update event", description = "Updates event details")
     public ResponseEntity<EventResponse> updateEvent(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateEventRequest request) {
+            @Valid @RequestBody UpdateEventRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventWriteOwnership(id, principal.getUsername());
         log.info("Updating event {}", id);
         Event updated = eventService.updateEvent(id, request);
         return ResponseEntity.ok(EventResponse.from(updated));
     }
 
+    @Transactional
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update event status")
@@ -146,6 +154,7 @@ public class EventController {
         log.info("Updating event {} status to {}", id, status);
         Role userRole = extractRoleFromPrincipal(principal);
         recordAccessService.requireEventAccess(id, principal.getUsername());
+        recordAccessService.requireEventWriteOwnership(id, principal.getUsername());
         return ResponseEntity.ok(eventService.updateEventStatusResponse(id, status, userRole));
     }
 

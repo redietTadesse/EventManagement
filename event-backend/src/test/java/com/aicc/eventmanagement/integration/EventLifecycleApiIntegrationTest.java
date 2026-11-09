@@ -7,6 +7,7 @@ import com.aicc.eventmanagement.entities.VenueBooking;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.repositories.ChecklistRepository;
+import com.aicc.eventmanagement.repositories.BookingAgreementRepository;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
@@ -100,6 +101,7 @@ class EventLifecycleApiIntegrationTest {
     @Autowired private VenueRepository venues;
     @Autowired private EventRepository events;
     @Autowired private InquiryRepository inquiries;
+    @Autowired private BookingAgreementRepository agreements;
     @Autowired private ChecklistRepository tasks;
     @Autowired private VendorAssignmentRepository assignments;
     @Autowired private VenueBookingRepository bookings;
@@ -754,6 +756,9 @@ class EventLifecycleApiIntegrationTest {
     private long acceptedInquiry() throws Exception {
         long inquiry = proposedInquiry();
         call(PATCH, "/inquiries/" + inquiry + "/accept", client, Map.of("categories", List.of("av", "security", "catering")), 200);
+        assertThat(agreements.findById(inquiry)).isPresent()
+                .get()
+                .satisfies(agreement -> assertThat(agreement.getTermsSnapshot()).contains("\"totalEtb\":120000"));
         return inquiry;
     }
 
@@ -800,8 +805,10 @@ class EventLifecycleApiIntegrationTest {
         long inquiry = acceptedInquiry();
         String inquiryLink = "/client/inquiries/" + inquiry;
         JsonNode clientInbox = call(GET, "/notifications", client, null, 200);
-        assertThat(clientInbox.path("unreadCount").asLong()).isEqualTo(1);
-        JsonNode proposal = clientInbox.path("items").get(0);
+        assertThat(clientInbox.path("unreadCount").asLong()).isEqualTo(3);
+        JsonNode proposal = nodes(clientInbox.path("items")).stream()
+                .filter(item -> item.path("title").asText().equals("Your event proposal is ready"))
+                .findFirst().orElseThrow();
         assertThat(proposal.path("path").asText()).isEqualTo(inquiryLink);
         assertThat(proposal.path("title").asText()).isEqualTo("Your event proposal is ready");
         org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000).times(1))

@@ -27,7 +27,7 @@ class CategoryUtilsTest {
     @Test
     void filtersInternalCateringAndUnknownCategoriesFromExternalAssignment() {
         assertThat(CategoryUtils.externalVendorCategories("conference",
-                List.of("AV", "catering", "not-a-service")))
+                List.of("venue", "AV", "catering", "not-a-service")))
                 .containsExactly("av");
         assertThat(CategoryUtils.externalVendorCategories("wedding", List.of("catering")))
                 .containsExactly("catering");

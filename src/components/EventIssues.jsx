@@ -7,7 +7,7 @@ const buttonClass = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 const label = (value) => value.replace(/_/g, ' ').toLowerCase();
 
-function IssueCard({ issue, staff, people, onChanged }) {
+function IssueCard({ issue, staff, people, readOnly, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [note, setNote] = useState('');
@@ -72,7 +72,7 @@ function IssueCard({ issue, staff, people, onChanged }) {
         </ol>
       </details>
       {staff && !resolved && <button type="button" className="text-sm font-medium text-indigo-700" onClick={() => setEditing(!editing)}>{editing ? 'Cancel changes' : 'Manage issue'}</button>}
-      {editing && <form onSubmit={(event) => save(event, 'edit')} className="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
+      {editing && staff && !readOnly && <form onSubmit={(event) => save(event, 'edit')} className="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm">Priority<select className={inputClass} value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>{priorities.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
         <label className="space-y-1 text-sm">Responsible person<select required className={inputClass} value={form.responsibleUserId} onChange={(event) => setForm({ ...form, responsibleUserId: event.target.value })}>
           {!people.some((person) => person.id === issue.responsible.id) && <option value={issue.responsible.id} disabled>{issue.responsible.name} (unavailable)</option>}
@@ -86,7 +86,7 @@ function IssueCard({ issue, staff, people, onChanged }) {
         {form.status === 'RESOLVED' && <label className="space-y-1 text-sm sm:col-span-2">Verified resolution<textarea required maxLength={4000} className={inputClass} value={form.resolutionNote} onChange={(event) => setForm({ ...form, resolutionNote: event.target.value })} /></label>}
         <button disabled={saving} className={buttonClass}>{saving ? 'Saving…' : 'Save issue'}</button>
       </form>}
-      {!resolved && <form onSubmit={(event) => save(event, 'note')} className="flex flex-col gap-2">
+      {!resolved && !readOnly && <form onSubmit={(event) => save(event, 'note')} className="flex flex-col gap-2">
         <label className="space-y-1 text-sm">Progress update<textarea required maxLength={4000} className={inputClass} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Describe progress or the action needed" /></label>
         <div><button disabled={saving || !note.trim()} className={buttonClass}>{saving ? 'Saving…' : 'Add update'}</button></div>
       </form>}
@@ -95,7 +95,7 @@ function IssueCard({ issue, staff, people, onChanged }) {
   );
 }
 
-export default function EventIssues({ eventId, assignmentId, assignments = [], tasks = [], staff = false, canReport = true }) {
+export default function EventIssues({ eventId, assignmentId, assignments = [], tasks = [], staff = false, canReport = true, readOnly = false }) {
   const resource = useApiResource(`/events/${eventId}/issues`);
   const people = useApiResource(staff ? `/events/${eventId}/issue-responsibles` : null);
   const [items, setItems] = useState([]);
@@ -134,7 +134,7 @@ export default function EventIssues({ eventId, assignmentId, assignments = [], t
       <div><h2 className="text-lg font-semibold">Event issues</h2><p className="text-sm text-slate-500">{outstanding.length} unresolved · {outstanding.filter((issue) => issue.overdue).length} overdue</p></div>
       <div className="flex gap-3"><button type="button" onClick={refresh} className="text-sm text-indigo-700">Refresh issues</button>{canReport && <button type="button" onClick={() => setShowForm(!showForm)} className={buttonClass}>{showForm ? 'Cancel report' : 'Report an issue'}</button>}</div>
     </header>
-    {showForm && <form onSubmit={create} className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2">
+    {showForm && canReport && !readOnly && <form onSubmit={create} className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2">
       <label className="space-y-1 text-sm sm:col-span-2">Issue title<input name="title" required maxLength={200} className={inputClass} value={form.title} onChange={change} /></label>
       <label className="space-y-1 text-sm sm:col-span-2">Description<textarea name="description" required maxLength={4000} className={inputClass} value={form.description} onChange={change} /></label>
       <label className="space-y-1 text-sm">Priority<select name="priority" className={inputClass} value={form.priority} onChange={change}>{priorities.map((priority) => <option key={priority} value={priority}>{label(priority)}</option>)}</select></label>
@@ -148,6 +148,6 @@ export default function EventIssues({ eventId, assignmentId, assignments = [], t
       <div className="sm:col-span-2"><button disabled={saving} className={buttonClass}>{saving ? 'Reporting…' : 'Submit issue'}</button></div>
     </form>}
     {(resource.error || people.error || error) && <p role="alert" className="text-sm text-rose-700">{resource.error || people.error || error}</p>}
-    {resource.loading ? <p>Loading issues…</p> : !resource.error && visible.length === 0 ? <p className="rounded-lg bg-white p-4 text-sm text-slate-500">No issues reported.</p> : visible.map((issue) => <IssueCard key={issue.id} issue={issue} staff={staff} people={people.data} onChanged={(updated) => setItems((previous) => previous.map((item) => item.id === updated.id ? updated : item))} />)}
+    {resource.loading ? <p>Loading issues…</p> : !resource.error && visible.length === 0 ? <p className="rounded-lg bg-white p-4 text-sm text-slate-500">No issues reported.</p> : visible.map((issue) => <IssueCard key={issue.id} issue={issue} staff={staff} readOnly={readOnly} people={people.data} onChanged={(updated) => setItems((previous) => previous.map((item) => item.id === updated.id ? updated : item))} />)}
   </section>;
 }

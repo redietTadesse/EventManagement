@@ -8,5 +8,6 @@ public record NotificationPage(
         int size,
         long totalElements,
         int totalPages,
-        boolean hasNext) {
+        boolean hasNext,
+        long unreadCount) {
 }

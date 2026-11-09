@@ -62,9 +62,10 @@ Open [the isolated app](http://localhost:5174). Its fixture usernames are `clien
 
 1. As the client, submit a future conference for fewer than 500 people with AV as the only requested service. Confirm the submitted request opens and remains available in My Inquiries after signing back in.
 2. As the coordinator, open the request and send a proposal for Audit Hall with Audit AV as the suggested vendor.
-3. As the client, accept the proposal. Check that the request says the coordinator still needs to reserve the venue and the timeline leaves Venue Booked unchecked.
-4. As the coordinator, review the conversion preview and create the event. Open the calendar and navigate to the event date. Check the venue, pending offer, tasks, and history in Event Detail.
-5. As the vendor, accept the AV offer. As the client, reopen the inquiry and follow View event details. Check the venue, dates, and confirmed status after refreshing.
+3. As the admin, open the management dashboard and check the amber **Proposal sent** stage. As the client, accept the proposal and verify that **Venue Booked** is still unchecked.
+4. Sign the agreement as both the client and the assigned coordinator. As the client, upload a sample payment receipt. On the admin dashboard, refresh revenue and lifecycle. The contract should appear under **Awaiting review** and its amount should still be outside gross verified payments.
+5. As the assigned coordinator, download the receipt and verify payment to book the venue. Check the calendar, pending vendor offer, tasks, and history. Refresh the admin dashboard to see the amount in gross verified payments and the record move into **Event preparation**.
+6. As the vendor, accept the AV offer. As the client, follow **View event details** and check the confirmed status. Refresh the admin lifecycle view to see the record in **Confirmed**.
 
 For a defense demo, introduce vendor assignment and event operations as proposed future capabilities. The single-vendor fixture is for a deterministic walkthrough. The authenticated integration suite exercises replacement vendors and competing venue requests.
 

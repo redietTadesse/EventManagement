@@ -10,6 +10,7 @@ import com.aicc.eventmanagement.events.*;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.EmailService;
+import com.aicc.eventmanagement.services.BookingAgreementService;
 import com.aicc.eventmanagement.services.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
@@ -23,6 +24,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class EmailNotificationListener {
     private final EmailService emailService;
     private final NotificationService notifications;
+    private final BookingAgreementService bookingAgreements;
     private final EventRepository events;
     private final UserRepository users;
 
@@ -42,8 +44,11 @@ public class EmailNotificationListener {
             case PROPOSAL_SENT -> notifications.notifyUser(inquiry.getClientId(), Destination.CLIENT_INQUIRY,
                     inquiry.getId(), event.getOldStatus() == EventStatus.PROPOSAL_SENT ? "Proposal updated" : "Your event proposal is ready",
                     "Open inquiry #" + inquiry.getId() + " to review the venue, quote, and terms.");
-            case PROPOSAL_ACCEPTED -> notifyCoordinator(inquiry, "Client accepted the proposal",
-                    "Open inquiry #" + inquiry.getId() + " to review the booking agreement.");
+            case PROPOSAL_ACCEPTED -> {
+                bookingAgreements.prepareForAcceptedProposal(inquiry);
+                notifyCoordinator(inquiry, "Client accepted the proposal",
+                        "Open inquiry #" + inquiry.getId() + " to review the booking agreement.");
+            }
             case PROPOSAL_REJECTED -> notifyCoordinator(inquiry, "Client declined the proposal",
                     "Open inquiry #" + inquiry.getId() + " to review the outcome.");
             default -> { }

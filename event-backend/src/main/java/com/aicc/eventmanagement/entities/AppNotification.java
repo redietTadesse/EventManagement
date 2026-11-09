@@ -26,7 +26,7 @@ public class AppNotification {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @Column(nullable = false)
@@ -41,6 +41,9 @@ public class AppNotification {
     @Column(name = "type", nullable = false, length = 50)
     private String destination;
 
+    @Column(name = "reference_id")
     private Long referenceId;
+    
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 }

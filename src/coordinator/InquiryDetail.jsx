@@ -7,12 +7,13 @@ import RichProposalForm from '../components/RichProposalForm';
 import BookingAgreement from '../components/BookingAgreement';
 import ConversionPreviewModal from '../components/ConversionPreviewModal';
 import CoordinatorOwnership from '../components/CoordinatorOwnership';
+import InquiryEditForm from './InquiryEditForm';
 import { useApp } from '../context/AppContext';
 
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { fetchInquiryById, downloadInquiryQuote, previewConversion, updateProposal } = useApp();
+  const { state, fetchInquiryById, downloadInquiryQuote, previewConversion, updateProposal } = useApp();
   const [loading, setLoading] = useState(true);
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
@@ -22,6 +23,7 @@ export default function InquiryDetail() {
   const [quoteError, setQuoteError] = useState('');
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
 
   const loadInquiry = useCallback(async () => {
     setLoading(true);
@@ -86,8 +88,9 @@ export default function InquiryDetail() {
   }
 
   const canConvert = inquiry?.status === 'PROPOSAL_ACCEPTED';
-  const canSendProposal = inquiry?.status === 'INQUIRY_SUBMITTED';
-  const canEditProposal = inquiry?.status === 'PROPOSAL_SENT';
+  const readOnly = inquiry.coordinator != null && String(inquiry.coordinator.id) !== String(state.currentUser?.id);
+  const canSendProposal = !readOnly && inquiry.status === 'INQUIRY_SUBMITTED';
+  const canEditProposal = !readOnly && inquiry.status === 'PROPOSAL_SENT';
 
   return (
     <Layout title="Inquiry Detail">
@@ -119,6 +122,9 @@ export default function InquiryDetail() {
             closed={['COMPLETED', 'CANCELLED', 'CLOSED', 'PROPOSAL_REJECTED'].includes(inquiry.event?.status || inquiry.status)}
             onChanged={(coordinator) => setInquiry((previous) => ({ ...previous, coordinator }))} />
         </div>
+        {readOnly && <p className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Read only. {inquiry.coordinator.name} is the lead coordinator. An administrator can reassign this inquiry.
+        </p>}
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex justify-between items-start">
             <h3 className="text-xl font-bold text-gray-800">Inquiry #{inquiry.id}</h3>
@@ -154,9 +160,13 @@ export default function InquiryDetail() {
               </div>
             )}
           </div>
+          {canSendProposal && (editingDetails ? <InquiryEditForm key={id} inquiry={inquiry}
+            onSaved={saved => { setInquiry(saved); setEditingDetails(false); }}
+            onCancel={() => setEditingDetails(false)} />
+            : <button type="button" className="btn-outline mt-4" onClick={() => setEditingDetails(true)}>Edit inquiry details</button>)}
         </div>
 
-        {canSendProposal && (
+        {canSendProposal && !editingDetails && (
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Compose Proposal</h3>
             <RichProposalForm
@@ -231,7 +241,7 @@ export default function InquiryDetail() {
           {previewLoading ? 'Checking options…' : 'Preview venue and vendor options'}
         </button>}
 
-        {(canConvert || inquiry.event || inquiry.status === 'EVENT_CREATED') &&
+        {!readOnly && (canConvert || inquiry.event || inquiry.status === 'EVENT_CREATED') &&
           <BookingAgreement key={inquiry.id} inquiryId={inquiry.id}
             onBooked={event => navigate(`/coordinator/events/${event.id}`)} />}
 

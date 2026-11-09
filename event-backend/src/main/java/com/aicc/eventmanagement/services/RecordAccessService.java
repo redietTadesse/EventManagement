@@ -8,8 +8,10 @@ import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
+import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.repositories.ChecklistRepository;
 import com.aicc.eventmanagement.repositories.EventRepository;
+import com.aicc.eventmanagement.repositories.EventIssueRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
@@ -18,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +33,63 @@ public class RecordAccessService {
     private final VendorRepository vendorRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final ChecklistRepository checklistRepository;
+    private final EventIssueRepository issueRepository;
+
+    // Keep the inquiry lock until the caller's write commits so a handover
+    // cannot change ownership between this check and the protected update.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireInquiryWriteOwnership(Long id, String username) {
+        User user = requireUser(username);
+        if (user.getRole() == Role.COORDINATOR) requireLead(id, user);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireEventWriteOwnership(Long id, String username) {
+        User user = requireUser(username);
+        if (user.getRole() == Role.COORDINATOR) requireEventLead(id, user);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireAssignmentWriteOwnership(Long id, String username) {
+        User user = requireUser(username);
+        if (user.getRole() != Role.COORDINATOR) return;
+        VendorAssignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Assignment", id));
+        requireEventLead(assignment.getEvent().getId(), user);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireChecklistWriteOwnership(Long id, String username) {
+        User user = requireUser(username);
+        if (user.getRole() != Role.COORDINATOR) return;
+        Checklist checklist = checklistRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Checklist item", id));
+        requireEventLead(checklist.getEvent().getId(), user);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireIssueWriteOwnership(Long id, String username) {
+        User user = requireUser(username);
+        if (user.getRole() != Role.COORDINATOR) return;
+        var issue = issueRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Issue", id));
+        requireEventLead(issue.getEvent().getId(), user);
+    }
+
+    private void requireEventLead(Long eventId, User user) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
+        if (event.getInquiry() != null) requireLead(event.getInquiry().getId(), user);
+    }
+
+    private void requireLead(Long inquiryId, User user) {
+        Inquiry inquiry = inquiryRepository.findForCoordinatorUpdate(inquiryId)
+                .orElseThrow(() -> new EntityNotFoundException("Inquiry", inquiryId));
+        if (inquiry.getCoordinator() != null && !inquiry.getCoordinator().getId().equals(user.getId())) {
+            throw new BusinessException("This work is assigned to another coordinator. Ask an administrator to reassign it.",
+                    "COORDINATOR_CONFLICT");
+        }
+    }
 
     public void requireInquiryAccess(Long inquiryId, String username) {
         User user = requireUser(username);
