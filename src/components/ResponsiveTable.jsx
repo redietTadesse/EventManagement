@@ -36,7 +36,8 @@ export default function ResponsiveTable({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-6 py-4 text-left ${col.className || ''}`}
+                  scope="col"
+                  className={`px-5 py-3.5 text-left ${col.className || ''}`}
                 >
                   {col.label}
                 </th>
@@ -52,7 +53,7 @@ export default function ResponsiveTable({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={`px-6 py-4 ${col.className || ''}`}
+                    className={`px-5 py-4 ${col.className || ''}`}
                   >
                     {col.render ? col.render(item, index) : item[col.key]}
                   </td>
@@ -64,7 +65,7 @@ export default function ResponsiveTable({
       </div>
 
       {/* Mobile Card View */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-3 p-3">
         {data.map((item, index) => (
           <div
             key={item.id || index}
@@ -77,7 +78,7 @@ export default function ResponsiveTable({
                     <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">
                       {col.label}
                     </span>
-                    <div className="text-right ml-4">
+                    <div className="min-w-0 break-words text-right ml-4">
                       {col.render ? col.render(item, index) : (
                         <span className="text-sm text-slate-700">{item[col.key]}</span>
                       )}

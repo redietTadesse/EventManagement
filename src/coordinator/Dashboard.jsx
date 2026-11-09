@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowPathIcon, CalendarDaysIcon, ExclamationTriangleIcon, UsersIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
+import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -76,21 +78,28 @@ export default function CoordinatorDashboard() {
     { title: 'Active vendors', value: data.stats?.activeVendors ?? '—', detail: 'All active registered vendors', icon: UsersIcon, iconClass: 'bg-sky-50 text-sky-700', href: '/coordinator/vendors' },
   ];
 
-  return <Layout title="Operations Overview"><main className="space-y-6">
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div>
-      <p className="text-sm font-medium text-indigo-600">Coordinator workspace</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Operations Overview</h1>
-      <p className="mt-1 text-sm text-slate-500">Monitor events, venue operations, and vendor coordination.</p>
-      <p className="mt-2 text-xs text-slate-400">{new Date().toLocaleDateString(undefined, { dateStyle: 'full' })} · Period metrics: next {period} days · Active vendors, pipeline, attention and activity: all current data{lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</p>
-    </div><div className="flex flex-wrap gap-2">
-      <label htmlFor="period" className="sr-only">Upcoming events period</label><select id="period" value={period} onChange={(event) => setPeriod(Number(event.target.value))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value={7}>Next 7 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option></select>
-      <button onClick={refresh} disabled={loading} aria-label="Refresh dashboard" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"><ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
-      <button type="button" onClick={() => setIsSimulationOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700">
-        <span className="relative flex h-2.5 w-2.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-200 opacity-75" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" /></span>
-        <span>▶ Run Live Simulation</span>
-      </button>
-    </div></header>
+  return <Layout title="Operations overview"><div className="space-y-6">
+    <PageHeader eyebrow="Coordinator workspace" title="Operations overview"
+      subtitle="Your events, upcoming decisions, and the work that needs attention."
+      action={<>
+        <label htmlFor="period" className="sr-only">Upcoming events period</label>
+        <select id="period" value={period} onChange={event => setPeriod(Number(event.target.value))}>
+          <option value={7}>Next 7 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>
+        </select>
+        <button type="button" onClick={refresh} disabled={loading} className="btn-outline"><ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+      </>} />
+    {lastUpdated && <p className="text-xs text-slate-500">Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · Upcoming events cover the next {period} days.</p>}
     {Object.keys(sectionErrors).length > 0 && <div role="alert" className="flex justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">Some dashboard sections could not be refreshed. Existing results are retained.<button onClick={refresh} className="font-semibold underline">Retry</button></div>}
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Operational summary">{summary.map((card) => { const metricLoaded = card.title === 'Upcoming events' || card.title === 'Confirmed events' ? loaded.events : card.title === 'Needs attention' ? loaded.exceptions && loaded.inquiries : loaded.stats; const metric = metricDisplay(card.value, metricLoaded); return <Link key={card.title} to={card.href} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"><div className="flex justify-between"><div><p className="text-sm text-slate-500">{card.title}</p><p className="mt-2 text-3xl font-bold tabular-nums text-slate-900" aria-busy={!metricLoaded}>{metric}</p></div><span className={`rounded-lg p-2 ${card.iconClass}`}><card.icon className="h-5 w-5" /></span></div><p className="mt-3 text-xs text-slate-500">{card.detail}</p></Link>; })}</section>
+    <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Operational summary">
+      {summary.map(card => {
+        const metricLoaded = card.title === 'Upcoming events' || card.title === 'Confirmed events' ? loaded.events
+          : card.title === 'Needs attention' ? loaded.exceptions && loaded.inquiries : loaded.stats;
+        return <Link key={card.title} to={card.href} className="rounded-2xl">
+          <StatCard label={card.title} value={metricDisplay(card.value, metricLoaded)} detail={card.detail}
+            icon={<card.icon />} color={card.title === 'Needs attention' ? 'amber' : card.title === 'Confirmed events' ? 'green' : 'navy'} />
+        </Link>;
+      })}
+    </section>
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex justify-between gap-3">
         <h2 className="font-semibold">My workload</h2>
@@ -102,10 +111,16 @@ export default function CoordinatorDashboard() {
       <Link to="/coordinator/events" className="mt-2 inline-block text-sm text-indigo-700">View events and filter by My events</Link>
     </section>
     <IssueAttention />
-    <VendorEcosystemChart data={demoVendorEcosystem} />
+
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex justify-between border-b border-slate-100 px-5 py-4"><div><h2 className="font-semibold text-slate-900">Attention required</h2><p className="mt-1 text-sm text-slate-500">Prioritized unresolved issues</p></div><Link to="/coordinator/inquiries" className="text-sm text-indigo-600">View all</Link></div>{attention.length ? <ul className="divide-y divide-slate-100">{attention.slice(0, 5).map((item) => <li key={item.id}><Link to={item.href} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50"><span className={`h-2.5 w-2.5 rounded-full ${item.priority === 0 ? 'bg-rose-500' : item.priority === 1 ? 'bg-amber-500' : 'bg-sky-500'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{item.title || 'Operational issue'}</span><span className="block truncate text-xs text-slate-500">{item.detail}</span></span><span className="text-xs text-slate-400">{item.time ? new Date(item.time).toLocaleDateString() : ''}</span></Link></li>)}</ul> : sectionErrors.exceptions || sectionErrors.inquiries ? <p className="px-5 py-8 text-center text-sm text-rose-700">Attention items are temporarily unavailable.</p> : !loaded.exceptions || !loaded.inquiries ? <p className="animate-pulse px-5 py-8 text-center text-sm text-slate-500">Loading attention items…</p> : <p className="px-5 py-8 text-center text-sm text-slate-500">No unresolved operational issues.</p>}</section>
     <div className="grid gap-6 xl:grid-cols-5"><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-3"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4"><div><h2 className="font-semibold text-slate-900">Upcoming events</h2><p className="mt-1 text-sm text-slate-500">From {dateRange.startDate} through {dateRange.endDate}</p></div><div className="flex gap-2"><label htmlFor="event-filter" className="sr-only">Filter upcoming events</label><select id="event-filter" value={eventFilter} onChange={(event) => setEventFilter(event.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs"><option value="ALL">All upcoming</option><option value="CONFIRMED">Confirmed</option><option value="AWAITING_VENDORS">Awaiting vendors</option><option value="NEEDS_COORDINATOR">Needs coordinator</option></select><Link to="/coordinator/events" className="px-2 py-1 text-sm text-indigo-600">View all</Link></div></div>{events.length ? <ul className="divide-y divide-slate-100">{events.slice(0, 7).map((event) => <li key={event.eventId}><Link to={`/coordinator/events/${event.eventId}`} className="flex flex-col gap-2 px-5 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-slate-800">{event.eventName}</p><p className="mt-1 text-xs text-slate-500">{event.clientName} · {event.venue || 'Venue pending'} · {event.expectedAttendees ?? '—'} guests</p></div><div className="flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{new Date(`${event.eventDate}T00:00:00`).toLocaleDateString()}</span><StatusBadge status={event.status} /></div></Link></li>)}</ul> : <p className="px-5 py-8 text-center text-sm text-slate-500">{sectionErrors.events ? 'Upcoming events are temporarily unavailable.' : !loaded.events ? 'Loading upcoming events…' : 'No upcoming events in this period.'}</p>}</section>
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2"><h2 className="font-semibold text-slate-900">Event lifecycle</h2><p className="mt-1 text-sm text-slate-500">All event records; proportions use the full event count, including cancelled and closed events.</p>{loaded.stats ? <div className="mt-5 space-y-4">{stageCounts.map((stage) => { const total = stageCounts.reduce((sum, item) => sum + item.count, 0); return <div key={stage.label}><div className="mb-1.5 flex justify-between text-sm"><span className="text-slate-600">{stage.label}</span><span className="font-semibold tabular-nums">{stage.count}</span></div><div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${total ? stage.count / total * 100 : 0}%` }} /></div></div>; })}</div> : <p className="mt-5 animate-pulse text-sm text-slate-500">{sectionErrors.stats ? 'Lifecycle data is temporarily unavailable.' : 'Loading lifecycle data…'}</p>}</section></div>
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-semibold text-slate-900">Recent activity</h2></div>{data.history.length ? <ul className="divide-y divide-slate-100">{data.history.slice(0, 5).map((item, index) => <li key={item.id || index} className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:justify-between"><span className="text-sm text-slate-700">{item.description || `${item.fromStatus || ''} → ${item.toStatus || ''}`}</span><span className="text-xs text-slate-400">{item.occurredAt ? new Date(item.occurredAt).toLocaleString() : ''}</span></li>)}</ul> : <p className="px-5 py-7 text-center text-sm text-slate-500">{sectionErrors.history ? 'Recent activity is temporarily unavailable.' : !loaded.history ? 'Loading activity…' : 'No recent activity.'}</p>}</section>
-  </main><LiveSimulationModal isOpen={isSimulationOpen} onClose={() => setIsSimulationOpen(false)} /></Layout>;
+    <details className="surface p-5">
+      <summary className="text-sm font-semibold text-slate-700">Workflow demonstration</summary>
+      <p className="my-3 text-sm text-slate-500">Explore a sample vendor selection scenario for your presentation.</p>
+      <button type="button" onClick={() => setIsSimulationOpen(true)} className="btn-outline">Open demonstration</button>
+      <div className="mt-4"><VendorEcosystemChart data={demoVendorEcosystem} /></div>
+    </details>
+  </div><LiveSimulationModal isOpen={isSimulationOpen} onClose={() => setIsSimulationOpen(false)} /></Layout>;
 }

@@ -13,7 +13,7 @@ import {
 
 const SIMULATION_STAGES = [
   { label: 'Intake', detail: 'Inquiry received' },
-  { label: 'Ranking', detail: 'AI scores vendors' },
+  { label: 'Ranking', detail: 'Vendors are ranked' },
   { label: 'Offers', detail: 'Vendors notified' },
   { label: 'Recovery', detail: 'Fallback selected' },
   { label: 'Confirmed', detail: 'Event ready' },
