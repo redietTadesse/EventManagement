@@ -30,6 +30,7 @@ public class GlobalExceptionHandler {
         HttpStatus status = "ACCESS_DENIED".equals(ex.getErrorCode())
                 ? HttpStatus.FORBIDDEN
                 : HttpStatus.BAD_REQUEST;
+        if ("COORDINATOR_CONFLICT".equals(ex.getErrorCode())) status = HttpStatus.CONFLICT;
         return ResponseEntity.status(status)
                 .body(new ErrorResponse(ex.getErrorCode(), ex.getMessage(), LocalDateTime.now()));
     }
@@ -63,6 +64,12 @@ public class GlobalExceptionHandler {
         log.warn("Workflow authorization failure: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ErrorResponse("TRANSITION_FORBIDDEN", ex.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadTooLarge() {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(new ErrorResponse("RECEIPT_TOO_LARGE", "The receipt must be 5 MB or smaller.", LocalDateTime.now()));
     }
 
     @ExceptionHandler(Exception.class)

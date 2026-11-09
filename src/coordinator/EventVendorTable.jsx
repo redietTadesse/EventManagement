@@ -3,11 +3,28 @@ import StatusBadge from '../components/StatusBadge';
 import { parseSelection, serviceLabel } from './eventDetailModel';
 
 const percent = value => value == null ? '—' : `${Math.round(value * 10) / 10}%`;
+const scoreWidth = value => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+
+function ScoreBar({ label, subtitle, value, color }) {
+  return <div className="space-y-1">
+    <div className="flex items-center justify-between gap-2">
+      <span className="font-medium text-slate-700">{label}</span>
+      <span className="text-xs font-semibold text-slate-600">{percent(value)}</span>
+    </div>
+    <div className="h-1.5 overflow-hidden rounded-full bg-slate-200" aria-label={`${label} score`}>
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${scoreWidth(value)}%` }} />
+    </div>
+    <p className="text-[11px] text-slate-500">{subtitle}</p>
+  </div>;
+}
 
 function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, reviewVersion, canAssign, feedback, onAssign, onHistory }) {
   const [reviewing, setReviewing] = useState(highlighted);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const container = useRef(null);
   const { current } = row;
+  const previous = row.attempts.slice(0, -1).reverse()
+    .find(attempt => ['DECLINED', 'EXPIRED'].includes(attempt.status));
   const { snapshot, selected } = parseSelection(current);
   const assignable = canAssign && row.state === 'exhausted';
 
@@ -23,19 +40,34 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
       <div className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_1.2fr_1fr_1.2fr_1.2fr] md:items-start md:px-5">
         <div><p className="text-xs text-slate-500 md:hidden">Required service</p><p className="font-semibold capitalize text-slate-900">{serviceLabel(row.category)}</p></div>
         <div><p className="text-xs text-slate-500 md:hidden">Current vendor</p><p className="text-sm text-slate-800">{current?.vendorName || (current?.status === 'OPEN' ? 'Open vendor pool' : 'Not assigned')}</p>
-          {current?.vendorId && <details className="mt-2 text-xs"><summary className="cursor-pointer font-medium text-indigo-700">Why selected?</summary>
-            <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-3 text-slate-600">
-              <p>{snapshot?.reasoning || (snapshot?.selectionReason ? serviceLabel(snapshot.selectionReason) : 'No selection reason was recorded for this offer.')}</p>
+          {current?.vendorId && <div className="mt-2 text-xs">
+            <button type="button" aria-expanded={evidenceOpen} onClick={() => setEvidenceOpen(value => !value)} className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100">
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5"><path d="m13.5 13.5 4 4M8.75 14.5a5.75 5.75 0 1 0 0-11.5 5.75 5.75 0 0 0 0 11.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>
+              Why selected?
+            </button>
+            {evidenceOpen && <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-slate-50 p-3 text-slate-600">
+              <div className="rounded-md bg-indigo-50 p-2.5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Decision reasoning</p>
+                <p>{snapshot?.reasoning || (snapshot?.selectionReason ? serviceLabel(snapshot.selectionReason) : 'No selection reason was recorded for this offer.')}</p>
+              </div>
               {snapshot?.eventDate && <p>Recorded for {snapshot.eventDate}.</p>}
-              {selected?.score != null ? <><p className="font-semibold text-slate-800">Selection score: {percent(selected.score)}</p><p>Weights: quality 50% · load 40% · rotation 10%.</p>
-                <p>Scores: quality {percent(selected.qualityScore)} · load {percent(selected.workloadScore)} · rotation {percent(selected.rotationScore)}.</p>
-                {(selected.qualityContribution != null || selected.workloadContribution != null || selected.rotationContribution != null) && <p>Weighted contributions: {selected.qualityContribution ?? '—'} + {selected.workloadContribution ?? '—'} + {selected.rotationContribution ?? '—'} percentage points.</p>}
+              {selected?.score != null ? <><p className="font-semibold text-slate-800">Selection score: {percent(selected.score)}</p><p className="text-[11px] text-slate-500">Weights: Quality 50% · Load 40% · Rotation 10%</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <ScoreBar label="Quality" subtitle="Client reviews" value={selected.qualityScore} color="bg-indigo-500" />
+                  <ScoreBar label="Load" subtitle="Current active events" value={selected.workloadScore} color="bg-amber-500" />
+                  <ScoreBar label="Rotation" subtitle="Fair vendor rotation" value={selected.rotationScore} color="bg-sky-500" />
+                </div>
               </> : <p>A ranking score is not recorded for this selection.</p>}
-              {snapshot?.actor?.username && <p>Assigned by {snapshot.actor.username}.</p>}
-            </div>
-          </details>}
+              {snapshot?.actor?.username && <div className="rounded-md bg-amber-50 p-2.5 text-amber-900"><p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">Recorded actor</p><p>Assigned by {snapshot.actor.username}.</p></div>}
+            </div>}
+          </div>}
         </div>
-        <div><p className="text-xs text-slate-500 md:hidden">Offer status</p>{current ? <StatusBadge status={current.status} /> : <span className="text-sm text-rose-700">No offer</span>}</div>
+        <div className="space-y-1">
+          <p className="text-xs text-slate-500 md:hidden">Offer status</p>
+          {current ? <StatusBadge status={current.status} /> : <span className="text-sm text-rose-700">No offer</span>}
+          {current?.status === 'OPEN' && <p className="text-xs font-medium text-rose-800">No eligible replacement was found. The offer is open to the vendor pool.</p>}
+          {previous && <p className="text-xs text-slate-600">Previous offer: {previous.vendorName || 'Vendor'} · {previous.status.toLowerCase()}</p>}
+        </div>
         <div className="text-sm text-slate-600"><p className="text-xs text-slate-500 md:hidden">Response deadline</p>
           {current?.status === 'PENDING' ? current.expiresAt ? <><time dateTime={current.expiresAt}>{new Date(current.expiresAt).toLocaleString()}</time>{new Date(current.expiresAt) < new Date() && <p className="mt-1 text-xs text-amber-700">Deadline passed; refresh for the latest outcome.</p>}</> : 'No deadline recorded' : '—'}
         </div>
@@ -52,7 +84,15 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
         {!loading && !error && alternatives.length === 0 && <p className="text-sm text-slate-700">No eligible alternative is currently available.</p>}
         {alternatives.map(vendor => <div key={vendor.vendorId || vendor.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-          <p className="font-medium text-slate-900">#{vendor.rank} {vendor.companyName}</p><p className="mt-1 text-xs text-slate-600">Match {percent(vendor.score)} · quality {percent(vendor.qualityScore)} · load {percent(vendor.workloadScore)} · rotation {percent(vendor.rotationScore)}</p>
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-medium text-slate-900">#{vendor.rank} {vendor.companyName}</p>
+            <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-indigo-600">Match</p><p className="text-2xl font-bold leading-none text-indigo-700">{percent(vendor.score)}</p></div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <ScoreBar label="Quality" subtitle="Client reviews" value={vendor.qualityScore} color="bg-indigo-500" />
+            <ScoreBar label="Load" subtitle="Current active events" value={vendor.workloadScore} color="bg-amber-500" />
+            <ScoreBar label="Rotation" subtitle="Fair vendor rotation" value={vendor.rotationScore} color="bg-sky-500" />
+          </div>
           <p className="mt-1 text-xs text-emerald-700">{vendor.eligibilityExplanation}</p>
         </div>)}
         {excluded.length > 0 && <details className="text-xs"><summary className="cursor-pointer font-semibold text-rose-800">{excluded.length} excluded {excluded.length === 1 ? 'vendor' : 'vendors'} and reasons</summary><ul className="mt-2 space-y-2">{excluded.map((vendor, index) => <li key={vendor.vendorId || index}><span className="font-medium">{vendor.companyName}</span> — {vendor.reason}</li>)}</ul></details>}

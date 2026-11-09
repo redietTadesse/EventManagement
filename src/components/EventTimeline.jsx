@@ -1,68 +1,33 @@
 import { CheckIcon } from '@heroicons/react/24/solid';
 
-export default function EventTimeline({ timeline }) {
+export default function EventTimeline({ timeline, status, proposalAccepted }) {
   if (!timeline) return null;
-
+  const stopped = ['PROPOSAL_REJECTED', 'CLOSED', 'CANCELLED'].includes(status);
   const steps = [
-    { id: 'inquiry', label: 'Inquiry Submitted', active: timeline.inquirySubmitted },
-    { id: 'proposal', label: 'Proposal Sent', active: timeline.proposalSent },
-    { id: 'venue', label: 'Venue Held', active: timeline.venueHeld, tooltip: timeline.venueName ? `${timeline.venueName} reserved` : null },
-    { id: 'vendors', label: 'Vendors Confirmed', active: timeline.vendorsConfirmed },
-    { id: 'confirmed', label: 'Event Confirmed', active: timeline.eventConfirmed },
+    ['Inquiry received', timeline.inquirySubmitted],
+    ['Proposal sent', timeline.proposalSent],
+    ['Proposal accepted', proposalAccepted],
+    ['Venue booked', timeline.venueHeld, timeline.venueName],
+    ['Vendors confirmed', timeline.vendorsConfirmed],
+    ['Event confirmed', timeline.eventConfirmed],
   ];
+  const next = stopped || timeline.eventConfirmed ? -1 : steps.findIndex(([, done]) => !done);
 
-  let currentStepIndex = steps.findLastIndex(step => step.active);
-  if (currentStepIndex === -1) currentStepIndex = 0;
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
-      <h3 className="text-lg font-semibold text-slate-800 mb-8">Event Progress</h3>
-
-      <div className="relative">
-        <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -translate-y-1/2 rounded-full hidden md:block" />
-
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 md:gap-0 relative z-10">
-          {steps.map((step, index) => {
-            const isCompleted = index < currentStepIndex;
-            const isCurrent = index === currentStepIndex;
-
-            return (
-              <div key={step.id} className="flex md:flex-col items-center gap-4 md:gap-3 w-full md:w-auto relative">
-                {index !== steps.length - 1 && (
-                  <div className="absolute left-[19px] top-10 w-1 h-full bg-slate-100 md:hidden" />
-                )}
-
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 bg-white
-                    ${isCompleted ? 'bg-indigo-600 border-indigo-600' : ''}
-                    ${isCurrent ? 'border-indigo-600 ring-4 ring-indigo-100 animate-pulse' : ''}
-                    ${!isCompleted && !isCurrent ? 'border-slate-300' : ''}
-                  `}
-                >
-                  {isCompleted ? (
-                    <CheckIcon className="w-5 h-5 text-white" />
-                  ) : (
-                    <span className={`text-sm font-bold ${isCurrent ? 'text-indigo-600' : 'text-slate-400'}`}>
-                      {index + 1}
-                    </span>
-                  )}
-                </div>
-
-                <div className="md:text-center mt-1">
-                  <p className={`text-sm font-semibold ${isCurrent ? 'text-indigo-600' : isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>
-                    {step.label}
-                  </p>
-                  {step.tooltip && step.active && (
-                    <p className="text-xs text-slate-500 mt-1 bg-indigo-50 px-2 py-1 rounded-md inline-block">
-                      {step.tooltip}
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+  return <section className="surface p-5 sm:p-6" aria-label="Event progress">
+    <h2 className="font-semibold text-slate-900">Event progress</h2>
+    <ol className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      {steps.map(([label, done, detail], index) => (
+        <li key={label} aria-current={index === next ? 'step' : undefined}
+          className={`flex items-start gap-2 rounded-xl border p-3 ${done ? 'border-emerald-100 bg-emerald-50' : index === next ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>
+          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold ${done ? 'bg-emerald-700 text-white' : 'bg-white text-slate-700'}`} aria-hidden="true">
+            {done ? <CheckIcon className="h-4 w-4" /> : index + 1}
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-slate-900">{label}</p>
+            <p className="mt-1 text-[11px] text-slate-600">{done ? detail || 'Done' : index === next ? 'In progress' : stopped || timeline.eventConfirmed ? 'Not recorded' : 'Pending'}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </section>;
 }

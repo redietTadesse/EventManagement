@@ -239,7 +239,7 @@ public class VendorService {
         String stored = event.getRequiredCategories();
         List<String> selected = stored != null && !stored.isBlank()
                 ? CategoryUtils.split(stored)
-                : CategoryUtils.categoriesForEventType(event.getInquiry().getEventType());
+                : List.of();
         return CategoryUtils.externalVendorCategories(event.getInquiry().getEventType(), selected);
     }
 

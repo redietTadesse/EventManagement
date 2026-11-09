@@ -13,5 +13,6 @@ public record VenueFitResponse(
         boolean eligible,
         LocalDate blockedFrom,
         LocalDate blockedThrough,
-        List<String> explanation
+        List<String> explanation,
+        List<String> blockers
 ) { }

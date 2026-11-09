@@ -14,7 +14,16 @@ import java.util.List;
 @Repository
 public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from Inquiry i where i.id = :id")
+    java.util.Optional<Inquiry> findForCoordinatorUpdate(@Param("id") Long id);
+
     List<Inquiry> findByStatus(EventStatus status);
+
+    @Query("select i.status, count(i) from Inquiry i left join i.event e where e.id is null group by i.status")
+    List<Object[]> countUnconvertedByStatus();
+
+    long countByStatusAndUpdatedAtBeforeAndEventIsNull(EventStatus status, LocalDateTime cutoff);
 
     List<Inquiry> findByClientId(Long clientId);
 

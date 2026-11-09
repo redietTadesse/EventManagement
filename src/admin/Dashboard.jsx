@@ -1,8 +1,80 @@
 
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import api from '../api/axios';
+import useApiResource from '../hooks/useApiResource';
+import LifecycleDashboard from './LifecycleDashboard';
+import ManagementOutlook from './ManagementOutlook';
+
+const RevenueDashboard = lazy(() => import('./RevenueDashboard'));
+
+function EmailDiagnostics() {
+  const status = useApiResource('/admin/emails/status');
+  const log = useApiResource('/admin/emails/log');
+
+  const emailLogs = Array.isArray(log.data) ? log.data : [];
+
+  return (
+    <section className="rounded-xl border bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-slate-900">
+          Proposal email diagnostics
+        </h2>
+        <button
+          className="rounded-lg border px-3 py-2 text-sm"
+          onClick={() => {
+            status.reload();
+            log.reload();
+          }}
+        >
+          Refresh email diagnostics
+        </button>
+      </div>
+
+      {status.error && (
+        <p role="alert" className="text-rose-700">
+          {status.error}
+        </p>
+      )}
+
+      {status.loading && <p>Loading email status…</p>}
+
+      {typeof status.data?.enabled === 'boolean' && (
+        <p className="mt-2 text-sm text-slate-600">
+          Email delivery is {status.data.enabled ? 'enabled' : 'disabled'}.
+        </p>
+      )}
+
+      {log.error && (
+        <p role="alert" className="text-rose-700">
+          {log.error}
+        </p>
+      )}
+
+      {log.loading && <p>Loading email log…</p>}
+
+      {!log.loading && !log.error && emailLogs.length === 0 && (
+        <p className="mt-2 text-sm text-slate-600">
+          No email log entries.
+        </p>
+      )}
+
+      {emailLogs.length > 0 && (
+        <ul className="mt-3 max-h-64 divide-y overflow-auto text-sm text-slate-700">
+          {emailLogs.map((entry, index) => (
+            <li
+              key={index}
+              className="whitespace-pre-wrap break-words py-2"
+            >
+              {entry}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -33,6 +105,7 @@ export default function AdminDashboard() {
   return (
     <Layout title="Administration">
       <div className="space-y-6">
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
@@ -53,7 +126,10 @@ export default function AdminDashboard() {
         </div>
 
         {error && (
-          <p role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">
+          <p
+            role="alert"
+            className="rounded-lg bg-rose-50 p-4 text-rose-700"
+          >
             {error}
           </p>
         )}
@@ -75,6 +151,22 @@ export default function AdminDashboard() {
               </p>
             </section>
           ))}
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            to="/admin/coordinators"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-white"
+          >
+            Add coordinator
+          </Link>
+
+          <Link
+            to="/admin/vendors/new"
+            className="rounded-lg border bg-white px-4 py-2 text-indigo-700"
+          >
+            Add vendor
+          </Link>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -102,6 +194,26 @@ export default function AdminDashboard() {
             </p>
           </Link>
         </div>
+
+        <Suspense
+          fallback={
+            <p
+              role="status"
+              className="rounded-2xl border bg-white p-5 text-sm text-slate-600"
+            >
+              Loading revenue dashboard…
+            </p>
+          }
+        >
+          <RevenueDashboard />
+        </Suspense>
+
+        <LifecycleDashboard />
+
+        <ManagementOutlook />
+
+        <EmailDiagnostics />
+
       </div>
     </Layout>
   );

@@ -9,6 +9,8 @@ import interactionPlugin from '@fullcalendar/interaction';
 import Layout from './Layout';
 import api from '../api/axios';
 import { eventDayCoverage, mapCalendarEvents } from './calendarModel';
+import useVenueAvailabilityCalendar, { calendarDateKey } from '../hooks/useVenueAvailabilityCalendar';
+import { VenueDayExplanation } from './VenueAvailabilityReasons';
 
 export default function MasterCalendar() {
   const navigate = useNavigate();
@@ -21,6 +23,17 @@ export default function MasterCalendar() {
     return { year: today.getFullYear(), month: today.getMonth() };
   });
   const requestController = useRef(null);
+  const [attendees, setAttendees] = useState('');
+  const [inspectedDate, setInspectedDate] = useState('');
+  const attendance = Number.isInteger(Number(attendees)) && Number(attendees) > 0 ? Number(attendees) : undefined;
+  const [availabilityRevision, setAvailabilityRevision] = useState(0);
+  const [visibleDates, setVisibleDates] = useState(null);
+  const availability = useVenueAvailabilityCalendar(
+    visibleDates?.start || calendarDateKey(new Date(visibleMonth.year, visibleMonth.month, 1)),
+    visibleDates?.end || calendarDateKey(new Date(visibleMonth.year, visibleMonth.month + 1, 0)),
+    attendance,
+    availabilityRevision,
+  );
 
   const loadEvents = useCallback(async () => {
     requestController.current?.abort();
@@ -56,7 +69,7 @@ export default function MasterCalendar() {
     <div className="coordinator-calendar space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><h1 className="text-2xl font-bold text-slate-900">Calendar</h1><p className="mt-1 text-sm text-slate-500">Event dates and vendor coordination status.</p></div>
-        <button type="button" onClick={loadEvents} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 disabled:opacity-50">{loading ? 'Loading…' : 'Refresh calendar'}</button>
+        <button type="button" onClick={() => { loadEvents(); setAvailabilityRevision((value) => value + 1); }} disabled={loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 disabled:opacity-50">{loading ? 'Loading…' : 'Refresh calendar'}</button>
       </div>
       {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}{loaded ? ' Previously loaded events remain visible.' : ''} <button type="button" onClick={loadEvents} disabled={loading} className="font-medium underline">Retry</button></div>}
       {loading && !loaded && <p role="status" className="py-10 text-center text-sm text-slate-500">Loading calendar events…</p>}
@@ -99,14 +112,40 @@ export default function MasterCalendar() {
 
       {/* Calendar Container */}
       <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200 p-6">
+        <div className="mb-4 flex flex-wrap items-end gap-3 text-sm">
+          <label className="text-slate-700">
+            Expected attendees (optional)
+            <input type="number" min="1" value={attendees} onChange={(event) => setAttendees(event.target.value)}
+              className="mt-1 block w-44 rounded-lg border border-slate-300 px-2 py-1" />
+          </label>
+          <span className="rounded bg-slate-200 px-2 py-1 text-slate-700">Select a gray date to see why venues are unavailable</span>
+        </div>
+        {inspectedDate && <VenueDayExplanation key={`${inspectedDate}/${attendance}`} date={inspectedDate}
+          attendees={attendance} onClose={() => setInspectedDate('')} />}
+        {!availability && <p role="status" className="mb-3 text-sm text-slate-600">Checking venue availability…</p>}
+        {availability?.error && <p role="status" className="mb-3 text-sm text-amber-800">
+          Venue availability could not be checked. <button type="button" className="underline"
+            onClick={() => setAvailabilityRevision((value) => value + 1)}>Retry</button>
+        </p>}
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           events={events}
           height="auto"
+          dayCellClassNames={({ date }) => availability?.dates?.get(calendarDateKey(date)) === false ? ['venue-unavailable'] : []}
+          dayCellContent={({ date, dayNumberText }) => {
+            const key = calendarDateKey(date);
+            if (availability?.dates?.get(key) !== false) return dayNumberText;
+            return <button type="button" aria-label={`${key}, show venue availability reasons`}
+              onClick={() => setInspectedDate(key)} className="underline">{dayNumberText}</button>;
+          }}
           datesSet={({ view }) => {
             const year = view.currentStart.getFullYear();
             const month = view.currentStart.getMonth();
+            const end = new Date(view.currentEnd);
+            end.setDate(end.getDate() - 1);
+            const nextDates = { start: calendarDateKey(view.currentStart), end: calendarDateKey(end) };
+            setVisibleDates(previous => previous?.start === nextDates.start && previous?.end === nextDates.end ? previous : nextDates);
             setVisibleMonth(previous => previous.year === year && previous.month === month ? previous : { year, month });
           }}
           headerToolbar={{
@@ -145,6 +184,12 @@ export default function MasterCalendar() {
           color: #334155; /* slate-700 */
           font-weight: 500;
           padding: 8px;
+        }
+        .coordinator-calendar .fc .venue-unavailable {
+          background-color: #e2e8f0;
+        }
+        .coordinator-calendar .fc .venue-unavailable .fc-daygrid-day-number {
+          text-decoration: line-through;
         }
         .fc-event {
           border-radius: 6px;

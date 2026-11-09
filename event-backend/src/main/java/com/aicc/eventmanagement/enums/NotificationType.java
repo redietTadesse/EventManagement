@@ -1,0 +1,12 @@
+package com.aicc.eventmanagement.enums;
+
+public enum NotificationType {
+    INQUIRY_SUBMITTED,
+    PROPOSAL_SENT,
+    PROPOSAL_ACCEPTED,
+    PROPOSAL_CHANGE_REQUESTED,
+    EVENT_COMPLETED,
+    VENDOR_ASSIGNMENT_OFFERED,
+    VENDOR_ACCEPTED,
+    VENDOR_DECLINED
+}

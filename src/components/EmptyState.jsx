@@ -1,52 +1,17 @@
 import { Link } from 'react-router-dom';
+import { InboxStackIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 
-export default function EmptyState({
-  icon = '📭',
-  title = 'Nothing here yet',
-  description = 'Start by adding your first item.',
-  actionText,
-  actionLink,
-  actionOnClick,
-  size = 'default'
-}) {
-  const sizeClasses = {
-    small: 'py-8',
-    default: 'py-12',
-    large: 'py-16',
-  };
-
-  const iconSizes = {
-    small: 'text-4xl',
-    default: 'text-5xl',
-    large: 'text-6xl',
-  };
-
-  return (
-    <div className={`text-center px-4 ${sizeClasses[size]}`}>
-      <div className={`${iconSizes[size]} mb-4 animate-pulse`}>{icon}</div>
-      <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
-      <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">{description}</p>
-      {(actionText && (actionLink || actionOnClick)) && (
-        <div className="mt-4">
-          {actionLink ? (
-            <Link
-              to={actionLink}
-              className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors hover:underline"
-            >
-              {actionText}
-              <span>→</span>
-            </Link>
-          ) : (
-            <button
-              onClick={actionOnClick}
-              className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors hover:underline"
-            >
-              {actionText}
-              <span>→</span>
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
+export default function EmptyState({ icon, title = 'Nothing here yet', description,
+  actionText, actionLink, actionOnClick, size = 'default' }) {
+  return <div className={`px-5 text-center ${size === 'small' ? 'py-8' : 'py-12'}`}>
+    <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400">
+      {icon && typeof icon !== 'string' ? icon : <InboxStackIcon className="h-6 w-6" aria-hidden="true" />}
+    </span>
+    <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+    {description && <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">{description}</p>}
+    {actionText && (actionLink || actionOnClick) && <div className="mt-5">
+      {actionLink ? <Link to={actionLink} className="btn-outline">{actionText}<ArrowRightIcon className="h-4 w-4" /></Link>
+        : <button type="button" onClick={actionOnClick} className="btn-outline">{actionText}<ArrowRightIcon className="h-4 w-4" /></button>}
+    </div>}
+  </div>;
 }

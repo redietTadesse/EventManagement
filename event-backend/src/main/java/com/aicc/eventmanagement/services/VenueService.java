@@ -142,7 +142,7 @@ public class VenueService {
 
     public boolean isVenueAvailable(Long venueId, LocalDate startDate, LocalDate endDate, Integer expectedAttendees) {
         Venue venue = getById(venueId);
-        return isVenueAvailableForRange(venue, startDate, endDate, -1L, expectedAttendees);
+        return isVenueAvailableForRange(venue, startDate, endDate, -1L, expectedAttendees, null);
     }
 
     public boolean isVenueAvailableForEvent(Long venueId, LocalDate startDate, LocalDate endDate, Long eventId) {
@@ -155,17 +155,19 @@ public class VenueService {
     public boolean isVenueAvailableForEvent(
             Long venueId, LocalDate startDate, LocalDate endDate, Long eventId, Integer expectedAttendees) {
         Venue venue = getById(venueId);
-        return isVenueAvailableForRange(venue, startDate, endDate, eventId, expectedAttendees);
+        String type = eventId == null ? null : eventRepository.findById(eventId)
+                .map(Event::getInquiry).map(com.aicc.eventmanagement.entities.Inquiry::getEventType).orElse(null);
+        return isVenueAvailableForRange(venue, startDate, endDate, eventId, expectedAttendees, type);
     }
 
     private boolean isVenueAvailableForRange(
-            Venue venue, LocalDate startDate, LocalDate endDate, Long eventId, Integer expectedAttendees) {
+            Venue venue, LocalDate startDate, LocalDate endDate, Long eventId, Integer expectedAttendees, String eventType) {
         if (startDate == null || (endDate != null && endDate.isBefore(startDate))) return false;
         if (!venue.isActive() || exceedsCapacity(venue, expectedAttendees)) return false;
         Long excludedEventId = eventId != null ? eventId : -1L;
-        LocalDate actualEndDate = endDate != null ? endDate : startDate;
-        LocalDate blockStart = startDate.minusDays(venue.getSetupBufferDays());
-        LocalDate blockEnd = actualEndDate.plusDays(venue.getTeardownBufferDays());
+        var window = bookingWindow(venue, eventType, startDate, endDate);
+        LocalDate blockStart = window.from();
+        LocalDate blockEnd = window.through();
 
         if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(
                 venue.getId(), blockStart, blockEnd)) {
@@ -196,6 +198,10 @@ public class VenueService {
     }
 
     public List<Venue> getAvailableVenues(LocalDate startDate, LocalDate endDate, Integer expectedAttendees) {
+        return getAvailableVenues(startDate, endDate, expectedAttendees, null);
+    }
+
+    public List<Venue> getAvailableVenues(LocalDate startDate, LocalDate endDate, Integer expectedAttendees, String eventType) {
         if (startDate == null || (endDate != null && endDate.isBefore(startDate))) {
             throw new BusinessException("End date cannot be before start date", "INVALID_DATE_RANGE");
         }
@@ -205,7 +211,35 @@ public class VenueService {
         return venueRepository.findAll().stream()
                 .filter(Venue::isActive)
                 .filter(v -> !exceedsCapacity(v, expectedAttendees))
-                .filter(v -> isVenueAvailableForRange(v, startDate, endDate, -1L, expectedAttendees))
+                .filter(v -> isVenueAvailableForRange(v, startDate, endDate, -1L, expectedAttendees, eventType))
+                .toList();
+    }
+
+    public record DayAvailability(LocalDate date, boolean available) {}
+
+    private static com.aicc.eventmanagement.util.VenueBookingWindow bookingWindow(
+            Venue venue, String eventType, LocalDate start, LocalDate end) {
+        return com.aicc.eventmanagement.util.VenueBookingWindow.forEvent(eventType, start, end,
+                venue.getSetupBufferDays(), venue.getTeardownBufferDays());
+    }
+
+    @Transactional(readOnly = true)
+    public List<DayAvailability> getAvailabilityCalendar(LocalDate start, LocalDate end, Integer attendees, String eventType) {
+        if (end.isBefore(start) || end.isAfter(start.plusDays(30))) {
+            throw new BusinessException("Choose a calendar range of up to 31 days", "INVALID_DATE_RANGE");
+        }
+        if (attendees != null && attendees < 1) {
+            throw new BusinessException("Attendee count must be at least one", "INVALID_ATTENDEE_COUNT");
+        }
+        List<Venue> candidates = venueRepository.findAll().stream()
+                .filter(Venue::isActive)
+                .filter(venue -> !exceedsCapacity(venue, attendees))
+                .toList();
+        LocalDate today = LocalDate.now();
+        return start.datesUntil(end.plusDays(1))
+                .filter(date -> date.isAfter(today))
+                .map(date -> new DayAvailability(date, candidates.stream()
+                        .anyMatch(venue -> isVenueAvailableForRange(venue, date, date, -1L, attendees, eventType))))
                 .toList();
     }
 
@@ -217,6 +251,16 @@ public class VenueService {
     @Transactional(readOnly = true)
     public List<VenueFitResponse> explainVenueFit(
             LocalDate startDate, LocalDate endDate, Integer expectedAttendees, Long excludedEventId) {
+        String eventType = excludedEventId == null ? null : eventRepository.findById(excludedEventId)
+                .map(Event::getInquiry)
+                .map(com.aicc.eventmanagement.entities.Inquiry::getEventType)
+                .orElse(null);
+        return explainVenueFit(startDate, endDate, expectedAttendees, excludedEventId, eventType);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VenueFitResponse> explainVenueFit(
+            LocalDate startDate, LocalDate endDate, Integer expectedAttendees, Long excludedEventId, String eventType) {
         if (startDate == null || (endDate != null && endDate.isBefore(startDate))) {
             throw new BusinessException("End date cannot be before start date", "INVALID_DATE_RANGE");
         }
@@ -228,27 +272,29 @@ public class VenueService {
         long eventIdToExclude = excludedEventId != null ? excludedEventId : -1L;
         return venueRepository.findAll().stream()
                 .map(venue -> explainVenue(venue, startDate, actualEndDate,
-                        expectedAttendees, eventIdToExclude))
+                        expectedAttendees, eventIdToExclude, eventType))
                 .toList();
     }
 
     private VenueFitResponse explainVenue(
             Venue venue, LocalDate startDate, LocalDate endDate,
-            Integer expectedAttendees, Long excludedEventId) {
-        LocalDate blockedFrom = startDate.minusDays(venue.getSetupBufferDays());
-        LocalDate blockedThrough = endDate.plusDays(venue.getTeardownBufferDays());
+            Integer expectedAttendees, Long excludedEventId, String eventType) {
+        var window = bookingWindow(venue, eventType, startDate, endDate);
+        LocalDate blockedFrom = window.from();
+        LocalDate blockedThrough = window.through();
         List<String> explanation = new ArrayList<>();
+        List<String> blockers = new ArrayList<>();
 
         if (venue.isActive()) {
             explanation.add("Venue is active.");
         } else {
-            explanation.add("Venue is inactive and cannot be booked.");
+            blockers.add("Venue is inactive and cannot be booked.");
         }
 
         if (expectedAttendees == null) {
             explanation.add("No attendee count was supplied, so capacity was not checked.");
         } else if (exceedsCapacity(venue, expectedAttendees)) {
-            explanation.add("Capacity " + venue.getCapacity() + " is below "
+            blockers.add("Capacity " + venue.getCapacity() + " is below "
                     + expectedAttendees + " expected attendees.");
         } else if (venue.getCapacity() == null) {
             explanation.add("No capacity limit is configured.");
@@ -259,7 +305,7 @@ public class VenueService {
         boolean blockedDate = unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(
                 venue.getId(), blockedFrom, blockedThrough);
         if (blockedDate) {
-            explanation.add("An administrator-blocked date overlaps the setup, event, or teardown window.");
+            blockers.add("An administrator-blocked date overlaps the setup, event, or teardown window.");
         } else {
             explanation.add("No administrator-blocked date overlaps " + blockedFrom + " through " + blockedThrough + ".");
         }
@@ -267,23 +313,19 @@ public class VenueService {
         long confirmedBookings = venueBookingRepository.countConfirmedBookingsInRangeExcludingEvent(
                 venue.getId(), blockedFrom, blockedThrough, excludedEventId);
         if (confirmedBookings > 0) {
-            explanation.add("Another confirmed venue booking overlaps the setup, event, or teardown window.");
+            blockers.add("Another confirmed venue booking overlaps the setup, event, or teardown window.");
         }
 
         long scheduledEvents = eventRepository.countVenueEventsInRangeExcludingEvent(
                 venue.getId(), blockedFrom, blockedThrough, DEAD_STATUSES, excludedEventId);
         if (scheduledEvents > 0) {
-            explanation.add("Another active event uses this venue during the setup, event, or teardown window.");
+            blockers.add("Another active event uses this venue during the setup, event, or teardown window.");
         }
 
-        boolean eligible = venue.isActive()
-                && !exceedsCapacity(venue, expectedAttendees)
-                && confirmedBookings == 0
-                && scheduledEvents == 0
-                && !blockedDate;
+        explanation.addAll(blockers);
         return new VenueFitResponse(venue.getId(), venue.getName(), venue.getLocation(),
-                venue.getCapacity(), venue.isActive(), eligible, blockedFrom, blockedThrough,
-                List.copyOf(explanation));
+                venue.getCapacity(), venue.isActive(), blockers.isEmpty(), blockedFrom, blockedThrough,
+                List.copyOf(explanation), List.copyOf(blockers));
     }
 
     /**
@@ -319,8 +361,10 @@ public class VenueService {
         }
 
         // 2. Calculate the full blocked range including buffers
-        LocalDate blockStart = startDate.minusDays(venue.getSetupBufferDays());
-        LocalDate blockEnd = actualEndDate.plusDays(venue.getTeardownBufferDays());
+        String eventType = event.getInquiry() == null ? null : event.getInquiry().getEventType();
+        var window = bookingWindow(venue, eventType, startDate, actualEndDate);
+        LocalDate blockStart = window.from();
+        LocalDate blockEnd = window.through();
 
         if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(venueId, blockStart, blockEnd)) {
             throw new BusinessException("Venue is unavailable during the event setup or booking period.",
@@ -444,7 +488,7 @@ public class VenueService {
                 && expectedAttendees > venue.getCapacity();
     }
 
-    private Venue getByIdForUpdate(Long id) {
+    Venue getByIdForUpdate(Long id) {
         return venueRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException("Venue not found with id: " + id));
     }

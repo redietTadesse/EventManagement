@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import EventIssues from '../components/EventIssues';
 import { useApp } from '../context/AppContext';
 
 export default function AssignmentDetail() {
@@ -98,9 +99,14 @@ export default function AssignmentDetail() {
         </div>
 
         {error && <div className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>}
+        {assignment?.eventId && ['ACCEPTED', 'COMPLETED'].includes(assignment.status) && (
+          <EventIssues key={assignment.id} eventId={assignment.eventId} assignmentId={assignment.id}
+            canReport={assignment.status === 'ACCEPTED' && !['CANCELLED', 'CLOSED', 'COMPLETED'].includes(assignment.eventStatus)} />
+        )}
 
         <div className="bg-white rounded-xl shadow p-6 space-y-4">
           <h3 className="font-semibold text-gray-800">Event details</h3>
+          <p className="text-sm text-gray-600">Handled by {assignment.coordinator?.name || 'Coordinator assignment pending'}</p>
           <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div>
               <p className="text-gray-500">Date</p>
