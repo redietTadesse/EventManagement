@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import AuditTimeline from '../components/AuditTimeline';
 import StatusBadge from '../components/StatusBadge';
+import BookingAgreement from '../components/BookingAgreement';
 import EventTimeline from '../components/EventTimeline';
 import useApiResource from '../hooks/useApiResource';
 import { useApp } from '../context/AppContext';
@@ -11,7 +12,7 @@ import api from '../api/axios';
 const requestProgress = {
   INQUIRY_SUBMITTED: ['Request received', 'The coordinator will review your dates and requirements before sending a proposal.'],
   PROPOSAL_SENT: ['Your response is needed', 'Review the proposal below, then accept it, request changes, or decline it.'],
-  PROPOSAL_ACCEPTED: ['Proposal accepted', 'The coordinator will check availability again and reserve the venue during booking.'],
+  PROPOSAL_ACCEPTED: ['Proposal accepted', 'The contract below shows what still needs to happen before the venue can be booked.'],
   PROPOSAL_REJECTED: ['Proposal declined', 'This request has ended. You can submit a new inquiry if your plans change.'],
   CLOSED: ['Request closed', 'This request has ended.'],
   EVENT_CREATED: ['Event created', 'The coordinator is preparing the event. Check your event details for the latest information.'],
@@ -202,6 +203,7 @@ export default function ClientInquiryDetail() {
         <section aria-labelledby="request-progress" className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
           <h2 id="request-progress" className="font-semibold text-gray-900">{progressTitle}</h2>
           <p className="mt-1 text-sm text-gray-700">{progressDescription}</p>
+          {canRespond && <a href="#client-proposal" className="btn-primary mt-3">Review proposal</a>}
           {event?.id && (
             <Link to={`/client/events/${event.id}`} className="mt-3 inline-block text-sm font-semibold text-indigo-700 hover:underline">
               View event details →
@@ -211,7 +213,10 @@ export default function ClientInquiryDetail() {
 
         {responseNotice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{responseNotice}</p>}
         {error && <div role="alert" className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
-        {timeline && <EventTimeline timeline={{ ...timeline, proposalSent: Boolean(parsedProposal) }} />}
+        {timeline && <EventTimeline timeline={timeline} status={status}
+          proposalAccepted={inquiry.status === 'PROPOSAL_ACCEPTED' || inquiry.status === 'EVENT_CREATED' || Boolean(event?.id)} />}
+        {(['PROPOSAL_ACCEPTED', 'EVENT_CREATED'].includes(inquiry.status) || inquiry.event) &&
+          <BookingAgreement key={inquiry.id} inquiryId={inquiry.id} />}
         {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
           <VendorPreferences key={inquiry.id} inquiry={inquiry} onSaved={setInquiry} />
         )}
@@ -228,7 +233,7 @@ export default function ClientInquiryDetail() {
         </section>
 
         {parsedProposal ? (
-          <section className="space-y-5 rounded-xl border border-indigo-100 bg-white p-6 shadow">
+          <section id="client-proposal" tabIndex={-1} className="surface scroll-mt-24 space-y-5 p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">Your proposal</h2>

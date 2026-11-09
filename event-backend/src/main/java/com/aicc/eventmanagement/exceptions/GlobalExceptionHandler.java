@@ -66,6 +66,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("TRANSITION_FORBIDDEN", ex.getMessage(), LocalDateTime.now()));
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadTooLarge() {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(new ErrorResponse("RECEIPT_TOO_LARGE", "The receipt must be 5 MB or smaller.", LocalDateTime.now()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);

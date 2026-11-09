@@ -7,7 +7,6 @@ import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.ConfirmCategoriesRequest;
 import com.aicc.eventmanagement.payload.ConversionPreviewResponse;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
-import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.EventResponse;
 import com.aicc.eventmanagement.payload.InquiryResponse;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
@@ -178,17 +177,10 @@ public class InquiryController {
 
     @PostMapping("/{id}/convert")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Convert inquiry to event", description = "Converts an accepted inquiry into a full event")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Event created successfully",
-                    content = @Content(schema = @Schema(implementation = EventResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Inquiry not in accepted state"),
-            @ApiResponse(responseCode = "404", description = "Inquiry not found")
-    })
-    public ResponseEntity<EventResponse> convertToEvent(@PathVariable Long id, @Valid @RequestBody ConvertToEventRequest request) {
-        log.info("Converting inquiry {} to event", id);
-        Event event = inquiryService.convertToEvent(id, request);
-        return ResponseEntity.ok(EventResponse.from(event));
+    @Operation(summary = "Legacy direct conversion", description = "Use the booking agreement receipt verification endpoint to book an inquiry.")
+    public void convertToEvent() {
+        throw new com.aicc.eventmanagement.exceptions.BusinessException(
+                "Sign the contract and verify the payment receipt to book this event.", "BOOKING_AGREEMENT_REQUIRED");
     }
 
     @GetMapping("/{id}/conversion-preview")

@@ -76,9 +76,10 @@ public class VenueController {
     public ResponseEntity<List<VenueResponse>> availableOn(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            @RequestParam(required = false) @Min(1) Integer attendees) {
+            @RequestParam(required = false) @Min(1) Integer attendees,
+            @RequestParam(required = false) String eventType) {
         List<VenueResponse> venues = venueService.getAvailableVenues(date,
-                        endDate != null ? endDate : date, attendees).stream()
+                        endDate != null ? endDate : date, attendees, eventType).stream()
                 .map(VenueResponse::from)
                 .toList();
         return ResponseEntity.ok(venues);
@@ -89,8 +90,9 @@ public class VenueController {
     public List<VenueService.DayAvailability> availabilityCalendar(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
-            @RequestParam(required = false) Integer attendees) {
-        return venueService.getAvailabilityCalendar(start, end, attendees);
+            @RequestParam(required = false) Integer attendees,
+            @RequestParam(required = false) String eventType) {
+        return venueService.getAvailabilityCalendar(start, end, attendees, eventType);
     }
 
     public record VenueAvailabilityReason(Long venueId, String name, boolean available, List<String> reasons) {}
@@ -100,8 +102,9 @@ public class VenueController {
     public List<VenueAvailabilityReason> availabilityReasons(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            @RequestParam(required = false) Integer attendees) {
-        return venueService.explainVenueFit(date, endDate, attendees, null).stream()
+            @RequestParam(required = false) Integer attendees,
+            @RequestParam(required = false) String eventType) {
+        return venueService.explainVenueFit(date, endDate, attendees, null, eventType).stream()
                 .map(venue -> new VenueAvailabilityReason(venue.venueId(), venue.name(), venue.eligible(), venue.blockers()))
                 .toList();
     }

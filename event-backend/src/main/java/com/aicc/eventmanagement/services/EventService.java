@@ -11,6 +11,7 @@ import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
 import com.aicc.eventmanagement.exceptions.BusinessException;
+import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.payload.EventReadinessResponse;
 import com.aicc.eventmanagement.payload.EventResponse;
 import com.aicc.eventmanagement.payload.UpdateEventRequest;
@@ -53,10 +54,9 @@ public class EventService {
     public Event createEvent(Event event) {
         log.info("Creating event: {}", event.getName());
 
-        // Validate inquiry exists
-        if (event.getInquiry() != null && event.getInquiry().getId() != null) {
-            inquiryRepository.findById(event.getInquiry().getId())
-                    .orElseThrow(() -> new RuntimeException("Inquiry not found with id: " + event.getInquiry().getId()));
+        if (event.getInquiry() != null) {
+            throw new BusinessException("Use the signed contract and verified receipt to book an inquiry.",
+                    "BOOKING_AGREEMENT_REQUIRED");
         }
 
         // Set initial status if not set
@@ -80,7 +80,7 @@ public class EventService {
     public Event getEventById(Long id) {
         log.info("Fetching event with id: {}", id);
         return eventRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Event not found with id: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Event", id));
     }
 
     @Transactional(readOnly = true)
@@ -146,7 +146,7 @@ public class EventService {
     public Event getEventByInquiryId(Long inquiryId) {
         log.info("Fetching event for inquiry: {}", inquiryId);
         return eventRepository.findByInquiryId(inquiryId)
-                .orElseThrow(() -> new RuntimeException("Event not found for inquiry: " + inquiryId));
+                .orElseThrow(() -> new EntityNotFoundException("Event for inquiry", inquiryId));
     }
 
     @Transactional
@@ -310,8 +310,8 @@ public class EventService {
             if (status != VendorAssignmentStatus.ACCEPTED && status != VendorAssignmentStatus.PENDING) continue;
             if (assignment.getVendor() == null) continue;
 
-            boolean available = vendorService.isVendorAvailableForEvent(
-                    assignment.getVendor().getId(), newDate, eventId);
+            boolean available = datesAvailableForVendor(
+                    assignment.getVendor().getId(), newDate, newEndDate, eventId);
             String vendorName = assignment.getVendorName() != null
                     ? assignment.getVendorName()
                     : assignment.getVendor().getCompanyName();
@@ -386,5 +386,16 @@ public class EventService {
         long durationDays = java.time.temporal.ChronoUnit.DAYS.between(
                 event.getInquiry().getEventDate(), event.getInquiry().getEndDate());
         return newStartDate.plusDays(Math.max(0, durationDays));
+    }
+
+    private boolean datesAvailableForVendor(
+            Long vendorId, java.time.LocalDate startDate, java.time.LocalDate endDate, Long eventId) {
+        java.time.LocalDate actualEnd = endDate == null ? startDate : endDate;
+        java.time.LocalDate date = startDate;
+        while (!date.isAfter(actualEnd)) {
+            if (!vendorService.isVendorAvailableForEvent(vendorId, date, eventId)) return false;
+            date = date.plusDays(1);
+        }
+        return true;
     }
 }

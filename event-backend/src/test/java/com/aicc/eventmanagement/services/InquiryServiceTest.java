@@ -379,7 +379,7 @@ class InquiryServiceTest {
         request.setClientName("John Smith");
         request.setExpectedAttendees(250);
 
-        when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
+        when(inquiryRepository.findForCoordinatorUpdate(1L)).thenReturn(Optional.of(inquiry));
         when(inquiryRepository.save(any(Inquiry.class))).thenReturn(inquiry);
 
         Inquiry result = inquiryService.updateInquiry(1L, request);
@@ -404,7 +404,7 @@ class InquiryServiceTest {
         com.aicc.eventmanagement.payload.UpdateInquiryRequest request = new com.aicc.eventmanagement.payload.UpdateInquiryRequest();
         request.setEventDate(LocalDate.now().minusDays(1));
 
-        when(inquiryRepository.findById(1L)).thenReturn(Optional.of(inquiry));
+        when(inquiryRepository.findForCoordinatorUpdate(1L)).thenReturn(Optional.of(inquiry));
 
         assertThatThrownBy(() -> inquiryService.updateInquiry(1L, request))
                 .isInstanceOf(RuntimeException.class)

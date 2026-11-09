@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { pricingTiers } from '../utils/constants';
 import { useApp } from '../context/AppContext';
 import VendorSuggestions from './VendorSuggestions';
 import api from '../api/axios';
@@ -16,7 +15,7 @@ import InquiryDateCalendar from '../client/InquiryDateCalendar';
  *   venue            String  (required)
  *   venueId          Long
  *   venueDetails     String  (JSON-serialised, NOT an object)
- *   price            Integer (required, >= 0)
+ *   price            Integer (required, > 0)
  *   terms            String  (required)
  *   vendorShortlist  Map<String, List<Long>>  (values MUST be arrays of vendor IDs)
  *   pricingTier      String
@@ -100,7 +99,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     setLoading(true);
     setError('');
 
-    fetchAvailableVenues(inquiry.eventDate, inquiry.expectedAttendees, inquiry.endDate)
+    fetchAvailableVenues(inquiry.eventDate, inquiry.expectedAttendees, inquiry.endDate, inquiry.eventType)
       .then((venueList) => {
         if (cancelled) return;
         setVenues(venueList || []);
@@ -111,21 +110,12 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [inquiry?.eventDate, inquiry?.endDate, inquiry?.expectedAttendees, fetchAvailableVenues]);
+  }, [inquiry?.eventDate, inquiry?.endDate, inquiry?.expectedAttendees, inquiry?.eventType, fetchAvailableVenues]);
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 
-  // The configured venue rate is treated as a daily base rate for proposals.
-  const basePrice = Number(selectedVenue?.hourlyRate) || 0;
-  const tierMultiplier = pricingTiers[formData.pricingTier]?.multiplier || 1;
-  const start = new Date(inquiry?.eventDate);
-  const end = new Date(inquiry?.endDate || inquiry?.eventDate);
-  const days = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
-    ? 1
-    : Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
-  const calculatedPrice = formData.customPrice
-    ? parseInt(formData.customPrice, 10)
-    : Math.round(basePrice * tierMultiplier * days);
+  const quotedPrice = Number(formData.customPrice);
+  const validPrice = Number.isInteger(quotedPrice) && quotedPrice > 0 && quotedPrice <= 2147483647;
 
   const toggleVendorForCategory = (category, vendorId) => {
     setFormData((prev) => {
@@ -144,7 +134,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
   const handlePrev = () => setStep(step - 1);
 
   const handleSubmit = async () => {
-    if (!inquiry) return;
+    if (!inquiry || !validPrice) return;
     setSubmitting(true);
     setError('');
     try {
@@ -167,7 +157,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
               location: selectedVenue.location,
             })
           : null,
-        price: Number.isFinite(calculatedPrice) ? calculatedPrice : 0,
+        price: quotedPrice,
         terms: formData.terms,
         vendorShortlist: shortlist,
         pricingTier: formData.pricingTier,
@@ -223,8 +213,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                 {venues.map(v => (
                   <option key={v.id} value={v.id}>
                     {v.name}
-                    {v.capacity ? ` (Capacity: ${v.capacity}` : ' ('}
-                    {v.hourlyRate ? `, Base Daily Rate: ETB ${Number(v.hourlyRate).toLocaleString()}/day)` : ')'}
+                    {v.capacity ? ` (Capacity: ${v.capacity})` : ''}
                   </option>
                 ))}
               </select>
@@ -236,7 +225,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
             </div>
 
             {inquiry?.eventDate && (
-              <InquiryDateCalendar key={inquiry.id} readOnly start={inquiry.eventDate}
+              <InquiryDateCalendar key={inquiry.id} readOnly eventType={inquiry.eventType} start={inquiry.eventDate}
                 end={inquiry.endDate || ''} attendees={inquiry.expectedAttendees} />
             )}
 
@@ -251,46 +240,21 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                 {selectedVenue.description && (
                   <p className="text-sm"><strong>Notes:</strong> {selectedVenue.description}</p>
                 )}
-                <p className="text-sm">
-                  <strong>Base Daily Rate:</strong>{' '}
-                  {selectedVenue.hourlyRate
-                    ? `ETB ${Number(selectedVenue.hourlyRate).toLocaleString()}/day`
-                    : 'Not set'}
-                </p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Pricing Tier</label>
-              <div className="grid grid-cols-3 gap-2">
-                {Object.entries(pricingTiers).map(([key, tier]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, pricingTier: key })}
-                    className={`p-3 rounded-lg border-2 text-left ${
-                      formData.pricingTier === key
-                        ? 'border-navy bg-navy/10 text-navy'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="font-medium">{tier.name}</div>
-                    <div className="text-xs text-slate-500">{tier.multiplier}x venue rate</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Custom Price (ETB)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Quoted total (ETB)</label>
               <input
                 type="number"
-                placeholder={`Calculated: ETB ${calculatedPrice.toLocaleString()}`}
+                min={1}
+                step={1}
+                required
                 value={formData.customPrice}
                 onChange={(e) => setFormData({ ...formData, customPrice: e.target.value })}
                 className="w-full rounded-lg border-slate-300 shadow-sm focus:border-navy focus:ring-navy"
               />
-              <p className="text-xs text-slate-500 mt-1">Leave empty to use calculated price</p>
+              <p className="text-xs text-slate-500 mt-1">Enter the total you are quoting for the full booking window and agreed services.</p>
             </div>
 
             <div>
@@ -299,7 +263,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                 value={formData.terms}
                 onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
                 rows={3}
-                placeholder="Payment terms, cancellation policy, etc."
+                placeholder="Include payment instructions, due dates, and cancellation terms."
                 className="w-full rounded-lg border-slate-300 shadow-sm focus:border-navy focus:ring-navy"
                 required
               />
@@ -312,7 +276,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
             <button
               onClick={handleNext}
               className="btn-primary"
-              disabled={!selectedVenue || !formData.terms.trim()}
+              disabled={!selectedVenue || !validPrice || !formData.terms.trim()}
             >
               Next: Suggest Vendors →
             </button>

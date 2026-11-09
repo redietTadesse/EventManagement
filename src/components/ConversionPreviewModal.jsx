@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function ConversionPreviewModal({ preview, onConfirm, onCancel, submitting }) {
+export default function ConversionPreviewModal({ preview, onCancel }) {
   const [expandedCategory, setExpandedCategory] = useState(null);
 
   if (!preview) return null;
@@ -13,7 +13,7 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
       <div className="bg-slate-900 text-slate-100 rounded-2xl shadow-2xl border border-slate-800 max-w-3xl w-full max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-slate-800">
           <h2 className="text-lg font-semibold text-slate-100">
-            Ready to convert: {eventType}
+            Booking preview: {eventType}
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             {eventDate} · {expectedAttendees} attendees · {categories.length} categories
@@ -156,18 +156,9 @@ export default function ConversionPreviewModal({ preview, onConfirm, onCancel, s
           <button
             type="button"
             onClick={onCancel}
-            disabled={submitting}
             className="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg disabled:opacity-50"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-500 disabled:opacity-50"
-          >
-            {submitting ? 'Converting…' : 'Confirm and Convert'}
+            Close preview
           </button>
         </div>
       </div>

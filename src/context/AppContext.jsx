@@ -275,23 +275,6 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  const convertInquiryToEvent = useCallback(async (inquiryId, eventData) => {
-    try {
-      const res = await api.post(`/inquiries/${inquiryId}/convert`, eventData);
-      fetchInquiries().catch((refreshError) => {
-        console.warn('Event was created, but inquiries could not be refreshed.', refreshError);
-      });
-      showToast('Event created successfully', 'success');
-      return res.data;
-    } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || 'Failed to convert inquiry to event';
-      console.error('Convert error:', err);
-      console.error('Error response:', err.response?.data);
-      showToast(msg, 'error', 5000, true);
-      throw err;
-    }
-  }, [fetchInquiries, showToast]);
-
   // ===== ASSIGNMENTS =====
 
   const fetchAssignmentsForEvent = useCallback(async (eventId) => {
@@ -370,8 +353,8 @@ export const AppProvider = ({ children }) => {
 
   // ===== VENUES =====
 
-  const fetchAvailableVenues = useCallback(async (date, attendees, endDate) => {
-    const res = await api.get('/venues/available', { params: { date, attendees, endDate } });
+  const fetchAvailableVenues = useCallback(async (date, attendees, endDate, eventType) => {
+    const res = await api.get('/venues/available', { params: { date, attendees, endDate, eventType } });
     return res.data;
   }, []);
 
@@ -523,7 +506,7 @@ export const AppProvider = ({ children }) => {
     login, registerClient, logout,
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus, fetchMyVendorProfile,
     fetchInquiries, fetchMyInquiries, fetchInquiryById, downloadInquiryQuote, createInquiry, updateInquiry,
-    sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion, convertInquiryToEvent,
+    sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion,
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, manuallyAssignForEvent, fetchOpenAssignments,
     fetchMyAssignments, fetchMyAssignment, rateAssignment,
     fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,

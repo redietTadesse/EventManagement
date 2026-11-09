@@ -19,7 +19,8 @@ public final class CategoryUtils {
             "exhibition", List.of("venue", "booth_setup", "security", "cleaning", "exhibitors"),
             "concert", List.of("venue", "stage_setup", "av", "security", "artists"),
             "gala", List.of("venue", "catering", "photography", "music", "security"),
-            "seminar", List.of("venue", "av", "catering")
+            "seminar", List.of("venue", "av", "catering"),
+            "meeting", List.of("venue", "av", "catering")
     );
 
     private static final Map<String, String> CATEGORY_ALIASES = Map.of(

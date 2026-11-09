@@ -89,6 +89,7 @@ class EventLifecycleApiIntegrationTest {
                 .anySatisfy(item -> assertThat(item.path("username").asText()).isEqualTo(username));
         call(POST, path, admin, payload, 409);
     }
+    @Autowired private com.aicc.eventmanagement.services.InquiryService inquiryService;
     @Autowired private ObjectMapper json;
     @Autowired private JwtUtils jwt;
     @Autowired private JdbcTemplate jdbc;
@@ -370,16 +371,16 @@ class EventLifecycleApiIntegrationTest {
         vendor("Security", "security", 4.0, date.plusYears(1));
         long first = acceptedInquiry(), second = acceptedInquiry();
         long eventCount = events.count(), taskCount = tasks.count(), offerCount = assignments.count();
+        var receipts = Map.of(first, signAndUpload(first), second, signAndUpload(second));
         var executor = Executors.newFixedThreadPool(2);
         var start = new CountDownLatch(1);
         try {
             List<Future<MvcResult>> attempts = List.of(first, second).stream().map(inquiry -> executor.submit(() -> {
                 start.await();
-                return http.perform(MockMvcRequestBuilders.post("/api/v1/inquiries/{id}/convert", inquiry)
+                return http.perform(MockMvcRequestBuilders.post("/api/v1/inquiries/{id}/booking-agreement/receipt/verify", inquiry)
                         .header("Authorization", "Bearer " + jwt.generateJwtToken(coordinator.getUsername(), coordinator.getRole().name()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsBytes(Map.of("name", "Concurrent event " + inquiry,
-                                "venue", venue.getName(), "venueId", venue.getId())))).andReturn();
+                        .content(json.writeValueAsBytes(Map.of("receiptUploadedAt", receipts.get(inquiry))))).andReturn();
             })).toList();
             start.countDown();
             MvcResult firstResult = attempts.get(0).get(20, TimeUnit.SECONDS);
@@ -414,19 +415,19 @@ class EventLifecycleApiIntegrationTest {
         call(PATCH, "/inquiries/" + inquiry + "/reject", client, null, 200);
         call(PUT, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 400);
         call(PATCH, "/inquiries/" + inquiry + "/accept", client, null, 400);
-        assertThat(convert(inquiry, 400).path("code").asText()).isEqualTo("INVALID_STATE");
+        call(POST, "/inquiries/" + inquiry + "/convert", coordinator, Map.of("name", "Rejected event"), 400);
         assertThat(events.findByInquiryId(inquiry)).isEmpty();
         assertThat(call(GET, "/inquiries/" + inquiry, client, null, 200).path("status").asText()).isEqualTo("PROPOSAL_REJECTED");
     }
 
     @Test
-    void emptySelectionsUseInquiryDefaultsAndPreserveProposalAndConversionCategories() throws Exception {
+    void emptySelectionsStayEmptyUntilTheClientSelectsServices() throws Exception {
         vendor("Fallback AV", "av", 4.0, date.plusYears(1));
         JsonNode inquiry = call(POST, "/inquiries", client, Map.of(
                 "clientId", client.getId(), "clientName", client.getFullName(), "eventType", "conference",
                 "eventDate", date.toString(), "expectedAttendees", 150, "requestedCategories", List.of()), 201);
-        assertThat(nodes(inquiry.path("requestedCategories")).stream().map(JsonNode::asText))
-                .containsExactly("venue", "av", "catering", "security", "registration");
+        assertThat(inquiry.path("requestedCategories").isArray()).isTrue();
+        assertThat(nodes(inquiry.path("requestedCategories"))).isEmpty();
 
         String path = "/inquiries/" + inquiry.path("id").asLong();
         var proposalWithEmptySelection = new java.util.HashMap<>(proposal());
@@ -435,8 +436,7 @@ class EventLifecycleApiIntegrationTest {
         assertThat(sent.path("proposal").path("categories")).isEqualTo(inquiry.path("requestedCategories"));
 
         call(PATCH, path + "/accept", client, Map.of("categories", List.of("av")), 200);
-        JsonNode converted = call(POST, path + "/convert", coordinator,
-                Map.of("name", "Category fallback event", "categories", List.of()), 200);
+        JsonNode converted = convert(inquiry.path("id").asLong(), 200);
         assertThat(nodes(offers(converted.path("id").asLong())).stream()
                 .map(offer -> offer.path("serviceCategory").asText())).containsExactly("av");
     }
@@ -502,9 +502,8 @@ class EventLifecycleApiIntegrationTest {
         vendor("Linked AV", "av", 4.0, date.plusYears(1));
         long firstEvent = convert(acceptedInquiry(), 200).path("id").asLong();
         vendor("Other event AV", "av", 4.0, date.plusYears(1));
-        long secondInquiry = acceptedInquiry();
-        long secondEvent = call(POST, "/inquiries/" + secondInquiry + "/convert", coordinator,
-                Map.of("name", "Second issue event"), 200).path("id").asLong();
+        venue = venues.save(Venue.builder().name("Second issue hall " + run).capacity(300).active(true).build());
+        long secondEvent = convert(acceptedInquiry(), 200).path("id").asLong();
         long otherAssignment = currentOffer(secondEvent, "av").path("id").asLong();
         long otherTask = nodes(checklist(secondEvent)).get(0).path("id").asLong();
         String path = "/events/" + firstEvent + "/issues";
@@ -563,7 +562,9 @@ class EventLifecycleApiIntegrationTest {
         call(PUT, ownerPath, admin, handover, 409);
         call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 200);
         call(PATCH, "/inquiries/" + inquiry + "/accept", client, null, 200);
-        long event = convert(inquiry, 200).path("id").asLong();
+        String receipt = signAndUpload(inquiry, replacement);
+        long event = call(POST, agreementPath(inquiry) + "/receipt/verify", replacement,
+                Map.of("receiptUploadedAt", receipt), 200).path("id").asLong();
         assertThat(call(GET, "/events/" + event, client, null, 200).path("coordinator").path("id").asLong())
                 .isEqualTo(replacement.getId());
         assertThat(call(GET, "/inquiries/" + inquiry, client, null, 200).path("coordinator").path("id").asLong())
@@ -626,8 +627,10 @@ class EventLifecycleApiIntegrationTest {
         long inquiry = acceptedInquiry();
         jdbc.update("DELETE FROM coordinator_assignment_history WHERE inquiry_id = ?", inquiry);
         jdbc.update("UPDATE inquiries SET coordinator_id = NULL, coordinator_version = 0 WHERE id = ?", inquiry);
-        long event = call(POST, "/inquiries/" + inquiry + "/convert", admin,
-                Map.of("name", "Legacy unassigned event"), 200).path("id").asLong();
+        // Create a historical fixture that predates contract and receipt verification.
+        var legacyRequest = new com.aicc.eventmanagement.payload.ConvertToEventRequest();
+        legacyRequest.setName("Legacy unassigned event");
+        long event = inquiryService.convertToEvent(inquiry, legacyRequest).getId();
         JsonNode offer = currentOffer(event, "av");
         respond(offer, supplier.user(), "ACCEPTED");
         String issuePath = "/events/" + event + "/issues";
@@ -677,7 +680,8 @@ class EventLifecycleApiIntegrationTest {
         JsonNode sent = call(POST, path + "/proposal", coordinator, proposal(), 200);
         assertThat(sent.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
         call(PATCH, path + "/accept", client, null, 200);
-        JsonNode event = call(POST, path + "/convert", converter, Map.of("name", "First handler event"), 200);
+        call(GET, path + "/booking-agreement", converter, null, 403);
+        JsonNode event = convert(inquiry, 200);
         assertThat(event.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
         assertThat(nodes(call(GET, path + "/coordinator", coordinator, null, 200).path("history"))).hasSize(1);
     }
@@ -748,8 +752,93 @@ class EventLifecycleApiIntegrationTest {
     }
 
     private JsonNode convert(long inquiry, int expectedStatus) throws Exception {
-        return call(POST, "/inquiries/" + inquiry + "/convert", coordinator,
-                Map.of("name", "Lifecycle event " + run, "venueId", venue.getId(), "venue", venue.getName()), expectedStatus);
+        String receipt = signAndUpload(inquiry);
+        return call(POST, agreementPath(inquiry) + "/receipt/verify", coordinator,
+                Map.of("receiptUploadedAt", receipt), expectedStatus);
+    }
+
+    private String agreementPath(long inquiry) { return "/inquiries/" + inquiry + "/booking-agreement"; }
+
+    private String signAndUpload(long inquiry) throws Exception {
+        return signAndUpload(inquiry, coordinator);
+    }
+
+    private String signAndUpload(long inquiry, User assignedCoordinator) throws Exception {
+        String path = agreementPath(inquiry);
+        String revision = call(GET, path, client, null, 200).path("revision").asText();
+        call(POST, path + "/signature", client, Map.of("name", client.getFullName(), "revision", revision, "consent", true), 200);
+        call(POST, path + "/signature", assignedCoordinator,
+                Map.of("name", assignedCoordinator.getFullName(), "revision", revision, "consent", true), 200);
+        return uploadReceipt(inquiry, 200).path("receiptUploadedAt").asText();
+    }
+
+    private JsonNode uploadReceipt(long inquiry, int expected) throws Exception {
+        var file = new org.springframework.mock.web.MockMultipartFile("receipt", "receipt.pdf", "application/pdf",
+                "%PDF-1.4 test fixture".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var result = http.perform(MockMvcRequestBuilders.multipart("/api/v1" + agreementPath(inquiry) + "/receipt")
+                .file(file).header("Authorization", "Bearer " + jwt.generateJwtToken(client.getUsername(), "CLIENT")))
+                .andExpect(status().is(expected)).andReturn();
+        return json.readTree(result.getResponse().getContentAsByteArray());
+    }
+
+    @Test
+    void onlyTheAssignedCoordinatorCanBookAfterBothSignAndPaymentIsReviewed() throws Exception {
+        long inquiry = acceptedInquiry();
+        String path = agreementPath(inquiry);
+        User outsider = user("other-coordinator", Role.COORDINATOR);
+        User admin = user("booking-admin", Role.ADMIN);
+        assertThat(call(POST, "/inquiries/" + inquiry + "/convert", coordinator, Map.of("name", "Bypass"), 400)
+                .path("code").asText()).isEqualTo("BOOKING_AGREEMENT_REQUIRED");
+        call(PATCH, "/inquiries/" + inquiry + "/status?status=EVENT_CREATED", coordinator, null, 400);
+        uploadReceipt(inquiry, 400);
+        assertThat(bookings.findByVenueId(venue.getId())).isEmpty();
+
+        JsonNode draft = call(GET, path, client, null, 200);
+        assertThat(draft.path("terms").path("totalEtb").asInt()).isEqualTo(120000);
+        String revision = draft.path("revision").asText();
+        call(POST, path + "/signature", client, Map.of("name", "Client", "revision", "outdated", "consent", true), 400);
+        call(POST, path + "/signature", client, Map.of("name", "Client", "revision", revision, "consent", true), 200);
+        uploadReceipt(inquiry, 400);
+        call(POST, path + "/signature", outsider, Map.of("name", "Other", "revision", revision, "consent", true), 403);
+        call(POST, path + "/signature", coordinator, Map.of("name", "Coordinator", "revision", revision, "consent", true), 200);
+        JsonNode uploaded = uploadReceipt(inquiry, 200);
+        var verification = Map.of("receiptUploadedAt", uploaded.path("receiptUploadedAt").asText());
+        call(POST, path + "/receipt/verify", outsider, verification, 403);
+        call(POST, path + "/receipt/verify", admin, verification, 403);
+        assertThat(bookings.findByVenueId(venue.getId())).isEmpty();
+        call(POST, path + "/receipt/reject", coordinator, Map.of("reason", "Amount not visible", "receiptUploadedAt", uploaded.path("receiptUploadedAt").asText()), 200);
+        call(POST, path + "/receipt/verify", coordinator, verification, 400);
+        JsonNode replacement = uploadReceipt(inquiry, 200);
+        call(POST, path + "/receipt/verify", coordinator, verification, 400);
+        call(POST, path + "/receipt/verify", coordinator,
+                Map.of("receiptUploadedAt", replacement.path("receiptUploadedAt").asText()), 200);
+        assertThat(bookings.findByVenueId(venue.getId())).hasSize(4);
+        assertThat(call(GET, path, client, null, 200).path("state").asText()).isEqualTo("BOOKED");
+
+    }
+
+    @Test
+    void exhibitionAndMeetingWindowsAreUsedForTheContractAndEveryBookedDay() throws Exception {
+        date = LocalDate.now().plusDays(14);
+        for (String type : List.of("exhibition", "meeting")) {
+            int venueBuffer = type.equals("meeting") ? 2 : 0;
+            Venue hall = venues.save(Venue.builder().name(type + " hall " + run).capacity(300)
+                    .setupBufferDays(venueBuffer).teardownBufferDays(venueBuffer).active(true).build());
+            long inquiry = call(POST, "/inquiries", client, Map.of("clientId", client.getId(),
+                    "clientName", client.getFullName(), "eventType", type, "eventDate", date.toString(),
+                    "expectedAttendees", 100, "requestedCategories", List.of("venue")), 201).path("id").asLong();
+            call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, Map.of("venue", hall.getName(),
+                    "venueId", hall.getId(), "price", 50000, "terms", "Full window", "categories", List.of("venue")), 200);
+            call(PATCH, "/inquiries/" + inquiry + "/accept", client, null, 200);
+            JsonNode terms = call(GET, agreementPath(inquiry), client, null, 200).path("terms");
+            LocalDate from = type.equals("meeting") ? date.minusDays(1) : date;
+            int days = type.equals("meeting") ? 3 : 7;
+            assertThat(terms.path("bookedFrom").asText()).isEqualTo(from.toString());
+            assertThat(terms.path("bookedThrough").asText()).isEqualTo(from.plusDays(days - 1).toString());
+            convert(inquiry, 200);
+            assertThat(bookings.findByVenueId(hall.getId())).extracting(VenueBooking::getBookingDate)
+                    .containsExactlyInAnyOrderElementsOf(from.datesUntil(from.plusDays(days)).toList());
+        }
     }
 
     private void respond(JsonNode offer, User actor, String response) throws Exception {
