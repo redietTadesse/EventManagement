@@ -20,12 +20,13 @@ public class SendProposalRequest {
     @NotBlank(message = "Venue is required")
     private String venue;
 
+    @NotNull(message = "Select a venue from the availability list")
     private Long venueId;
 
     private String venueDetails;
 
     @NotNull(message = "Price is required")
-    @Min(value = 0, message = "Price must be positive")
+    @Min(value = 1, message = "Price must be positive")
     private Integer price;
 
     @NotBlank(message = "Terms and conditions are required")

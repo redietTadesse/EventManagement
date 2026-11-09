@@ -251,7 +251,7 @@ public class VendorService {
         String stored = event.getRequiredCategories();
         List<String> selected = stored != null && !stored.isBlank()
                 ? CategoryUtils.split(stored)
-                : CategoryUtils.categoriesForEventType(event.getInquiry().getEventType());
+                : List.of();
         return CategoryUtils.externalVendorCategories(event.getInquiry().getEventType(), selected);
     }
 
@@ -305,6 +305,13 @@ public class VendorService {
     }
 
 
+
+    @Transactional(readOnly = true)
+    public List<LocalDate> getBookedDates(Long vendorId) {
+        getVendorById(vendorId);
+        return bookedDateRepository.findByVendorId(vendorId).stream()
+                .map(VendorBookedDate::getBookedDate).sorted().toList();
+    }
 
     @Transactional
     public void addBookedDate(Long vendorId, LocalDate date) {

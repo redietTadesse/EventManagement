@@ -9,7 +9,7 @@ export default function ClientInquiries() {
   const { state: { currentUser } } = useApp();
   const { data: inquiries, loading, error, reload } = useApiResource(currentUser?.id ? `/inquiries/client/${currentUser.id}` : null);
 
-  const myInquiries = inquiries.filter(i => i.clientId === currentUser?.id);
+  const myInquiries = inquiries.filter(i => String(i.clientId) === String(currentUser?.id));
 
   return (
     <Layout title="My Inquiries">

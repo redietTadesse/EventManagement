@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
+import InquiryDateCalendar from './InquiryDateCalendar';
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
@@ -66,17 +68,21 @@ export default function NewInquiry() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.eventDate || (form.endDate && form.endDate < form.eventDate)) {
+      setError('Select a start date and an end date on or after it.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
-      await createInquiry({
+      const inquiry = await createInquiry({
         clientId: currentUser?.id,
         clientName: currentUser?.name || currentUser?.fullName,
         ...form,
         requestedCategories: form.requestedCategories,
         expectedAttendees: Number(form.expectedAttendees),
       });
-      navigate('/client/dashboard');
+      navigate(`/client/inquiries/${inquiry.id}`, { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit');
     } finally {
@@ -94,11 +100,15 @@ export default function NewInquiry() {
 
   return (
     <Layout title="New Inquiry">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">New Inquiry</h1>
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6">
+      <div className="mx-auto max-w-3xl">
+        <PageHeader eyebrow="Client workspace" title="Plan an event"
+          subtitle="Tell your coordinator what you need so they can prepare a proposal."
+          action={<Link className="btn-outline" to="/client/inquiries">My inquiries</Link>} />
+        <form onSubmit={handleSubmit} className="surface p-5 sm:p-7">
+          <h2 className="form-section-title">Event details</h2>
+          <p className="form-section-note">Choose the event type and estimated attendance to check venue availability.</p>
           {error && (
-            <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">
+            <div role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
               {error}
             </div>
           )}
@@ -114,39 +124,14 @@ export default function NewInquiry() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             >
               <option value="conference">Conference</option>
+              <option value="meeting">Meeting</option>
+              <option value="exhibition">Exhibition</option>
               <option value="wedding">Wedding</option>
               <option value="trade_show">Trade Show</option>
               <option value="concert">Concert</option>
               <option value="gala">Gala</option>
               <option value="seminar">Seminar</option>
             </select>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event Start Date
-            </label>
-            <input
-              type="date"
-              name="eventDate"
-              value={form.eventDate}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-              required
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event End Date (Optional - for multi-day events)
-            </label>
-            <input
-              type="date"
-              name="endDate"
-              value={form.endDate || ''}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-            />
           </div>
 
           <div className="mb-4">
@@ -163,6 +148,12 @@ export default function NewInquiry() {
               min="1"
             />
           </div>
+
+          <p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-relaxed text-indigo-900">
+            Available dates can be requested by multiple clients. An inquiry does not reserve a venue. The coordinator checks availability again when verifying payment and booking.
+          </p>
+          <InquiryDateCalendar eventType={form.eventType} start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
+            onChange={(eventDate, endDate) => setForm((previous) => ({ ...previous, eventDate, endDate }))} />
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -181,7 +172,7 @@ export default function NewInquiry() {
               ))}
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Pre-selected based on the event type. Uncheck anything you do not need.
+              These are suggestions based on the event type. Clear all boxes if AICC should source no external services.
             </p>
           </div>
 
@@ -202,7 +193,7 @@ export default function NewInquiry() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50"
+            className="btn-primary w-full sm:w-auto"
           >
             {submitting ? 'Submitting...' : 'Submit Inquiry'}
           </button>

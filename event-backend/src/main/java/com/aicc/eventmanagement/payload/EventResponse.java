@@ -20,6 +20,7 @@ public class EventResponse {
     
     private Long id;
     private Long inquiryId;
+    private CoordinatorAssignmentPayload.Person coordinator;
     private String clientName;
     private Integer expectedAttendees;
     private String requirements;
@@ -47,6 +48,7 @@ public class EventResponse {
         return EventResponse.builder()
                 .id(event.getId())
                 .inquiryId(inquiry != null ? inquiry.getId() : null)
+                .coordinator(inquiry == null ? null : CoordinatorAssignmentPayload.Person.from(inquiry.getCoordinator()))
                 .clientName(inquiry != null ? inquiry.getClientName() : null)
                 .expectedAttendees(inquiry != null ? inquiry.getExpectedAttendees() : null)
                 .requirements(inquiry != null ? inquiry.getRequirements() : null)

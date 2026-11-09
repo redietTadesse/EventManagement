@@ -41,6 +41,15 @@ public class EmailService {
     @Value("${app.email.recipient-override:}")
     private String recipientOverride;
 
+    @Value("${app.frontend-url:http://localhost:5173}")
+    private String frontendUrl;
+
+    public void sendWorkflowNotification(NotificationService.EmailRequested notice) {
+        String link = frontendUrl.replaceAll("/+$", "") + notice.path();
+        sendEmail(notice.recipient(), notice.title() + " – AICC",
+                notice.message() + "\n\nOpen in AICC: " + link);
+    }
+
     /**
      * Store of sent emails for testing/demo purposes.
      * In production, this would not exist — emails would be sent directly.

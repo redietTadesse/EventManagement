@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { ROLE_DASHBOARDS } from '../utils/roles';
 import { BuildingOfficeIcon, UserGroupIcon, ClipboardDocumentListIcon, ShieldCheckIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -23,6 +23,7 @@ export default function Login() {
 
   const { login, registerClient } = useApp();
   const navigate = useNavigate();
+  const { state: locationState } = useLocation();
 
   const portalKey = portal?.toLowerCase();
   const portalInfo = PORTAL_LABELS[portalKey];
@@ -38,7 +39,11 @@ export default function Login() {
     setNotice('');
     try {
       const data = await login(form.username, form.password);
-      navigate(ROLE_DASHBOARDS[data?.role] || '/', { replace: true });
+      const dashboard = ROLE_DASHBOARDS[data?.role];
+      const rolePrefix = dashboard?.slice(0, dashboard.lastIndexOf('/') + 1);
+      const returnTo = locationState?.returnTo;
+      navigate(rolePrefix && typeof returnTo === 'string' && returnTo.startsWith(rolePrefix)
+        ? returnTo : dashboard || '/', { replace: true });
     } catch (err) {
       let errorMsg = 'Login failed. Check your credentials.';
       if (err.response?.data?.message) errorMsg = err.response.data.message;

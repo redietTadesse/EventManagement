@@ -8,6 +8,8 @@ import VendorDecisionHistory from '../components/VendorTrailDrawer';
 import ManualAssignModal from '../components/ManualAssignModal';
 import EventReadinessWidget from '../components/EventReadinessWidget';
 import ChangeDateModal from '../components/ChangeDateModal';
+import EventIssues from '../components/EventIssues';
+import CoordinatorOwnership from '../components/CoordinatorOwnership';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -34,7 +36,7 @@ export default function EventDetail() {
   const [assignmentsError, setAssignmentsError] = useState('');
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [categoriesError, setCategoriesError] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get('tab') === 'issues' ? 'issues' : 'overview');
   const [highlightedCategory, setHighlightedCategory] = useState(null);
   const [vendorReviewVersion, setVendorReviewVersion] = useState(0);
   const [historyCategory, setHistoryCategory] = useState(null);
@@ -195,7 +197,7 @@ useEffect(() => {
       setChecklistLoaded(false);
       setVenueBookings([]);
       setVenueBookingsLoaded(false);
-      setActiveTab('overview');
+      setActiveTab(new URLSearchParams(window.location.search).get('tab') === 'issues' ? 'issues' : 'overview');
       setLifecycleFeedback(null);
       setDateFeedback('');
       setVendorFeedback({});
@@ -573,7 +575,7 @@ useEffect(() => {
     && alternativesByCategory[nextAction.category].length === 0;
   const tabs = [
     { id: 'overview', label: 'Overview' }, { id: 'vendors', label: 'Vendors' },
-    { id: 'tasks', label: 'Tasks' }, { id: 'history', label: 'History' },
+    { id: 'tasks', label: 'Tasks' }, { id: 'issues', label: 'Issues' }, { id: 'history', label: 'History' },
   ];
 
   return (
@@ -634,6 +636,9 @@ useEffect(() => {
 
         <section role="tabpanel" id={`event-panel-${activeTab}`} aria-labelledby={`event-tab-${activeTab}`} className="space-y-6">
           {activeTab === 'overview' && <>
+            <CoordinatorOwnership key={event.inquiryId} inquiryId={event.inquiryId}
+              closed={['COMPLETED', 'CANCELLED', 'CLOSED'].includes(event.status)}
+              onChanged={(coordinator) => setEvent((previous) => ({ ...previous, coordinator }))} />
             <EventReadinessWidget eventId={id} refreshKey={readinessRefresh} />
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -671,7 +676,12 @@ useEffect(() => {
           </>}
 
           {activeTab === 'vendors' && <>
-            <div><h2 className="font-semibold text-slate-900">Required vendor services</h2><p className="mt-1 text-sm text-slate-500">Each row shows the latest offer for one required external service. Earlier attempts remain in History.</p></div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><h2 className="font-semibold text-slate-900">Required vendor services</h2><p className="mt-1 text-sm text-slate-500">See the latest offer, previous outcomes, and current alternatives for each service.</p></div>
+              <button type="button" className="btn-outline" disabled={refreshingOperations} onClick={handleRefreshOperations}>
+                {refreshingOperations ? 'Refreshing…' : 'Refresh offers and eligibility'}
+              </button>
+            </div>
             {(assignmentsError || categoriesError) && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{assignmentsError || categoriesError} <button type="button" onClick={handleRefreshOperations} className="underline">Retry</button></p>}
             {assignmentsLoaded && categoriesLoaded && <EventVendorTable rows={services} alternatives={alternativesByCategory} excluded={excludedVendorsByCategory} loading={decisionLoadingByCategory} errors={decisionErrorByCategory} highlightedCategory={highlightedCategory} reviewVersion={vendorReviewVersion} canAssign={actions.assign && vendorsKnown && !assignmentSaving && !lifecycleSaving} feedbackByCategory={vendorFeedback} onAssign={row => {
               setSelectedAssignment(row.current || { serviceCategory: row.category });
@@ -897,6 +907,7 @@ useEffect(() => {
               </div>
           </section>}
 
+          {activeTab === 'issues' && <EventIssues key={id} eventId={id} staff assignments={assignments} tasks={checklist} canReport={!['CANCELLED', 'CLOSED', 'COMPLETED'].includes(event.status)} />}
           {activeTab === 'history' && <>
             <AuditTimeline referenceType="EVENT" referenceId={id} refreshKey={historyRefresh} title="Lifecycle history" />
             <VendorDecisionHistory eventId={id} refreshKey={historyRefresh} expandedCategory={historyCategory} />

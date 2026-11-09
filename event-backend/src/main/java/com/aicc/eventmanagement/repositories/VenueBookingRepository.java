@@ -13,6 +13,13 @@ import java.util.Optional;
 @Repository
 public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long> {
 
+    @Query("""
+           select vb.venue.id, count(vb) from VenueBooking vb
+           where vb.status = 'CONFIRMED' and vb.bookingDate between :start and :end
+           group by vb.venue.id
+           """)
+    List<Object[]> countReservedDaysByVenue(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
     @Query("SELECT vb FROM VenueBooking vb WHERE vb.venue.id = :venueId AND vb.bookingDate = :date")
     Optional<VenueBooking> findByVenueAndDate(@Param("venueId") Long venueId, @Param("date") LocalDate date);
 
@@ -37,6 +44,14 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
             @Param("eventId") Long eventId);
 
     List<VenueBooking> findByEventId(Long eventId);
+
+    @Query("""
+           SELECT COUNT(vb) FROM VenueBooking vb
+           WHERE vb.event.id = :eventId AND vb.venue.id = :venueId
+             AND vb.bookingDate BETWEEN :startDate AND :endDate AND vb.status = 'CONFIRMED'
+           """)
+    long countEventBookingsInRange(@Param("eventId") Long eventId, @Param("venueId") Long venueId,
+                                   @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     boolean existsByVenueIdAndBookingDateAndStatus(Long venueId, LocalDate date, VenueBooking.BookingStatus status);
 

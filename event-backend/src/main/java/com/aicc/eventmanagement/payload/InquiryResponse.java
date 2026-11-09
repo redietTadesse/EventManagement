@@ -18,6 +18,7 @@ import java.util.Map;
 public class InquiryResponse {
     private Long id;
     private Long clientId;
+    private CoordinatorAssignmentPayload.Person coordinator;
     private String clientName;
     private String eventType;
     private LocalDate eventDate;
@@ -39,6 +40,7 @@ public class InquiryResponse {
         InquiryResponse response = new InquiryResponse();
         response.setId(inquiry.getId());
         response.setClientId(inquiry.getClientId());
+        response.setCoordinator(CoordinatorAssignmentPayload.Person.from(inquiry.getCoordinator()));
         response.setClientName(inquiry.getClientName());
         response.setEventType(inquiry.getEventType());
         response.setEventDate(inquiry.getEventDate());
@@ -81,6 +83,9 @@ public class InquiryResponse {
 
     private static ProposalResponse parseProposal(String proposalJson) throws JsonProcessingException {
         Map<String, Object> proposalMap = objectMapper.readValue(proposalJson, new TypeReference<>() {});
+        if (proposalMap == null) {
+            return null;
+        }
 
         ProposalResponse proposal = new ProposalResponse();
         proposal.setVenue((String) proposalMap.get("venue"));

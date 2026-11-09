@@ -1,10 +1,87 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
+import AuditTimeline from '../components/AuditTimeline';
 import StatusBadge from '../components/StatusBadge';
+import BookingAgreement from '../components/BookingAgreement';
 import EventTimeline from '../components/EventTimeline';
+import useApiResource from '../hooks/useApiResource';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
+
+const requestProgress = {
+  INQUIRY_SUBMITTED: ['Request received', 'The coordinator will review your dates and requirements before sending a proposal.'],
+  PROPOSAL_SENT: ['Your response is needed', 'Review the proposal below, then accept it, request changes, or decline it.'],
+  PROPOSAL_ACCEPTED: ['Proposal accepted', 'The contract below shows what still needs to happen before the venue can be booked.'],
+  PROPOSAL_REJECTED: ['Proposal declined', 'This request has ended. You can submit a new inquiry if your plans change.'],
+  CLOSED: ['Request closed', 'This request has ended.'],
+  EVENT_CREATED: ['Event created', 'The coordinator is preparing the event. Check your event details for the latest information.'],
+  AWAITING_VENDORS: ['Waiting for vendor confirmations', 'The coordinator is waiting for the required services to be confirmed.'],
+  NEEDS_COORDINATOR: ['The coordinator is resolving an issue', 'Check your event details for the latest information.'],
+  CONFIRMED: ['Event confirmed', 'Open your event for the current venue, dates, and services.'],
+  COMPLETED: ['Event completed', 'Your event details are available in My Events.'],
+  CANCELLED: ['Event cancelled', 'This event has been cancelled.'],
+};
+
+function VendorPreferences({ inquiry, onSaved }) {
+  const path = `/inquiries/${inquiry.id}`;
+  const { data, loading, error, reload } = useApiResource(`${path}/recommended-vendors`);
+  const [selected, setSelected] = useState(inquiry.preferredVendorIds ?? []);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const categories = (data.categories ?? []).filter(({ options }) => options.length);
+
+  const save = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setNotice('');
+    setSaveError('');
+    try {
+      const response = await api.post(`${path}/vendor-preference`, { vendorIds: selected });
+      onSaved(response.data);
+      setNotice('Vendor preferences saved.');
+    } catch (err) {
+      setSaveError(err.response?.data?.message || 'Could not save vendor preferences.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white p-4">
+      <summary className="cursor-pointer font-semibold">Vendor preferences</summary>
+      <p className="my-2 text-sm text-slate-600">Select vendors you would prefer for your event.</p>
+      {loading && <p>Loading vendor options…</p>}
+      {error && <p role="alert">{error} <button onClick={reload} className="underline">Retry</button></p>}
+      {!loading && !error && categories.length === 0 && <p>No vendor options are currently available.</p>}
+      {categories.length > 0 && (
+        <form onSubmit={save} className="space-y-3">
+          {categories.map(({ category, options }) => (
+            <fieldset key={category} disabled={saving}>
+              <legend className="font-medium capitalize">{category.replace(/_/g, ' ')}</legend>
+              {options.map(({ vendorId, companyName }) => (
+                <label key={vendorId} className="flex items-center gap-2 py-1 text-sm">
+                  <input type="checkbox" checked={selected.includes(vendorId)} onChange={(event) => {
+                    const checked = event.target.checked;
+                    setNotice('');
+                    setSelected((ids) => checked ? [...ids, vendorId] : ids.filter((id) => id !== vendorId));
+                  }} />
+                  {companyName}
+                </label>
+              ))}
+            </fieldset>
+          ))}
+          <button type="submit" disabled={saving || selected.length === 0} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save preferences'}
+          </button>
+          {notice && <p role="status">{notice}</p>}
+          {saveError && <p role="alert" className="text-rose-700">{saveError}</p>}
+        </form>
+      )}
+    </details>
+  );
+}
 
 export default function ClientInquiryDetail() {
   const { id } = useParams();
@@ -17,6 +94,7 @@ export default function ClientInquiryDetail() {
   const [error, setError] = useState('');
   const [changeMode, setChangeMode] = useState(false);
   const [changeReason, setChangeReason] = useState('');
+  const [responseNotice, setResponseNotice] = useState('');
 
   const loadInquiry = useCallback(async () => {
     try {
@@ -41,6 +119,7 @@ export default function ClientInquiryDetail() {
   const decideProposal = async (decision) => {
     setSaving(true);
     setError('');
+    setResponseNotice('');
     try {
       const updated = decision === 'accept'
         ? await acceptProposal(id)
@@ -53,6 +132,7 @@ export default function ClientInquiryDetail() {
       if (decision === 'changes') {
         setChangeMode(false);
         setChangeReason('');
+        setResponseNotice('Your change request was sent to the coordinator.');
       }
     } catch (err) {
       setError(err.response?.data?.message || `Failed to ${decision} proposal`);
@@ -75,14 +155,18 @@ export default function ClientInquiryDetail() {
   }
 
   const proposal = inquiry.proposal;
-  const canRespond = inquiry.status === 'PROPOSAL_SENT' && proposal;
-
   // Parse proposal if it's a string
   let parsedProposal = proposal;
   if (typeof proposal === 'string') {
     try { parsedProposal = JSON.parse(proposal); }
     catch { parsedProposal = null; }
   }
+  const event = inquiry.event;
+  const status = event?.status || inquiry.status;
+  const canRespond = status === 'PROPOSAL_SENT' && parsedProposal;
+  const [progressTitle, progressDescription] = status === 'PROPOSAL_SENT' && !parsedProposal
+    ? ['Proposal details unavailable', 'Ask the coordinator to review this proposal before you respond.']
+    : requestProgress[status] || ['Request status', 'Check the details below for the latest information.'];
 
   // Parse the enriched shortlist - handle both new array format and old map format
   let shortlist = [];
@@ -113,25 +197,43 @@ export default function ClientInquiryDetail() {
             <Link to="/client/inquiries" className="text-sm text-indigo-600 hover:text-indigo-700">← My inquiries</Link>
             <h1 className="mt-2 text-2xl font-bold text-gray-800">{inquiry.eventType}</h1>
           </div>
-          <StatusBadge status={inquiry.status} />
+          <StatusBadge status={status} />
         </div>
 
-        {timeline && <EventTimeline timeline={timeline} />}
+        <section aria-labelledby="request-progress" className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+          <h2 id="request-progress" className="font-semibold text-gray-900">{progressTitle}</h2>
+          <p className="mt-1 text-sm text-gray-700">{progressDescription}</p>
+          {canRespond && <a href="#client-proposal" className="btn-primary mt-3">Review proposal</a>}
+          {event?.id && (
+            <Link to={`/client/events/${event.id}`} className="mt-3 inline-block text-sm font-semibold text-indigo-700 hover:underline">
+              View event details →
+            </Link>
+          )}
+        </section>
 
-        {error && <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
+        {responseNotice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{responseNotice}</p>}
+        {error && <div role="alert" className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
+        {timeline && <EventTimeline timeline={timeline} status={status}
+          proposalAccepted={inquiry.status === 'PROPOSAL_ACCEPTED' || inquiry.status === 'EVENT_CREATED' || Boolean(event?.id)} />}
+        {(['PROPOSAL_ACCEPTED', 'EVENT_CREATED'].includes(inquiry.status) || inquiry.event) &&
+          <BookingAgreement key={inquiry.id} inquiryId={inquiry.id} />}
+        {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
+          <VendorPreferences key={inquiry.id} inquiry={inquiry} onSaved={setInquiry} />
+        )}
 
         <section className="space-y-4 rounded-xl bg-white p-6 shadow">
           <h2 className="font-semibold text-gray-800">Inquiry details</h2>
           <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
             <div><p className="text-gray-500">Event date</p><p className="font-medium">{inquiry.eventDate || '—'}</p></div>
             <div><p className="text-gray-500">Attendees</p><p className="font-medium">{inquiry.expectedAttendees ?? '—'}</p></div>
+            <div><p className="text-gray-500">Handled by</p><p className="font-medium">{inquiry.coordinator?.name || 'Coordinator assignment pending'}</p></div>
             <div><p className="text-gray-500">Requested services</p><p className="font-medium">{inquiry.requestedCategories?.join(', ') || '—'}</p></div>
           </div>
           {inquiry.requirements && <div className="text-sm"><p className="text-gray-500">Requirements</p><p className="mt-1 text-gray-800">{inquiry.requirements}</p></div>}
         </section>
 
         {parsedProposal ? (
-          <section className="space-y-5 rounded-xl border border-indigo-100 bg-white p-6 shadow">
+          <section id="client-proposal" tabIndex={-1} className="surface scroll-mt-24 space-y-5 p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">Your proposal</h2>
@@ -177,7 +279,7 @@ export default function ClientInquiryDetail() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-500 mt-3">
-                  Accepting this proposal initiates the booking process. The system will automatically assign the requested vendors and escalate if they are unavailable.
+                  These vendors are suggestions. Vendor offers are sent after the coordinator creates the event.
                 </p>
               </div>
             )}
@@ -218,6 +320,8 @@ export default function ClientInquiryDetail() {
                     <textarea
                       value={changeReason}
                       onChange={(e) => setChangeReason(e.target.value)}
+                      aria-label="Changes you would like"
+                      maxLength={2000}
                       rows={3}
                       className="w-full rounded-xl border-gray-200 p-3 text-sm focus:ring-2 focus:ring-brand-500"
                       placeholder="e.g., Please swap the catering vendor for a different one"
@@ -241,19 +345,11 @@ export default function ClientInquiryDetail() {
                   </>
                 )}
               </div>
-            ) : (
-              <p className="border-t border-gray-100 pt-4 text-sm text-gray-600">
-                {inquiry.status === 'PROPOSAL_ACCEPTED' ? 'You accepted this proposal.' : `Proposal status: ${inquiry.status.replaceAll('_', ' ').toLowerCase()}.`}
-              </p>
-            )}
+            ) : null}
           </section>
-        ) : (
-          <section className="rounded-xl bg-white p-6 text-sm text-gray-600 shadow">
-            {inquiry.status === 'INQUIRY_SUBMITTED'
-              ? 'No proposal has been sent for this inquiry yet.'
-              : 'Proposal details are unavailable for this record. Ask the coordinator to review the proposal before responding.'}
-          </section>
-        )}
+        ) : null}
+        <AuditTimeline key={inquiry.id} referenceType="INQUIRY" referenceId={inquiry.id}
+          refreshKey={inquiry.updatedAt || inquiry.status} title="Inquiry history" expandedByDefault={false} />
       </div>
     </Layout>
   );

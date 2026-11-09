@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.List;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -23,5 +24,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByRole(Role role);
 
-    List<User> findByRoleAndIsActiveTrue(Role role);
+    List<User> findByRoleOrderByUsernameAsc(Role role);
 }
