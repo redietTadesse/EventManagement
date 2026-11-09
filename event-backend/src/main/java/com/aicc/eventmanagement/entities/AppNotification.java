@@ -43,7 +43,7 @@ public class AppNotification {
 
     @Column(name = "reference_id")
     private Long referenceId;
-    
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 }
