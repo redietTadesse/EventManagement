@@ -306,6 +306,13 @@ public class VendorService {
 
 
 
+    @Transactional(readOnly = true)
+    public List<LocalDate> getBookedDates(Long vendorId) {
+        getVendorById(vendorId);
+        return bookedDateRepository.findByVendorId(vendorId).stream()
+                .map(VendorBookedDate::getBookedDate).sorted().toList();
+    }
+
     @Transactional
     public void addBookedDate(Long vendorId, LocalDate date) {
         Vendor vendor = getVendorById(vendorId);
