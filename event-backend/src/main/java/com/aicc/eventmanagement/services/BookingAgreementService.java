@@ -34,6 +34,7 @@ public class BookingAgreementService {
     private final VenueService venues;
     private final InquiryService inquiryService;
     private final ObjectMapper json;
+    private final NotificationService notifications;
 
     public record Terms(String proposalNumber, String client, String eventType, LocalDate eventDate,
                         LocalDate endDate, Integer attendees, Long venueId, String venue, String venueDetails,
@@ -70,6 +71,7 @@ public class BookingAgreementService {
         if (!snapshot.equals(agreement.getTermsSnapshot())) {
             throw error("The signed terms differ from the current proposal. Ask the coordinator to review the booking.");
         }
+        boolean signedBefore = agreement.getClientSignedAt() != null && agreement.getCoordinatorSignedAt() != null;
         if (user.getRole() == Role.CLIENT && agreement.getClientSignedAt() == null) {
             agreement.setClientSignature(name);
             agreement.setClientSignedAt(Instant.now());
@@ -79,6 +81,9 @@ public class BookingAgreementService {
             agreement.setCoordinatorSignedAt(Instant.now());
         }
         agreements.save(agreement);
+        if (!signedBefore && agreement.getClientSignedAt() != null && agreement.getCoordinatorSignedAt() != null) {
+            notifyClient(inquiry, "Contract signed", "Both signatures are recorded. Open the inquiry for payment instructions and receipt upload.");
+        }
         return view(inquiry, user, agreement);
     }
 
@@ -94,6 +99,11 @@ public class BookingAgreementService {
         agreement.setReceipt(contents);
         agreement.setReceiptUploadedAt(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
         agreement.setRejectionReason(null);
+        if (inquiry.getCoordinator() != null) {
+            notifications.notifyUser(inquiry.getCoordinator().getId(),
+                    AppNotification.Destination.COORDINATOR_INQUIRY, id, "Payment receipt ready to review",
+                    "Review the receipt for inquiry #" + id + " before booking the venue.");
+        }
         return view(inquiry, user, agreement);
     }
 
@@ -115,6 +125,7 @@ public class BookingAgreementService {
             throw error("Give the client a reason of up to 1,000 characters.");
         }
         agreement.setRejectionReason(reason.strip());
+        notifyClient(inquiry, "Payment receipt needs replacement", "Open the inquiry to see the coordinator's feedback and upload a replacement.");
         return view(inquiry, user, agreement);
     }
 
@@ -137,7 +148,14 @@ public class BookingAgreementService {
         Event event = inquiryService.convertToEvent(id, request);
         agreement.setVerifiedBy(coordinator.getId());
         agreement.setVerifiedAt(Instant.now());
+        notifyClient(inquiry, "Payment verified and venue booked",
+                "The venue is reserved. Open your inquiry to follow event preparation.");
         return event;
+    }
+
+    private void notifyClient(Inquiry inquiry, String title, String message) {
+        notifications.notifyUser(inquiry.getClientId(), AppNotification.Destination.CLIENT_INQUIRY,
+                inquiry.getId(), title, message);
     }
 
     private View view(Inquiry inquiry, User user, BookingAgreement agreement) {

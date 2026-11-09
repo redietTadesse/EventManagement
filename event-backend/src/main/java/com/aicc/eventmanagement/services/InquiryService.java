@@ -24,7 +24,6 @@ import com.aicc.eventmanagement.payload.UpdateProposalRequest;
 import com.aicc.eventmanagement.payload.VendorPreferenceRequest;
 import com.aicc.eventmanagement.payload.VendorRecommendationResponse;
 import com.aicc.eventmanagement.util.CategoryUtils;
-import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
@@ -59,8 +58,6 @@ public class InquiryService {
     private final EventRepository eventRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
-    private final EmailService emailService;
-    private final UserRepository userRepository;
     private final VenueService venueService;
     private final VendorService vendorService;
     private final VendorRankingService rankingService;
@@ -483,12 +480,6 @@ public class InquiryService {
         eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.INQUIRY_SUBMITTED,
                 EventStatus.PROPOSAL_SENT, String.valueOf(id), userRole));
 
-        try {
-            emailService.sendProposalNotification(inquiry, getUserEmail(inquiry.getClientId()));
-        } catch (Exception e) {
-            log.warn("Failed to send proposal email: {}", e.getMessage());
-        }
-
         return saved;
     }
 
@@ -551,6 +542,7 @@ public class InquiryService {
         Inquiry saved = inquiryRepository.save(inquiry);
         eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT,
                 EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
+        eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, EventStatus.PROPOSAL_SENT, EventStatus.PROPOSAL_REJECTED));
         return saved;
     }
 
@@ -687,10 +679,6 @@ public class InquiryService {
     private Inquiry lockInquiry(Long id) {
         return inquiryRepository.findForCoordinatorUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException("Inquiry", id));
-    }
-
-    private String getUserEmail(Long userId) {
-        return userRepository.findById(userId).map(User::getEmail).orElse("client@example.com");
     }
 
     @Transactional(readOnly = true)

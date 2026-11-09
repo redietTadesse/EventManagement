@@ -11,7 +11,6 @@ const initialState = {
   users: [],
   inquiries: [],
   vendors: [],
-  notifications: [],   // client-side only; no backend endpoint yet
   loading: false,
   error: null,
 };
@@ -26,12 +25,6 @@ const reducer = (state, action) => {
     case 'UPDATE_INQUIRY':
       return { ...state, inquiries: state.inquiries.map(i => i.id === action.payload.id ? action.payload : i) };
     case 'SET_VENDORS': return { ...state, vendors: action.payload };
-    case 'SET_NOTIFICATIONS': return { ...state, notifications: action.payload };
-    case 'ADD_NOTIFICATION': return { ...state, notifications: [action.payload, ...state.notifications] };
-    case 'MARK_NOTIFICATION_READ':
-      return { ...state, notifications: state.notifications.map(n => n.id === action.payload ? { ...n, isRead: true } : n) };
-    case 'MARK_ALL_READ':
-      return { ...state, notifications: state.notifications.map(n => ({ ...n, isRead: true })) };
     case 'SET_LOADING': return { ...state, loading: action.payload };
     case 'SET_ERROR':   return { ...state, error: action.payload };
     case 'CLEAR_ERROR': return { ...state, error: null };
@@ -483,23 +476,6 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  // ===== NOTIFICATIONS (client-side only) =====
-
-  const addNotification = useCallback((notification) => {
-    dispatch({
-      type: 'ADD_NOTIFICATION',
-      payload: { id: Date.now(), isRead: false, createdAt: new Date().toISOString(), ...notification },
-    });
-  }, []);
-
-  const markNotificationRead = useCallback((id) => {
-    dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id });
-  }, []);
-
-  const markAllNotificationsRead = useCallback(() => {
-    dispatch({ type: 'MARK_ALL_READ' });
-  }, []);
-
   const value = {
     state,
     dispatch,
@@ -515,7 +491,6 @@ export const AppProvider = ({ children }) => {
     fetchCoordinatorStats, fetchCoordinatorExceptions,
     fetchEventHistory, fetchInquiryHistory, fetchRecentHistory,
     fetchChecklist, createChecklist, updateChecklist, regenerateChecklist, toggleChecklistItem,
-    addNotification, markNotificationRead, markAllNotificationsRead,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

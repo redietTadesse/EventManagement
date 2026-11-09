@@ -91,6 +91,8 @@ class EventLifecycleApiIntegrationTest {
     }
     @Autowired private com.aicc.eventmanagement.services.InquiryService inquiryService;
     @Autowired private ObjectMapper json;
+    @org.springframework.boot.test.mock.mockito.SpyBean
+    private com.aicc.eventmanagement.services.EmailService workflowEmail;
     @Autowired private JwtUtils jwt;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private UserRepository users;
@@ -779,6 +781,44 @@ class EventLifecycleApiIntegrationTest {
                 .file(file).header("Authorization", "Bearer " + jwt.generateJwtToken(client.getUsername(), "CLIENT")))
                 .andExpect(status().is(expected)).andReturn();
         return json.readTree(result.getResponse().getContentAsByteArray());
+    }
+
+    @Test
+    void workflowNotifiesTheRightAccountsAndPersistsReadState() throws Exception {
+        VendorActor av = vendor("Notification AV", "av", 4.0, date.plusYears(1));
+        VendorActor security = vendor("Notification Security", "security", 4.0, date.plusYears(1));
+        long inquiry = acceptedInquiry();
+        String inquiryLink = "/client/inquiries/" + inquiry;
+        JsonNode clientInbox = call(GET, "/notifications", client, null, 200);
+        assertThat(clientInbox.path("unreadCount").asLong()).isEqualTo(1);
+        JsonNode proposal = clientInbox.path("items").get(0);
+        assertThat(proposal.path("path").asText()).isEqualTo(inquiryLink);
+        assertThat(proposal.path("title").asText()).isEqualTo("Your event proposal is ready");
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000).times(1))
+                .sendWorkflowNotification(org.mockito.ArgumentMatchers.argThat(notice ->
+                        notice.recipient().equals(client.getEmail()) && notice.path().equals(inquiryLink)
+                        && notice.title().equals("Your event proposal is ready")));
+
+        String markRead = "/notifications/" + proposal.path("id").asLong() + "/read";
+        call(PATCH, markRead, coordinator, null, 404);
+        call(PATCH, markRead, client, null, 204);
+        assertThat(call(GET, "/notifications", client, null, 200).path("unreadCount").asLong()).isZero();
+
+        String receipt = signAndUpload(inquiry);
+        assertThat(nodes(call(GET, "/notifications", coordinator, null, 200).path("items")))
+                .anyMatch(item -> item.path("title").asText().equals("Payment receipt ready to review"));
+        long event = call(POST, agreementPath(inquiry) + "/receipt/verify", coordinator,
+                Map.of("receiptUploadedAt", receipt), 200).path("id").asLong();
+        JsonNode offer = currentOffer(event, "av");
+        assertThat(nodes(call(GET, "/notifications", av.user(), null, 200).path("items")))
+                .anyMatch(item -> item.path("path").asText().equals("/vendor/assignments/" + offer.path("id").asLong()));
+        respond(offer, av.user(), "ACCEPTED");
+        respond(currentOffer(event, "security"), security.user(), "ACCEPTED");
+        assertThat(nodes(call(GET, "/notifications", client, null, 200).path("items")))
+                .anyMatch(item -> item.path("title").asText().equals("Your event is confirmed")
+                        && item.path("path").asText().equals("/client/events/" + event));
+        call(PATCH, "/notifications/read-all", client, null, 204);
+        assertThat(call(GET, "/notifications", client, null, 200).path("unreadCount").asLong()).isZero();
     }
 
     @Test
