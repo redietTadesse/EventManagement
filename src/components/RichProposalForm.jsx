@@ -328,12 +328,16 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                   <label className="block text-sm font-medium text-slate-700 mb-3 capitalize">
                     {cat.replace('_', ' ')}
                   </label>
-                  <VendorSuggestions
+                  {cat === 'venue' ? (
+                    <p className="text-sm text-slate-600">The AICC venue is selected in the venue step above.</p>
+                  ) : cat === 'catering' && inquiry?.eventType?.trim().toLowerCase() !== 'wedding' ? (
+                    <p className="text-sm text-slate-600">AICC provides catering in-house for this event. External catering vendors are available for weddings.</p>
+                  ) : <VendorSuggestions
                     category={cat}
                     eventDate={inquiry?.eventDate}
                     selectedVendorIds={chosenIds}
                     onSelectVendor={(vendor) => toggleVendorForCategory(cat, Number(vendor.id))}
-                  />
+                  />}
                 </div>
               );
             })}

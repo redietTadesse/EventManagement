@@ -31,7 +31,10 @@ public class VendorEligibilityService {
         if (!CategoryUtils.isKnownCategory(required) || !required.equals(offered)) {
             return ineligible("VENDOR_CATEGORY_MISMATCH", "Vendor does not offer the requested service category");
         }
+        // Category-only browsing has no event type. Apply the in-house policy
+        // when checking a specific event, rather than hiding all caterers.
         if ("catering".equals(required)
+                && (eventId != null || (eventType != null && !eventType.isBlank()))
                 && !"wedding".equals(CategoryUtils.normalizeEventType(eventType))) {
             return ineligible("INTERNAL_CATERING", "Catering is an in-house service for non-wedding events");
         }

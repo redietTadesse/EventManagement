@@ -216,9 +216,9 @@ export default function ClientInquiryDetail() {
         {timeline && <EventTimeline timeline={timeline} status={status}
           proposalAccepted={inquiry.status === 'PROPOSAL_ACCEPTED' || inquiry.status === 'EVENT_CREATED' || Boolean(event?.id)} />}
         {(['PROPOSAL_ACCEPTED', 'EVENT_CREATED'].includes(inquiry.status) || inquiry.event) &&
-          <BookingAgreement key={inquiry.id} inquiryId={inquiry.id} />}
+          <BookingAgreement key={`booking-${inquiry.id}`} inquiryId={inquiry.id} />}
         {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
-          <VendorPreferences key={inquiry.id} inquiry={inquiry} onSaved={setInquiry} />
+          <VendorPreferences key={`preferences-${inquiry.id}`} inquiry={inquiry} onSaved={setInquiry} />
         )}
 
         <section className="space-y-4 rounded-xl bg-white p-6 shadow">
@@ -348,7 +348,7 @@ export default function ClientInquiryDetail() {
             ) : null}
           </section>
         ) : null}
-        <AuditTimeline key={inquiry.id} referenceType="INQUIRY" referenceId={inquiry.id}
+        <AuditTimeline key={`history-${inquiry.id}`} referenceType="INQUIRY" referenceId={inquiry.id}
           refreshKey={inquiry.updatedAt || inquiry.status} title="Inquiry history" expandedByDefault={false} />
       </div>
     </Layout>

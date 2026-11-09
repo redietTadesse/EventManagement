@@ -68,7 +68,7 @@ export default function PortalSelect() {
           <figure className="relative min-h-50 bg-[#213d3d] sm:min-h-64 lg:min-h-full">
             <img src={import.meta.env.BASE_URL + 'aicc-venue.jpg'} width="1200" height="674"
               alt="Aerial view of the Addis International Convention Center and surrounding city at dusk"
-              fetchPriority="high" className="absolute inset-0 h-full w-full object-cover object-[50%_58%]" />
+              fetchpriority="high" className="absolute inset-0 h-full w-full object-cover object-[50%_58%]" />
             <figcaption className="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-between gap-2 bg-gradient-to-t from-slate-950/90 to-transparent px-5 pb-4 pt-9 text-xs text-white">
               <span className="inline-flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" aria-hidden="true" />Addis Ababa, Ethiopia</span>
               <a href="https://www.ena.et/web/eng/w/eng_6075186" className="text-slate-100 underline underline-offset-2">Photo: Ethiopian News Agency</a>
