@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Link,
   useLocation,
@@ -71,6 +71,7 @@ export default function Login() {
     ? SIGNUP_ALLOWED.includes(portalKey)
     : true;
 
+  useEffect(() => { window.scrollTo(0, 0); }, [portalKey]);
   const handleChange = (e) => {
     setForm((previous) => ({
       ...previous,
@@ -180,7 +181,7 @@ export default function Login() {
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors mb-6"
         >
           <ArrowLeftIcon className="w-4 h-4" />
-          All portals
+          Back to AICC
         </Link>
 
         {/* Authentication card */}

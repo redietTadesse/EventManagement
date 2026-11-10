@@ -1,6 +1,7 @@
 
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { ROLE_DASHBOARDS } from '../utils/roles';
 
 export default function ProtectedRoute({ allowedRoles }) {
   const { state } = useApp();
@@ -33,12 +34,8 @@ export default function ProtectedRoute({ allowedRoles }) {
     );
   }
 
-  // Prevent access to routes belonging to another role.
-  if (
-    allowedRoles &&
-    !allowedRoles.includes(currentUser.role)
-  ) {
-    return <Navigate to="/" replace />;
+  if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
+    return <Navigate to={ROLE_DASHBOARDS[currentUser.role] || '/'} replace />;
   }
 
   // Authenticated and authorized: render protected content.

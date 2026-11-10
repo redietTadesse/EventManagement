@@ -4,7 +4,7 @@ import { ToastProvider } from './context/ToastContext';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
-import PortalSelect from './components/PortalSelect';
+import LandingPage from './components/LandingPage';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
 import VendorApplication from './components/VendorApplication';
@@ -15,6 +15,7 @@ import ClientInquiries from './client/ClientInquiries';
 import ClientInquiryDetail from './client/ClientInquiryDetail';
 import ClientEventHistory from './client/ClientEventHistory';
 import ClientEventDetail from './client/ClientEventDetail';
+import ClientVenues from './client/ClientVenues';
 
 import CoordinatorDashboard from './coordinator/Dashboard';
 import AllInquiries from './coordinator/AllInquiries';
@@ -42,7 +43,7 @@ import AdminVenues from './admin/Venues';
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<PortalSelect />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/login/:portal?" element={<Login />} />
       <Route path="/vendor-application" element={<VendorApplication />} />
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute allowedRoles={['CLIENT']} />}>
         <Route path="/client/dashboard" element={<ClientDashboard />} />
         <Route path="/client/new-inquiry" element={<NewInquiry />} />
+        <Route path="/client/venues" element={<ClientVenues />} />
         <Route path="/client/inquiries" element={<ClientInquiries />} />
         <Route path="/client/inquiries/:id" element={<ClientInquiryDetail />} />
         <Route path="/client/events" element={<ClientEventHistory />} />

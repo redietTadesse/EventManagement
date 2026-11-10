@@ -1,22 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 import InquiryDateCalendar from './InquiryDateCalendar';
+import { EVENT_TYPES, MAX_ATTENDEES, readEventPlan } from '../utils/eventPlan';
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
   const { currentUser, loading } = state;
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    eventType: 'conference',
-    eventDate: '',
-    endDate: '',
-    expectedAttendees: '',
-    requirements: '',
-    requestedCategories: [],
+  const [params] = useSearchParams();
+  const [form, setForm] = useState(() => {
+    const plan = readEventPlan(params);
+    const preferredVenue = params.get('preferredVenue')?.trim().slice(0, 200);
+    return {
+      eventType: plan.eventType,
+      eventDate: plan.date,
+      endDate: plan.endDate,
+      expectedAttendees: plan.attendees,
+      requirements: preferredVenue ? `Preferred venue: ${preferredVenue}` : '',
+      requestedCategories: [],
+    };
   });
   const [availableCategories, setAvailableCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
@@ -114,31 +120,26 @@ export default function NewInquiry() {
           )}
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-event-type" className="block text-sm font-medium text-gray-700 mb-1">
               Event Type
             </label>
             <select
+              id="inquiry-event-type"
               name="eventType"
               value={form.eventType}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             >
-              <option value="conference">Conference</option>
-              <option value="meeting">Meeting</option>
-              <option value="exhibition">Exhibition</option>
-              <option value="wedding">Wedding</option>
-              <option value="trade_show">Trade Show</option>
-              <option value="concert">Concert</option>
-              <option value="gala">Gala</option>
-              <option value="seminar">Seminar</option>
+              {EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-attendees" className="block text-sm font-medium text-gray-700 mb-1">
               Expected Attendees
             </label>
             <input
+              id="inquiry-attendees"
               type="number"
               name="expectedAttendees"
               value={form.expectedAttendees}
@@ -146,6 +147,7 @@ export default function NewInquiry() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               required
               min="1"
+              max={MAX_ATTENDEES}
             />
           </div>
 
@@ -177,10 +179,11 @@ export default function NewInquiry() {
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-requirements" className="block text-sm font-medium text-gray-700 mb-1">
               Requirements
             </label>
             <textarea
+              id="inquiry-requirements"
               name="requirements"
               rows="3"
               value={form.requirements}

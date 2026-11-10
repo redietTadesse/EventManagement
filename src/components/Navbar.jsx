@@ -24,6 +24,7 @@ const navigation = {
     ['/client/dashboard', 'Overview', Squares2X2Icon],
     ['/client/inquiries', 'My inquiries', InboxStackIcon],
     ['/client/events', 'My events', CalendarDaysIcon],
+    ['/client/venues', 'Find a venue', BuildingOffice2Icon],
     ['/client/new-inquiry', 'Plan an event', PlusCircleIcon],
   ],
   COORDINATOR: [
