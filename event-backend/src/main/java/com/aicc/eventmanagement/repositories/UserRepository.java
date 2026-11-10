@@ -5,7 +5,6 @@ import com.aicc.eventmanagement.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.List;
 
@@ -25,4 +24,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByRole(Role role);
 
     List<User> findByRoleOrderByUsernameAsc(Role role);
+
+    List<User> findByRoleAndIsActiveTrue(Role role);
 }

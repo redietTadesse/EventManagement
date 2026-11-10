@@ -53,6 +53,18 @@ public class BookingAgreementService {
         return view(inquiry, user, agreements.findById(id).orElse(null));
     }
 
+    public void prepareForAcceptedProposal(Inquiry inquiry) {
+        if (inquiry == null || inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED || inquiry.getEvent() != null) return;
+        if (agreements.existsById(inquiry.getId())) return;
+
+        BookingAgreement agreement = new BookingAgreement();
+        agreement.setInquiryId(inquiry.getId());
+        agreement.setTermsSnapshot(encode(currentTerms(inquiry)));
+        agreements.save(agreement);
+        notifyClient(inquiry, "Your booking contract is ready",
+                "Open inquiry #" + inquiry.getId() + " to review and sign the contract before uploading payment.");
+    }
+
     public View sign(Long id, String username, String signature, String revision) {
         Inquiry inquiry = lock(id);
         User user = authorized(inquiry, username);

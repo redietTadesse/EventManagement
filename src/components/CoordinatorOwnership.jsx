@@ -50,6 +50,7 @@ export default function CoordinatorOwnership({ inquiryId, onChanged, closed = fa
         Handled by {ownership.coordinator?.name || 'Unassigned'}
         {ownership.coordinator && !ownership.coordinator.active && ' (inactive account)'}
       </p>}
+      {!admin && ownership && !closed && !ownership.coordinator && <p className="text-sm text-slate-600">Claiming makes you the lead coordinator. An administrator can reassign the work if needed.</p>}
       {ownership && !closed && (
         <form onSubmit={save} className="space-y-3">
           {admin && <>

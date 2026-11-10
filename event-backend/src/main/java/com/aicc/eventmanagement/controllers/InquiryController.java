@@ -36,6 +36,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -134,6 +135,7 @@ public class InquiryController {
         return ResponseEntity.ok(responses);
     }
 
+    @Transactional
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update inquiry status")
@@ -146,16 +148,20 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
         recordAccessService.requireInquiryAccess(id, principal.getUsername());
+        recordAccessService.requireInquiryWriteOwnership(id, principal.getUsername());
         Inquiry updated = inquiryService.updateInquiryStatus(id, status, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
+    @Transactional
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update inquiry details")
     public ResponseEntity<InquiryResponse> updateInquiry(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateInquiryRequest request) {
+            @Valid @RequestBody UpdateInquiryRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryWriteOwnership(id, principal.getUsername());
         log.info("Updating inquiry {}", id);
         Inquiry updated = inquiryService.updateInquiry(id, request);
         return ResponseEntity.ok(InquiryResponse.from(updated));
@@ -298,6 +304,7 @@ public class InquiryController {
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
+    @Transactional
     @PutMapping("/{id}/proposal")
     @PreAuthorize("hasRole('COORDINATOR')")
     @Operation(summary = "Update proposal for an inquiry", description = "Coordinator updates an existing proposal (only in PROPOSAL_SENT state)")
@@ -317,6 +324,7 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
 
+        recordAccessService.requireInquiryWriteOwnership(id, principal.getUsername());
         Inquiry updated = inquiryService.updateProposal(id, request, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }

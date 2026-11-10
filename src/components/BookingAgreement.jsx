@@ -43,6 +43,12 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  function messageFromError(err, fallback) {
+    const data = err.response?.data;
+    if (typeof data === 'string' && data.trim()) return data;
+    return data?.message || data?.error || err.message || fallback;
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     api.get(path, { signal: controller.signal })
@@ -50,7 +56,7 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
       .catch(err => {
         if (!controller.signal.aborted) setError(err.response?.status === 403
           ? 'The client and assigned coordinator can access this contract.'
-          : err.response?.data?.message || 'Could not load the booking contract.');
+          : messageFromError(err, 'Could not load the booking contract.'));
       });
     return () => controller.abort();
   }, [path, refresh]);
@@ -66,7 +72,7 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
         setError('The venue could not be booked. The receipt is still on file. Review availability and contact the client before trying again.');
         setRefresh(value => value + 1);
       } else {
-        setError(response?.message || 'Could not complete this step. Please try again.');
+        setError(response?.message || response?.error || messageFromError(err, 'Could not complete this step. Please try again.'));
       }
     }
     finally { setBusy(false); }

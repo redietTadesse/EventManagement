@@ -44,7 +44,8 @@ public class NotificationController {
                 result.getSize(),
                 result.getTotalElements(),
                 result.getTotalPages(),
-                result.hasNext()
+                result.hasNext(),
+                notificationService.unreadCount(userId)
         );
     }
 

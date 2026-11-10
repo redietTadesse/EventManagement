@@ -91,6 +91,10 @@ public class CoordinatorAssignmentService {
             throw new AccessDeniedException("Only active coordinators can pick up inquiries");
         }
         Inquiry inquiry = locked(id);
+        if (inquiry.getCoordinator() != null && !ownedBy(inquiry, user)) {
+            throw new BusinessException("This inquiry is assigned to another coordinator. Ask an administrator to reassign it.",
+                    "COORDINATOR_CONFLICT");
+        }
         if (inquiry.getStatus() == EventStatus.INQUIRY_SUBMITTED && inquiry.getCoordinator() == null) {
             change(inquiry, user, user, "Coordinator picked up the inquiry by sending its first proposal");
         }

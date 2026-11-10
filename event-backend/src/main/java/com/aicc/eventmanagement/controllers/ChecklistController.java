@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,6 +37,7 @@ public class ChecklistController {
     private final ChecklistService checklistService;
     private final RecordAccessService recordAccessService;
 
+    @Transactional
     @PostMapping
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Create a checklist item", description = "Creates a new checklist item for an event")
@@ -46,7 +48,9 @@ public class ChecklistController {
             @ApiResponse(responseCode = "401", description = "Unauthorized"),
             @ApiResponse(responseCode = "403", description = "Forbidden")
     })
-    public ResponseEntity<ChecklistResponse> createChecklist(@Valid @RequestBody CreateChecklistRequest request) {
+    public ResponseEntity<ChecklistResponse> createChecklist(@Valid @RequestBody CreateChecklistRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventWriteOwnership(request.getEventId(), principal.getUsername());
         log.info("Creating checklist item for event: {}", request.getEventId());
         Checklist created = checklistService.createChecklist(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ChecklistResponse.from(created));
@@ -67,10 +71,13 @@ public class ChecklistController {
         return ResponseEntity.ok(responses);
     }
 
+    @Transactional
     @PostMapping("/event/{eventId}/generate")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Add missing template tasks without changing existing checklist work")
-    public ResponseEntity<List<ChecklistResponse>> generateMissingTemplateTasks(@PathVariable Long eventId) {
+    public ResponseEntity<List<ChecklistResponse>> generateMissingTemplateTasks(@PathVariable Long eventId,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireEventWriteOwnership(eventId, principal.getUsername());
         return ResponseEntity.ok(checklistService.generateMissingTemplateTasks(eventId).stream()
                 .map(ChecklistResponse::from)
                 .toList());
@@ -88,6 +95,7 @@ public class ChecklistController {
         return ResponseEntity.ok(ChecklistResponse.from(checklist));
     }
 
+    @Transactional
     @PatchMapping("/{id}/complete")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'VENDOR')")
     @Operation(summary = "Mark checklist item as complete")
@@ -95,26 +103,33 @@ public class ChecklistController {
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
         recordAccessService.requireChecklistAccess(id, principal.getUsername(), true);
+        recordAccessService.requireChecklistWriteOwnership(id, principal.getUsername());
         log.info("Marking checklist item {} as complete", id);
         Checklist updated = checklistService.markAsComplete(id);
         return ResponseEntity.ok(ChecklistResponse.from(updated));
     }
 
+    @Transactional
     @PatchMapping("/{id}/incomplete")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Mark checklist item as incomplete")
-    public ResponseEntity<ChecklistResponse> markAsIncomplete(@PathVariable Long id) {
+    public ResponseEntity<ChecklistResponse> markAsIncomplete(@PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireChecklistWriteOwnership(id, principal.getUsername());
         log.info("Marking checklist item {} as incomplete", id);
         Checklist updated = checklistService.markAsIncomplete(id);
         return ResponseEntity.ok(ChecklistResponse.from(updated));
     }
 
+    @Transactional
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update checklist item")
     public ResponseEntity<ChecklistResponse> updateChecklist(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateChecklistRequest request) {
+            @Valid @RequestBody UpdateChecklistRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireChecklistWriteOwnership(id, principal.getUsername());
         log.info("Updating checklist item {}", id);
         Checklist updated = checklistService.updateChecklist(id, request);
         return ResponseEntity.ok(ChecklistResponse.from(updated));

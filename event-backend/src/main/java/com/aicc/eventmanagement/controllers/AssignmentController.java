@@ -1,3 +1,4 @@
+
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.Vendor;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,13 +45,18 @@ public class AssignmentController {
     public ResponseEntity<List<VendorAssignmentResponse>> getAssignmentsByEvent(
             @PathVariable Long eventId,
             @AuthenticationPrincipal UserDetails principal) {
+
         recordAccessService.requireEventAccess(eventId, principal.getUsername());
+
         List<VendorAssignment> assignments = vendorService.getAssignmentsByEvent(eventId);
+
         boolean includeDecision = principal.getAuthorities().stream().anyMatch(authority ->
-                authority.getAuthority().equals("ROLE_COORDINATOR") || authority.getAuthority().equals("ROLE_ADMIN"));
+                authority.getAuthority().equals("ROLE_COORDINATOR")
+                        || authority.getAuthority().equals("ROLE_ADMIN"));
+
         return ResponseEntity.ok(assignments.stream()
-            .map(assignment -> VendorAssignmentResponse.from(assignment, includeDecision))
-            .collect(Collectors.toList()));
+                .map(assignment -> VendorAssignmentResponse.from(assignment, includeDecision))
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}")
@@ -58,21 +65,32 @@ public class AssignmentController {
     public ResponseEntity<VendorAssignmentResponse> getAssignmentById(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
+
         recordAccessService.requireAssignmentAccess(id, principal.getUsername());
+
         VendorAssignment assignment = vendorService.getAssignmentById(id);
+
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 
+    @Transactional
     @PostMapping("/event/{eventId}/auto")
     @PreAuthorize("hasRole('COORDINATOR')")
     @Operation(summary = "Auto-assign vendors for an event")
-    public ResponseEntity<List<VendorAssignmentResponse>> autoAssign(@PathVariable Long eventId) {
+    public ResponseEntity<List<VendorAssignmentResponse>> autoAssign(
+            @PathVariable Long eventId,
+            @AuthenticationPrincipal UserDetails principal) {
+
+        recordAccessService.requireEventWriteOwnership(eventId, principal.getUsername());
+
         List<VendorAssignment> assignments = vendorService.autoAssignForEvent(eventId);
+
         return ResponseEntity.ok(assignments.stream()
                 .map(VendorAssignmentResponse::from)
                 .collect(Collectors.toList()));
     }
 
+    @Transactional
     @PostMapping("/event/{eventId}/manual")
     @PreAuthorize("hasRole('COORDINATOR')")
     @Operation(summary = "Manually assign a vendor to an event")
@@ -80,8 +98,13 @@ public class AssignmentController {
             @PathVariable Long eventId,
             @Valid @RequestBody ManualAssignRequest request,
             @AuthenticationPrincipal UserDetails principal) {
+
         var actor = userRepository.findByUsername(principal.getUsername())
-                .orElseThrow(() -> new BusinessException("Coordinator account not found", "ACCESS_DENIED"));
+                .orElseThrow(() -> new BusinessException(
+                        "Coordinator account not found", "ACCESS_DENIED"));
+
+        recordAccessService.requireEventWriteOwnership(eventId, principal.getUsername());
+
         VendorAssignment assignment = vendorService.manualAssign(
                 eventId,
                 request.getCategory(),
@@ -91,6 +114,7 @@ public class AssignmentController {
                 actor.getId(),
                 actor.getUsername()
         );
+
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment, true));
     }
 
@@ -114,6 +138,7 @@ public class AssignmentController {
 
         VendorAssignment updated = vendorService.respondToAssignment(
                 id, request.getResponse(), request.getDeclineReason());
+
         return ResponseEntity.ok(VendorAssignmentResponse.from(updated));
     }
 
@@ -125,23 +150,31 @@ public class AssignmentController {
 
         if (hasAnyRole(principal, "COORDINATOR", "ADMIN")) {
             List<VendorAssignment> allOpen = vendorService.getOpenAssignmentsForCoordinator();
+
             return ResponseEntity.ok(allOpen.stream()
                     .map(VendorAssignmentResponse::from)
                     .collect(Collectors.toList()));
         }
 
         Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
-        List<VendorAssignment> openAssignments = vendorService.getEligibleOpenAssignmentsForVendor(vendor.getId());
+
+        List<VendorAssignment> openAssignments =
+                vendorService.getEligibleOpenAssignmentsForVendor(vendor.getId());
+
         return ResponseEntity.ok(openAssignments.stream()
                 .map(VendorAssignmentResponse::from)
                 .collect(Collectors.toList()));
     }
 
     private boolean hasAnyRole(UserDetails principal, String... roles) {
-        if (principal == null) return false;
+        if (principal == null) {
+            return false;
+        }
+
         java.util.Set<String> userRoles = principal.getAuthorities().stream()
                 .map(a -> a.getAuthority().replace("ROLE_", ""))
                 .collect(java.util.stream.Collectors.toSet());
+
         return java.util.Arrays.stream(roles).anyMatch(userRoles::contains);
     }
 
@@ -151,8 +184,12 @@ public class AssignmentController {
     public ResponseEntity<VendorAssignmentResponse> claimAssignment(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
+
         Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
-        VendorAssignment assignment = vendorService.claimOpenAssignment(id, vendor.getId());
+
+        VendorAssignment assignment =
+                vendorService.claimOpenAssignment(id, vendor.getId());
+
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 
@@ -163,14 +200,20 @@ public class AssignmentController {
             @PathVariable Long id,
             @Valid @RequestBody RateAssignmentRequest request,
             @AuthenticationPrincipal UserDetails principal) {
+
         Long clientId = userRepository.findByUsername(principal.getUsername())
                 .orElseThrow(() -> new BusinessException("User not found", "USER_NOT_FOUND"))
                 .getId();
+
         VendorAssignment assignment = vendorService.rateAssignment(
                 id, request.getRating(), request.getComment(), clientId);
+
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 
+    // ============ COORDINATOR FALLBACK ============
+
+    @Transactional
     @PostMapping("/{id}/force-assign")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Coordinator force-assigns a vendor to an open/unclaimed assignment")
@@ -178,8 +221,13 @@ public class AssignmentController {
             @PathVariable Long id,
             @Valid @RequestBody ManualAssignRequest request,
             @AuthenticationPrincipal UserDetails principal) {
+
         var actor = userRepository.findByUsername(principal.getUsername())
-                .orElseThrow(() -> new BusinessException("Coordinator account not found", "ACCESS_DENIED"));
+                .orElseThrow(() -> new BusinessException(
+                        "Coordinator account not found", "ACCESS_DENIED"));
+
+        recordAccessService.requireAssignmentWriteOwnership(id, principal.getUsername());
+
         VendorAssignment assignment = vendorService.forceAssignToOpenAssignment(
                 id,
                 request.getVendorId(),
@@ -189,6 +237,7 @@ public class AssignmentController {
                 actor.getId(),
                 actor.getUsername()
         );
+
         return ResponseEntity.ok(VendorAssignmentResponse.from(assignment, true));
     }
 
@@ -199,10 +248,14 @@ public class AssignmentController {
             @AuthenticationPrincipal UserDetails principal) {
 
         Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
+
         if (vendor == null) {
             return ResponseEntity.notFound().build();
         }
-        List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(vendor.getId());
+
+        List<VendorAssignment> assignments =
+                vendorService.getAssignmentsByVendor(vendor.getId());
+
         return ResponseEntity.ok(assignments.stream()
                 .map(VendorAssignmentResponse::from)
                 .collect(Collectors.toList()));
@@ -215,20 +268,25 @@ public class AssignmentController {
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
 
-                Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
-                if (vendor == null) {
-                        return ResponseEntity.notFound().build();
-                }
-                VendorAssignment assignment = vendorService.getAssignmentById(id);
-                if (assignment == null) {
-                        return ResponseEntity.notFound().build();
-                }
-                if (assignment.getVendor() == null
-                                || !assignment.getVendor().getId().equals(vendor.getId())) {
-                        throw new BusinessException(
-                                        "You can only view your own assignments",
-                                        "ACCESS_DENIED");
-                }
-                return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
+        Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
+
+        if (vendor == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        VendorAssignment assignment = vendorService.getAssignmentById(id);
+
+        if (assignment == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (assignment.getVendor() == null
+                || !assignment.getVendor().getId().equals(vendor.getId())) {
+            throw new BusinessException(
+                    "You can only view your own assignments",
+                    "ACCESS_DENIED");
+        }
+
+        return ResponseEntity.ok(VendorAssignmentResponse.from(assignment));
     }
 }
