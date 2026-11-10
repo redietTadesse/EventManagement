@@ -574,11 +574,20 @@ class EventLifecycleApiIntegrationTest {
         users.saveAndFlush(replacement);
         JsonNode reassigned = call(PUT, ownerPath, admin, handover, 200);
         call(PUT, ownerPath, admin, handover, 409);
-        call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 200);
+        call(GET, "/inquiries/" + inquiry, coordinator, null, 200);
+        call(PUT, "/inquiries/" + inquiry, coordinator, Map.of("requirements", "Unauthorized change"), 409);
+        call(PUT, "/inquiries/" + inquiry, replacement, Map.of("requirements", "Reviewed requirements"), 200);
+        call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 409);
+        call(POST, "/inquiries/" + inquiry + "/proposal", replacement, proposal(), 200);
+        call(PUT, "/inquiries/" + inquiry + "/proposal", coordinator, proposal(), 409);
         call(PATCH, "/inquiries/" + inquiry + "/accept", client, null, 200);
         String receipt = signAndUpload(inquiry, replacement);
         long event = call(POST, agreementPath(inquiry) + "/receipt/verify", replacement,
                 Map.of("receiptUploadedAt", receipt), 200).path("id").asLong();
+        call(GET, "/events/" + event, coordinator, null, 200);
+        call(PUT, "/events/" + event + "/date?newDate=" + date.plusDays(5), coordinator, null, 409);
+        call(POST, "/checklists/event/" + event + "/generate", coordinator, null, 409);
+        call(POST, "/assignments/event/" + event + "/auto", coordinator, null, 409);
         assertThat(call(GET, "/events/" + event, client, null, 200).path("coordinator").path("id").asLong())
                 .isEqualTo(replacement.getId());
         assertThat(call(GET, "/inquiries/" + inquiry, client, null, 200).path("coordinator").path("id").asLong())
@@ -593,6 +602,8 @@ class EventLifecycleApiIntegrationTest {
         handover.put("expectedVersion", reassigned.path("version").asLong());
         handover.put("reason", "Lead coordinator returned");
         JsonNode finalOwner = call(PUT, ownerPath, admin, handover, 200);
+        call(POST, "/checklists/event/" + event + "/generate", replacement, null, 409);
+        call(POST, "/checklists/event/" + event + "/generate", coordinator, null, 200);
         assertThat(nodes(finalOwner.path("history"))).hasSize(3);
         assertThat(finalOwner.path("history").get(0).path("changedById").asLong()).isEqualTo(admin.getId());
         JsonNode transferred = nodes(call(GET, "/events/" + event + "/issues", coordinator, null, 200)).get(0);
@@ -679,7 +690,8 @@ class EventLifecycleApiIntegrationTest {
         }
         assertThat(call(POST, issuePath, supplier.user(), report, 201).path("responsible").path("id").asLong())
                 .isEqualTo(lead.getId());
-        call(PATCH, "/events/" + event + "/status?status=CANCELLED", coordinator, null, 200);
+        call(PATCH, "/events/" + event + "/status?status=CANCELLED", coordinator, null, 409);
+        call(PATCH, "/events/" + event + "/status?status=CANCELLED", lead, null, 200);
         call(PUT, ownerPath, admin, Map.of("coordinatorId", coordinator.getId(), "expectedVersion", 1,
                 "reason", "Attempt to move closed work"), 400);
     }
@@ -805,7 +817,7 @@ class EventLifecycleApiIntegrationTest {
         long inquiry = acceptedInquiry();
         String inquiryLink = "/client/inquiries/" + inquiry;
         JsonNode clientInbox = call(GET, "/notifications", client, null, 200);
-        assertThat(clientInbox.path("unreadCount").asLong()).isEqualTo(3);
+        assertThat(clientInbox.path("unreadCount").asLong()).isEqualTo(2);
         JsonNode proposal = nodes(clientInbox.path("items")).stream()
                 .filter(item -> item.path("title").asText().equals("Your event proposal is ready"))
                 .findFirst().orElseThrow();
@@ -819,7 +831,7 @@ class EventLifecycleApiIntegrationTest {
         String markRead = "/notifications/" + proposal.path("id").asLong() + "/read";
         call(PATCH, markRead, coordinator, null, 404);
         call(PATCH, markRead, client, null, 204);
-        assertThat(call(GET, "/notifications", client, null, 200).path("unreadCount").asLong()).isZero();
+        assertThat(call(GET, "/notifications", client, null, 200).path("unreadCount").asLong()).isEqualTo(1);
 
         String receipt = signAndUpload(inquiry);
         assertThat(nodes(call(GET, "/notifications", coordinator, null, 200).path("items")))

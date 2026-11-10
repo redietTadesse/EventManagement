@@ -2,11 +2,12 @@
 package com.aicc.eventmanagement.integration;
 
 import com.aicc.eventmanagement.entities.Inquiry;
+import com.aicc.eventmanagement.entities.Venue;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
-import com.aicc.eventmanagement.repositories.InquiryRepository;
+import com.aicc.eventmanagement.repositories.VenueRepository;
 import com.aicc.eventmanagement.services.InquiryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,12 +32,15 @@ class InquiryFlowIntegrationTest {
     private InquiryService inquiryService;
 
     @Autowired
-    private InquiryRepository inquiryRepository;
+    private VenueRepository venues;
+
+    private Venue venue;
 
     private CreateInquiryRequest createRequest;
 
     @BeforeEach
     void setUp() {
+        venue = venues.save(Venue.builder().name("Integration Hall").capacity(300).active(true).build());
         createRequest = CreateInquiryRequest.builder()
                 .clientId(1L)
                 .clientName("Integration Test Client")
@@ -58,7 +62,8 @@ class InquiryFlowIntegrationTest {
 
         // 2. Send proposal (as coordinator)
         SendProposalRequest proposalRequest = SendProposalRequest.builder()
-                .venue("Main Hall A")
+                .venue(venue.getName())
+                .venueId(venue.getId())
                 .price(150000)
                 .terms("50% deposit required. Full payment 2 weeks before event.")
                 .pricingTier("standard")
@@ -84,7 +89,8 @@ class InquiryFlowIntegrationTest {
         Inquiry created = inquiryService.createInquiry(createRequest);
 
         SendProposalRequest proposalRequest = SendProposalRequest.builder()
-                .venue("Main Hall A")
+                .venue(venue.getName())
+                .venueId(venue.getId())
                 .price(150000)
                 .terms("50% deposit required")
                 .build();
@@ -121,7 +127,7 @@ class InquiryFlowIntegrationTest {
 
         SendProposalRequest proposalRequest = SendProposalRequest.builder()
                 .venue("Ballroom B")
-                .venueId(2L)
+                .venueId(venue.getId())
                 .price(200000)
                 .terms("Full payment required")
                 .pricingTier("premium")
@@ -154,7 +160,8 @@ class InquiryFlowIntegrationTest {
         Inquiry created = inquiryService.createInquiry(inquiry);
 
         SendProposalRequest proposal = SendProposalRequest.builder()
-                .venue("Main Hall A")
+                .venue(venue.getName())
+                .venueId(venue.getId())
                 .price(100000)
                 .terms("Standard")
                 .categories(List.of("av", "catering"))
@@ -199,7 +206,8 @@ class InquiryFlowIntegrationTest {
         Inquiry created = inquiryService.createInquiry(inquiry);
 
         SendProposalRequest proposal = SendProposalRequest.builder()
-                .venue("Main Hall B")
+                .venue(venue.getName())
+                .venueId(venue.getId())
                 .price(90000)
                 .terms("Standard")
                 .categories(List.of("av", "catering", "security"))
