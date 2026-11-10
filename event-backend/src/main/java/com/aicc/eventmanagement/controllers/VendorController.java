@@ -6,13 +6,7 @@ import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.AvailabilityGridResponse;
-import com.aicc.eventmanagement.payload.CreateVendorRequest;
-import com.aicc.eventmanagement.payload.UpdateVendorRequest;
-import com.aicc.eventmanagement.payload.VendorApplyRequest;
-import com.aicc.eventmanagement.payload.VendorApplyResponse;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
-import com.aicc.eventmanagement.payload.VendorPerformanceResponse;
-import com.aicc.eventmanagement.payload.VendorReviewResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.AvailabilityService;
 import com.aicc.eventmanagement.services.ConflictResolutionService;
@@ -24,11 +18,9 @@ import com.aicc.eventmanagement.services.VendorService;
 import com.aicc.eventmanagement.util.CategoryUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -37,7 +29,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -64,10 +55,11 @@ public class VendorController {
 
     @GetMapping("/availability-grid")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Get availability grid for vendors", description = "Returns a 30-day availability grid for all active vendors in a category")
+    @Operation(summary = "Get availability grid for vendors")
     public ResponseEntity<AvailabilityGridResponse> getAvailabilityGrid(
             @RequestParam String category,
             @RequestParam(defaultValue = "30") int daysAhead) {
+
         log.info("Fetching availability grid for category: {}, daysAhead: {}", category, daysAhead);
         return ResponseEntity.ok(availabilityService.getAvailabilityGrid(category, daysAhead));
     }
@@ -90,10 +82,7 @@ public class VendorController {
     @PreAuthorize("hasRole('VENDOR')")
     @Operation(summary = "Get the authenticated vendor's profile")
     public ResponseEntity<Vendor> getMyProfile(@AuthenticationPrincipal UserDetails principal) {
-        Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
-        if (vendor == null) {
-            return ResponseEntity.notFound().build();
-        }
+        Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
         return ResponseEntity.ok(vendor);
     }
 
@@ -102,46 +91,6 @@ public class VendorController {
     @Operation(summary = "Get vendor by ID")
     public ResponseEntity<Vendor> getVendorById(@PathVariable Long id) {
         return ResponseEntity.ok(vendorService.getVendorById(id));
-    }
-
-    @PostMapping("/apply")
-    @Operation(summary = "Public vendor application", description = "Creates an inactive vendor profile for admin review. No authentication required.")
-    public ResponseEntity<VendorApplyResponse> applyAsVendor(@Valid @RequestBody VendorApplyRequest request) {
-        Vendor created = vendorService.applyForOnboarding(request);
-        User user = created.getUserId() != null
-                ? userRepository.findById(created.getUserId()).orElse(null)
-                : null;
-        String username = user != null ? user.getUsername() : null;
-        return ResponseEntity.status(HttpStatus.CREATED).body(new VendorApplyResponse(
-                "Application received. An administrator will review it and activate your account.",
-                created.getCompanyName(),
-                username
-        ));
-    }
-
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create a vendor (admin only)", description = "Creates a User account with role=VENDOR and a linked Vendor profile atomically")
-    public ResponseEntity<Vendor> createVendor(@Valid @RequestBody CreateVendorRequest request) {
-        Vendor created = vendorService.createVendor(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Update a vendor (admin only)")
-    public ResponseEntity<Vendor> updateVendor(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateVendorRequest request) {
-        Vendor updated = vendorService.updateVendor(id, request);
-        return ResponseEntity.ok(updated);
-    }
-
-    @PatchMapping("/{id}/toggle-active")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Activate or deactivate a vendor (admin only)")
-    public ResponseEntity<Vendor> toggleVendorActive(@PathVariable Long id) {
-        return ResponseEntity.ok(vendorService.toggleActive(id));
     }
 
     @GetMapping("/category/{category}")
@@ -173,13 +122,15 @@ public class VendorController {
     public ResponseEntity<List<VendorAssignmentResponse>> getVendorAssignments(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
+
         if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
             throw new BusinessException("You can only view your own assignments", "ACCESS_DENIED");
         }
+
         List<VendorAssignment> assignments = vendorService.getAssignmentsByVendor(id);
-        boolean includeDecisionSnapshots = hasRole(principal, Role.COORDINATOR) || hasRole(principal, Role.ADMIN);
+
         return ResponseEntity.ok(assignments.stream()
-                .map(assignment -> VendorAssignmentResponse.from(assignment, includeDecisionSnapshots))
+                .map(VendorAssignmentResponse::from)
                 .collect(Collectors.toList()));
     }
 
@@ -189,11 +140,15 @@ public class VendorController {
     public ResponseEntity<List<VendorAssignmentResponse>> getPendingAssignments(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails principal) {
+
         if (hasRole(principal, Role.VENDOR) && !isVendorIdMatch(id, principal)) {
             throw new BusinessException("You can only view your own pending assignments", "ACCESS_DENIED");
         }
+
         List<VendorAssignment> assignments = vendorService.getPendingAssignmentsForVendor(id);
-        return ResponseEntity.ok(assignments.stream().map(VendorAssignmentResponse::from).collect(Collectors.toList()));
+        return ResponseEntity.ok(assignments.stream()
+                .map(VendorAssignmentResponse::from)
+                .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/load")
@@ -243,20 +198,6 @@ public class VendorController {
         return ResponseEntity.ok(ratingService.getVendorRatingStats(id));
     }
 
-    @GetMapping("/{id}/performance")
-    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN', 'CLIENT')")
-    @Operation(summary = "Get a vendor's performance profile and recent reviews")
-    public ResponseEntity<VendorPerformanceResponse> getVendorPerformance(@PathVariable Long id) {
-        return ResponseEntity.ok(vendorService.getVendorPerformance(id));
-    }
-
-    @GetMapping("/{id}/reviews")
-    @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Get completed assignment reviews for a vendor")
-    public ResponseEntity<List<VendorReviewResponse>> getVendorReviews(@PathVariable Long id) {
-        return ResponseEntity.ok(vendorService.getVendorReviews(id));
-    }
-
     @GetMapping("/{id}/conflicts")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get conflicts for a vendor on a date")
@@ -279,7 +220,8 @@ public class VendorController {
     @GetMapping("/assignments/{assignmentId}/alternatives")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Find alternative vendors for a declined assignment")
-    public ResponseEntity<List<AlternativeVendor>> getAlternativesForAssignment(@PathVariable Long assignmentId) {
+    public ResponseEntity<List<AlternativeVendor>> getAlternativesForAssignment(
+            @PathVariable Long assignmentId) {
         return ResponseEntity.ok(conflictService.suggestAlternativesForAssignment(assignmentId));
     }
 
@@ -297,17 +239,15 @@ public class VendorController {
     @PostMapping("/recalculate-ratings")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Recalculate ratings for all vendors")
-    public ResponseEntity<Map<String, Object>> recalculateAllRatings() {
-        int updated = ratingService.recalculateAllVendorRatings();
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "updatedCount", updated,
-                "message", "Vendor ratings recalculated successfully. " + updated + " vendors updated."));
+    public ResponseEntity<Void> recalculateAllRatings() {
+        ratingService.recalculateAllVendorRatings();
+        return ResponseEntity.ok().build();
     }
 
     private boolean hasRole(UserDetails principal, Role role) {
         if (principal == null) return false;
-        return principal.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + role.name()));
+        return principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role.name()));
     }
 
     private boolean isVendorIdMatch(Long vendorId, UserDetails principal) {
@@ -315,11 +255,8 @@ public class VendorController {
         try {
             User user = userRepository.findByUsername(principal.getUsername()).orElse(null);
             if (user != null) {
-                Vendor vendor = vendorService.getVendorByUserOptional(principal.getUsername());
-                if (vendor == null) {
-                    return false;
-                }
-                return vendor.getId().equals(vendorId);
+                Vendor vendor = vendorService.getVendorByUser(principal.getUsername());
+                return vendor != null && vendor.getId().equals(vendorId);
             }
         } catch (Exception e) {
             log.debug("Failed to resolve vendor for user: {}", principal.getUsername());

@@ -31,9 +31,9 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
 
     // ADDED THIS METHOD FOR THE CHANGE-IMPACT ANALYSIS
     @Query("""
-           SELECT COUNT(vb) FROM VenueBooking vb 
-           WHERE vb.venue.id = :venueId 
-             AND vb.bookingDate BETWEEN :startDate AND :endDate 
+           SELECT COUNT(vb) FROM VenueBooking vb
+           WHERE vb.venue.id = :venueId
+             AND vb.bookingDate BETWEEN :startDate AND :endDate
              AND vb.status = 'CONFIRMED'
              AND (vb.event IS NULL OR vb.event.id <> :eventId)
            """)

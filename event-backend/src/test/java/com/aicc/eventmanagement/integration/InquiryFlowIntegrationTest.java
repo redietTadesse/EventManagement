@@ -1,12 +1,13 @@
+
 package com.aicc.eventmanagement.integration;
 
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.services.InquiryService;
-import com.aicc.eventmanagement.enums.Role;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,7 @@ class InquiryFlowIntegrationTest {
     void testFullInquiryToProposalFlow() {
         // 1. Create inquiry
         Inquiry created = inquiryService.createInquiry(createRequest);
+
         assertThat(created.getStatus()).isEqualTo(EventStatus.INQUIRY_SUBMITTED);
         assertThat(created.getId()).isNotNull();
 
@@ -62,33 +64,53 @@ class InquiryFlowIntegrationTest {
                 .pricingTier("standard")
                 .build();
 
-        Inquiry withProposal = inquiryService.sendProposal(created.getId(), proposalRequest, Role.COORDINATOR);
+        Inquiry withProposal = inquiryService.sendProposal(
+                created.getId(), proposalRequest, Role.COORDINATOR);
+
         assertThat(withProposal.getStatus()).isEqualTo(EventStatus.PROPOSAL_SENT);
         assertThat(withProposal.getProposal()).isNotNull();
 
         // 3. Accept proposal (as client)
-        Inquiry accepted = inquiryService.acceptProposal(withProposal.getId(), Role.CLIENT);
+        Inquiry accepted = inquiryService.acceptProposal(
+                withProposal.getId(), Role.CLIENT);
+
         assertThat(accepted.getStatus()).isEqualTo(EventStatus.PROPOSAL_ACCEPTED);
     }
 
     @Test
     @DisplayName("Requesting changes keeps the proposal pending; rejection is terminal")
     void testChangeRequestAndTerminalRejection() {
-        // Create and send proposal
+        // 1. Create inquiry and send proposal
         Inquiry created = inquiryService.createInquiry(createRequest);
+
         SendProposalRequest proposalRequest = SendProposalRequest.builder()
                 .venue("Main Hall A")
                 .price(150000)
                 .terms("50% deposit required")
                 .build();
-        Inquiry withProposal = inquiryService.sendProposal(created.getId(), proposalRequest, Role.COORDINATOR);
 
+        Inquiry withProposal = inquiryService.sendProposal(
+                created.getId(), proposalRequest, Role.COORDINATOR);
+
+        // 2. Client requests changes
         Inquiry changeRequested = inquiryService.requestProposalChanges(
-                withProposal.getId(), "Please revise the price", Role.CLIENT);
+                withProposal.getId(),
+                "Please revise the price",
+                Role.CLIENT
+        );
+
         assertThat(changeRequested.getStatus()).isEqualTo(EventStatus.PROPOSAL_SENT);
         assertThat(changeRequested.getRequirements()).contains("Please revise the price");
 
-        Inquiry rejected = inquiryService.rejectProposal(withProposal.getId(), Role.CLIENT);
+        // 3. Client rejects the proposal
+        String rejectionReason = "Price too high for our budget";
+
+        Inquiry rejected = inquiryService.rejectProposal(
+                withProposal.getId(),
+                rejectionReason,
+                Role.CLIENT
+        );
+
         assertThat(rejected.getStatus()).isEqualTo(EventStatus.PROPOSAL_REJECTED);
     }
 
@@ -96,6 +118,7 @@ class InquiryFlowIntegrationTest {
     @DisplayName("Should parse proposal JSON correctly")
     void testProposalJsonStructure() {
         Inquiry created = inquiryService.createInquiry(createRequest);
+
         SendProposalRequest proposalRequest = SendProposalRequest.builder()
                 .venue("Ballroom B")
                 .venueId(2L)
@@ -104,10 +127,12 @@ class InquiryFlowIntegrationTest {
                 .pricingTier("premium")
                 .build();
 
-        Inquiry withProposal = inquiryService.sendProposal(created.getId(), proposalRequest, Role.COORDINATOR);
+        Inquiry withProposal = inquiryService.sendProposal(
+                created.getId(), proposalRequest, Role.COORDINATOR);
 
         // Verify JSON was stored
         String proposalJson = withProposal.getProposal();
+
         assertThat(proposalJson).isNotNull();
         assertThat(proposalJson).contains("Ballroom B");
         assertThat(proposalJson).contains("200000");
@@ -134,19 +159,28 @@ class InquiryFlowIntegrationTest {
                 .terms("Standard")
                 .categories(List.of("av", "catering"))
                 .build();
-        inquiryService.sendProposal(created.getId(), proposal, Role.COORDINATOR);
 
-        inquiryService.acceptProposal(created.getId(), null, Role.CLIENT);
+        inquiryService.sendProposal(
+                created.getId(), proposal, Role.COORDINATOR);
+
+        inquiryService.acceptProposal(
+                created.getId(), null, Role.CLIENT);
 
         var convert = new com.aicc.eventmanagement.payload.ConvertToEventRequest();
         convert.setName("Category Test Event");
+
         var event = inquiryService.convertToEvent(created.getId(), convert);
 
-        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getRequiredCategories()))
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(
+                event.getRequiredCategories()))
                 .containsExactly("av");
-        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getRequiredCategories()))
+
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(
+                event.getRequiredCategories()))
                 .doesNotContain("security", "catering");
-        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(event.getInquiry().getCategories()))
+
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(
+                event.getInquiry().getCategories()))
                 .containsExactlyInAnyOrder("av", "catering");
     }
 
@@ -163,18 +197,24 @@ class InquiryFlowIntegrationTest {
                 .build();
 
         Inquiry created = inquiryService.createInquiry(inquiry);
+
         SendProposalRequest proposal = SendProposalRequest.builder()
                 .venue("Main Hall B")
                 .price(90000)
                 .terms("Standard")
                 .categories(List.of("av", "catering", "security"))
                 .build();
-        inquiryService.sendProposal(created.getId(), proposal, Role.COORDINATOR);
 
-        inquiryService.acceptProposal(created.getId(), List.of("av", "catering"), Role.CLIENT);
+        inquiryService.sendProposal(
+                created.getId(), proposal, Role.COORDINATOR);
+
+        inquiryService.acceptProposal(
+                created.getId(), List.of("av", "catering"), Role.CLIENT);
 
         Inquiry after = inquiryService.getInquiryById(created.getId());
-        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(after.getCategories()))
+
+        assertThat(com.aicc.eventmanagement.util.CategoryUtils.split(
+                after.getCategories()))
                 .containsExactlyInAnyOrder("av", "catering");
     }
 }

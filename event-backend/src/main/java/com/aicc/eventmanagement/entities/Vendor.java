@@ -63,6 +63,11 @@ public class Vendor {
     @Builder.Default
     private boolean isActive = true;
 
+    //  3-Strike Rule Flag for Incidents
+    @Column(name = "flagged_for_deactivation")
+    @Builder.Default
+    private boolean flaggedForDeactivation = false;
+
     @JsonIgnore
     @OneToMany(mappedBy = "vendor", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default

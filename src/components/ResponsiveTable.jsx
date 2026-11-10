@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * ResponsiveTable - A table that transforms into card views on mobile
- * 
+ *
  * @param {Array} columns - Array of column objects { key, label, render?, className? }
  * @param {Array} data - Array of data objects
  * @param {Function} renderRow - Optional custom row renderer

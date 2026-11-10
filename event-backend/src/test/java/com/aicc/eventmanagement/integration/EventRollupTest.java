@@ -1,9 +1,9 @@
 package com.aicc.eventmanagement.integration;
 
 import com.aicc.eventmanagement.entities.Event;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.Vendor;
-import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.SelectionReason;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;

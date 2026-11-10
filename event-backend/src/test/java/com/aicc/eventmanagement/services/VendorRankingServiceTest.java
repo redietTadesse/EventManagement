@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Vendor;
+import com.aicc.eventmanagement.repositories.PostEventReportRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -31,6 +34,7 @@ class VendorRankingServiceTest {
     @Mock private VendorRepository vendorRepository;
     @Mock private VendorAssignmentRepository assignmentRepository;
     @Mock private VendorRatingService ratingService;
+    @Mock private PostEventReportRepository reportRepository;
     @Mock private VendorEligibilityService eligibilityService;
     @InjectMocks private VendorRankingService rankingService;
 
@@ -59,6 +63,9 @@ class VendorRankingServiceTest {
         when(assignmentRepository.countActiveAssignmentsByVendors(anyList())).thenReturn(List.of());
         when(assignmentRepository.countAllAssignmentsByVendors(anyList())).thenReturn(List.of());
         when(ratingService.calculateVendorRatings(anyList())).thenReturn(Map.of(2L, 4.3));
+        when(reportRepository.findByVendorIdAndCreatedAtAfter(
+                anyLong(), any(LocalDateTime.class)))
+                .thenReturn(List.of());
     }
 
     @Test
