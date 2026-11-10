@@ -164,6 +164,7 @@ export default function ClientInquiryDetail() {
   const event = inquiry.event;
   const status = event?.status || inquiry.status;
   const canRespond = status === 'PROPOSAL_SENT' && parsedProposal;
+  const hasAgreement = ['PROPOSAL_ACCEPTED', 'EVENT_CREATED'].includes(inquiry.status) || Boolean(event);
   const [progressTitle, progressDescription] = status === 'PROPOSAL_SENT' && !parsedProposal
     ? ['Proposal details unavailable', 'Ask the coordinator to review this proposal before you respond.']
     : requestProgress[status] || ['Request status', 'Check the details below for the latest information.'];
@@ -200,23 +201,34 @@ export default function ClientInquiryDetail() {
           <StatusBadge status={status} />
         </div>
 
-        <section aria-labelledby="request-progress" className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
-          <h2 id="request-progress" className="font-semibold text-gray-900">{progressTitle}</h2>
-          <p className="mt-1 text-sm text-gray-700">{progressDescription}</p>
-          {canRespond && <a href="#client-proposal" className="btn-primary mt-3">Review proposal</a>}
-          {event?.id && (
-            <Link to={`/client/events/${event.id}`} className="mt-3 inline-block text-sm font-semibold text-indigo-700 hover:underline">
-              View event details →
-            </Link>
-          )}
+        <section aria-labelledby="request-progress" className="overflow-hidden rounded-2xl border border-[#38605b] bg-[#142f32] text-white">
+          <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-7">
+            <div className="max-w-lg">
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#efd392]">Your booking</p>
+              <h2 id="request-progress" className="mt-2 font-serif text-3xl">{progressTitle}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-emerald-50">{progressDescription}</p>
+            </div>
+            {timeline && <div className="rounded-xl border border-white/20 bg-white/5 px-4 py-3">
+              <p className="text-xs text-emerald-100">Venue reservation</p>
+              <p className="mt-1 text-sm font-semibold">{timeline.venueHeld ? 'Venue booked' : 'Venue not booked'}</p>
+              {timeline.venueHeld && timeline.venueName && <p className="mt-1 text-xs text-emerald-100">{timeline.venueName}</p>}
+            </div>}
+            <div className="flex w-full flex-wrap gap-2">
+              {canRespond && <a href="#client-proposal" className="btn-outline">Review proposal</a>}
+              {hasAgreement && !timeline?.venueHeld && !['CANCELLED', 'CLOSED', 'COMPLETED'].includes(status) &&
+                <a href="#client-agreement" className="btn-outline">View agreement and payment</a>}
+              {event?.id && <Link to={`/client/events/${event.id}`} className="btn-outline">View event details</Link>}
+            </div>
+          </div>
+          {timeline && <EventTimeline timeline={timeline} status={status}
+            proposalAccepted={inquiry.status === 'PROPOSAL_ACCEPTED' || inquiry.status === 'EVENT_CREATED' || Boolean(event?.id)} />}
         </section>
 
         {responseNotice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{responseNotice}</p>}
         {error && <div role="alert" className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</div>}
-        {timeline && <EventTimeline timeline={timeline} status={status}
-          proposalAccepted={inquiry.status === 'PROPOSAL_ACCEPTED' || inquiry.status === 'EVENT_CREATED' || Boolean(event?.id)} />}
-        {(['PROPOSAL_ACCEPTED', 'EVENT_CREATED'].includes(inquiry.status) || inquiry.event) &&
-          <BookingAgreement key={`booking-${inquiry.id}`} inquiryId={inquiry.id} />}
+        {hasAgreement && <div id="client-agreement" tabIndex={-1} className="scroll-mt-24">
+          <BookingAgreement key={`booking-${inquiry.id}`} inquiryId={inquiry.id} />
+        </div>}
         {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
           <VendorPreferences key={`preferences-${inquiry.id}`} inquiry={inquiry} onSaved={setInquiry} />
         )}
