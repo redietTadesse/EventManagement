@@ -34,6 +34,21 @@ export function buildServiceRows(requiredCategories = [], assignments = []) {
   });
 }
 
+export function latestOfferHandoff(rows) {
+  const recentRows = [...rows].sort((left, right) =>
+    Number(right.state === 'pending') - Number(left.state === 'pending')
+    || Number(right.current?.id || 0) - Number(left.current?.id || 0));
+  for (const row of recentRows) {
+    const previous = row.attempts.at(-2);
+    if (row.current?.vendorId != null && previous?.vendorId != null
+      && String(previous.vendorId) !== String(row.current.vendorId)
+      && ['DECLINED', 'EXPIRED'].includes(previous.status)) {
+      return { category: row.category, service: serviceLabel(row.category), previous, current: row.current };
+    }
+  }
+  return null;
+}
+
 export function parseSelection(assignment) {
   try {
     const snapshot = typeof assignment?.decisionSnapshot === 'string'
@@ -111,11 +126,11 @@ export function venueReservation(bookings, eventId, startDate, endDate = startDa
   const end = Date.parse(`${endDate || startDate}T00:00:00Z`);
   const requiredDays = Number.isFinite(start) && Number.isFinite(end) && end >= start
     ? Math.round((end - start) / 86400000) + 1 : null;
-  const confirmedDates = [...new Set(bookings
-    .filter(booking => String(booking.eventId) === String(eventId) && booking.status === 'CONFIRMED'
-      && booking.bookingDate >= startDate && booking.bookingDate <= (endDate || startDate))
+  const bookedDates = [...new Set(bookings
+    .filter(booking => String(booking.eventId) === String(eventId) && booking.status === 'CONFIRMED' && booking.bookingDate)
     .map(booking => booking.bookingDate))].sort();
-  return { requiredDays, confirmedDates, complete: requiredDays != null && confirmedDates.length === requiredDays };
+  const confirmedDates = bookedDates.filter(date => date >= startDate && date <= (endDate || startDate));
+  return { requiredDays, confirmedDates, bookedDates, complete: requiredDays != null && confirmedDates.length === requiredDays };
 }
 
 export function formatEventDate(value) {

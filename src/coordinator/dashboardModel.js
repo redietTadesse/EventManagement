@@ -65,6 +65,45 @@ export function buildAttentionItems(exceptions = {}, inquiries = []) {
   return [...unique.values()].sort((left, right) => left.priority - right.priority || new Date(left.time || 0) - new Date(right.time || 0));
 }
 
+export function buildOperationsQueue(attention, events) {
+  const queue = new Map();
+  for (const item of attention) {
+    const eventItem = item.href.startsWith('/coordinator/events/');
+    const assignment = item.id.startsWith('assignment:');
+    const route = eventItem ? `${item.href}?tab=vendors` : item.href;
+    if (queue.has(route)) {
+      if (assignment) queue.get(route).detail += ` · ${item.title} offer unclaimed`;
+      continue;
+    }
+    queue.set(route, {
+      ...item,
+      href: route,
+      title: assignment ? item.detail : item.title,
+      detail: assignment ? `${item.title} offer unclaimed` : item.detail,
+      action: eventItem ? 'Review vendors' : 'Open inquiry',
+    });
+  }
+  for (const event of events) {
+    if (!['NEEDS_COORDINATOR', 'AWAITING_VENDORS'].includes(event.status)) continue;
+    const href = `/coordinator/events/${event.eventId}?tab=vendors`;
+    const existing = queue.get(href);
+    if (existing) {
+      existing.date = event.eventDate;
+      existing.status = event.status;
+      if (event.venue) existing.detail = `${event.venue} · ${existing.detail}`;
+      continue;
+    }
+    queue.set(href, {
+      id: `upcoming:${event.eventId}`, href, title: event.eventName, status: event.status,
+      detail: [event.venue, event.status === 'NEEDS_COORDINATOR' ? 'Coordinator review required' : 'Waiting for vendor responses'].filter(Boolean).join(' · '),
+      priority: event.status === 'NEEDS_COORDINATOR' ? 0 : 3,
+      action: 'Review vendors',
+      date: event.eventDate,
+    });
+  }
+  return [...queue.values()].sort((left, right) => left.priority - right.priority);
+}
+
 export function countLifecycleStages(statusCounts) {
   return lifecycleStages.map((stage) => ({
     ...stage,

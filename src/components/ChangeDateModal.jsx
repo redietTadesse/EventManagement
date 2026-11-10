@@ -1,129 +1,120 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { Dialog } from '@headlessui/react';
 import api from '../api/axios';
+import { formatEventDate } from '../coordinator/eventDetailModel';
+import { calendarDateKey } from '../hooks/useVenueAvailabilityCalendar';
 
-function localDateString(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function DateResult({ result, selected, onSelect, disabled }) {
+  const { date, impact, error } = result;
+  const conflicts = impact?.vendorConflicts || [];
+  const reconfirmations = impact?.needsReconfirmation || [];
+  const blocked = !impact?.venueAvailable || conflicts.length > 0;
+
+  return <article className="flex min-w-0 flex-col rounded-xl border border-slate-200 p-4">
+    <p className="eyebrow">Proposed start date</p>
+    <h3 className="mt-1 text-lg font-semibold">{formatEventDate(date)}</h3>
+    {error ? <p className="mt-2 text-sm text-rose-800">{error}</p> : <>
+      <p className={'mt-2 text-sm font-semibold ' + (blocked ? 'text-rose-800' : 'text-emerald-800')}>
+        {blocked ? 'Scheduling conflict' : 'No scheduling conflicts found'}
+      </p>
+      <p className="mt-2 text-sm text-slate-700">Venue: {impact.venueAvailable ? 'No conflict found' : 'Unavailable'}</p>
+      <p className="mt-1 text-sm text-slate-700">Vendor reconfirmations: {reconfirmations.length}</p>
+      {[...conflicts, ...reconfirmations].length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-slate-600">
+        {[...conflicts, ...reconfirmations].map((message, index) => <li key={index}>{message}</li>)}
+      </ul>}
+      <div className="mt-auto pt-4">
+        <button type="button" className="btn-outline aria-pressed:border-indigo-600 aria-pressed:bg-indigo-50 disabled:opacity-50"
+          aria-label={'Choose ' + formatEventDate(date)} aria-pressed={selected} disabled={blocked || disabled} onClick={onSelect}>
+          {selected ? 'Selected' : 'Choose this date'}
+        </button>
+      </div>
+    </>}
+  </article>;
 }
 
-export default function ChangeDateModal({ isOpen, onClose, eventId, currentDate, onDateChanged }) {
-  const [newDate, setNewDate] = useState(currentDate || '');
-  const [impact, setImpact] = useState(null);
+export default function ChangeDateModal({ onClose, eventId, currentDate, onDateChanged }) {
+  const [dates, setDates] = useState(['', '']);
+  const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const today = calendarDateKey(new Date());
+  const candidates = dates.filter(Boolean);
+  const valid = dates[0] && candidates.every(date => date >= today && date !== currentDate)
+    && new Set(candidates).size === candidates.length;
 
-  useEffect(() => {
-    if (isOpen) {
-      setNewDate(currentDate || '');
-      setImpact(null);
-      setError('');
-    }
-  }, [isOpen, currentDate]);
-
-  if (!isOpen) return null;
-
-  const conflicts = impact?.vendorConflicts || [];
-  const reconfirmations = impact?.needsReconfirmation || [];
-  const hasConflicts = conflicts.length > 0 || impact?.venueAvailable === false;
-
-  const checkImpact = async () => {
+  async function compare(event) {
+    event.preventDefault();
+    if (!valid || loading || saving) return;
     setLoading(true);
-    setImpact(null);
+    setSelected('');
+    setResults([]);
     setError('');
-    try {
-      const response = await api.get(`/events/${eventId}/impact`, { params: { newDate } });
-      setImpact(response.data);
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Failed to analyze the date change.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const checks = await Promise.allSettled(candidates.map(date =>
+      api.get('/events/' + eventId + '/impact', { params: { newDate: date } })));
+    setResults(checks.map((check, index) => check.status === 'fulfilled'
+      ? { date: candidates[index], impact: check.value.data }
+      : { date: candidates[index], error: 'Could not check this date. Compare again to retry.' }));
+    setLoading(false);
+  }
 
-  const confirmChange = async () => {
-    if (!impact || hasConflicts) return;
+  async function confirmChange() {
+    if (!selected || loading || saving) return;
     setSaving(true);
     setError('');
     try {
-      const response = await api.put(`/events/${eventId}/date`, null, { params: { newDate } });
-      await onDateChanged?.(newDate, response.data);
+      const response = await api.put('/events/' + eventId + '/date', null, { params: { newDate: selected } });
+      await onDateChanged?.(selected, response.data);
       onClose();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to update the event date.');
-    } finally {
       setSaving(false);
     }
-  };
+  }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" role="presentation">
-      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="change-date-title">
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 id="change-date-title" className="text-xl font-bold text-slate-800">Change event date</h2>
-            <p className="mt-1 text-sm text-slate-500">Check vendor and venue availability before rescheduling.</p>
+  return <Dialog open onClose={saving ? () => {} : onClose} className="relative z-50">
+    <div className="fixed inset-0 bg-slate-900/60" aria-hidden="true" />
+    <div className="fixed inset-0 overflow-y-auto p-4">
+      <div className="flex min-h-full items-center justify-center">
+        <Dialog.Panel className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="bg-[#142f32] p-5 text-white sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#efd392]">Event operations</p>
+            <Dialog.Title className="mt-2 text-2xl font-semibold">Compare rescheduling options</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-emerald-50">
+              Current start date: {formatEventDate(currentDate)}. Check the venue and vendors for up to two alternatives before choosing a new date.
+            </Dialog.Description>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">×</button>
-        </div>
-
-        <label className="mb-2 block text-sm font-medium text-slate-700" htmlFor="new-event-date">New date</label>
-        <input
-          id="new-event-date"
-          type="date"
-          min={localDateString(new Date())}
-          value={newDate}
-          onChange={event => { setNewDate(event.target.value); setImpact(null); setError(''); }}
-          className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={checkImpact}
-          disabled={loading || !newDate || newDate === currentDate}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {loading ? 'Analyzing…' : 'Analyze impact'}
-        </button>
-
-        {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-
-        {impact && (
-          <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className={`text-sm font-semibold ${impact.venueAvailable ? 'text-emerald-700' : 'text-rose-700'}`}>
-              Venue {impact.venueAvailable ? 'is available' : 'is unavailable'} on {impact.newDate}.
+          <div className="space-y-4 p-5 sm:p-6">
+            <form onSubmit={compare} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              {dates.map((date, index) => <label key={index} className="grid gap-1 text-sm font-medium">
+                {index === 0 ? 'First alternative' : 'Second alternative (optional)'}
+                <input type="date" min={today} required={index === 0} value={date} disabled={loading || saving}
+                  className="w-full min-w-0" onChange={event => {
+                    setDates(dates.map((value, position) => position === index ? event.target.value : value));
+                    setResults([]);
+                    setSelected('');
+                    setError('');
+                  }} />
+              </label>)}
+              <button type="submit" className="btn-primary disabled:opacity-50" disabled={!valid || loading || saving}>Check dates</button>
+            </form>
+            {candidates.length > 0 && !valid && <p className="text-sm text-slate-600">Choose distinct alternatives on or after today, different from the current date.</p>}
+            {loading && <p role="status" className="text-sm">Checking venue and vendor availability…</p>}
+            {results.length > 0 && <div className="grid gap-3 sm:grid-cols-2" aria-label="Date comparison">
+              {results.map(result => <DateResult key={result.date} result={result} selected={result.date === selected}
+                disabled={saving} onSelect={() => setSelected(result.date)} />)}
+            </div>}
+            {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" className="btn-outline" disabled={saving} onClick={onClose}>Close</button>
+              <button type="button" className="btn-primary disabled:opacity-50" disabled={!selected || saving} onClick={confirmChange}>
+                {saving ? 'Rescheduling…' : selected ? 'Move to ' + formatEventDate(selected) : 'Confirm new date'}
+              </button>
             </div>
-            {conflicts.length > 0 && (
-              <div className="text-sm text-rose-700">
-                <p className="font-semibold">Vendor conflicts</p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">{conflicts.map((conflict, index) => <li key={`${index}-${conflict}`}>{conflict}</li>)}</ul>
-              </div>
-            )}
-            {reconfirmations.length > 0 && (
-              <div className="text-sm text-amber-700">
-                <p className="font-semibold">Vendors must reconfirm</p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">{reconfirmations.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>
-              </div>
-            )}
-            {!hasConflicts && reconfirmations.length === 0 && (
-              <p className="text-sm text-emerald-700">No conflicts found. The date can be changed.</p>
-            )}
           </div>
-        )}
-
-        <div className="mt-6 flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button
-            type="button"
-            onClick={confirmChange}
-            disabled={!impact || hasConflicts || saving || newDate === currentDate}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Confirm change'}
-          </button>
-        </div>
-      </section>
+        </Dialog.Panel>
+      </div>
     </div>
-  );
+  </Dialog>;
 }

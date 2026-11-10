@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import StatusBadge from '../components/StatusBadge';
 import EventVendorTable from './EventVendorTable';
 import AuditTimeline from '../components/AuditTimeline';
 import VendorDecisionHistory from '../components/VendorTrailDrawer';
 import ManualAssignModal from '../components/ManualAssignModal';
 import EventReadinessWidget from '../components/EventReadinessWidget';
+import EventOperationsPanel from '../components/EventOperationsPanel';
 import ChangeDateModal from '../components/ChangeDateModal';
 import EventIssues from '../components/EventIssues';
 import CoordinatorOwnership from '../components/CoordinatorOwnership';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
-import { buildServiceRows, eventActions, formatEventDate, formatEventRange, getEventStatusReason, nextEventAction, serviceLabel, venueReservation } from './eventDetailModel';
+import { buildServiceRows, eventActions, formatEventDate, formatEventRange, latestOfferHandoff, nextEventAction, serviceLabel, venueReservation } from './eventDetailModel';
 
 export default function EventDetail() {
   const { id } = useParams();
+  const { search } = useLocation();
   const navigate = useNavigate();
   const {
     state,
@@ -36,7 +37,7 @@ export default function EventDetail() {
   const [assignmentsError, setAssignmentsError] = useState('');
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [categoriesError, setCategoriesError] = useState('');
-  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get('tab') === 'issues' ? 'issues' : 'overview');
+  const [activeTab, setActiveTab] = useState('overview');
   const [highlightedCategory, setHighlightedCategory] = useState(null);
   const [vendorReviewVersion, setVendorReviewVersion] = useState(0);
   const [historyCategory, setHistoryCategory] = useState(null);
@@ -86,6 +87,13 @@ export default function EventDetail() {
   const bookingRequestId = useRef(0);
   const operationRequestId = useRef(0);
   const tabRefs = useRef({});
+
+  useEffect(() => {
+    const tab = new URLSearchParams(search).get('tab');
+    setActiveTab(['vendors', 'issues'].includes(tab) ? tab : 'overview');
+    setHighlightedCategory(null);
+    setHistoryCategory(null);
+  }, [id, search]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -197,7 +205,6 @@ useEffect(() => {
       setChecklistLoaded(false);
       setVenueBookings([]);
       setVenueBookingsLoaded(false);
-      setActiveTab(new URLSearchParams(window.location.search).get('tab') === 'issues' ? 'issues' : 'overview');
       setLifecycleFeedback(null);
       setDateFeedback('');
       setVendorFeedback({});
@@ -306,21 +313,22 @@ useEffect(() => {
 
 
   const services = buildServiceRows(event?.requiredCategories || [], assignments);
-  const statusReason = getEventStatusReason(event?.status, services);
   const vendorsKnown = assignmentsLoaded && categoriesLoaded && !assignmentsError && !categoriesError;
   const confirmedServices = services.filter(service => service.state === 'resolved').length;
   const pendingServices = services.filter(service => service.state === 'pending').length;
   const blockedServices = services.filter(service => service.state === 'exhausted').length;
   const completedTasks = checklist.filter(task => task.isComplete).length;
   const reservation = venueReservation(venueBookings, event?.id, event?.date, event?.endDate);
+  const venueKnown = venueBookingsLoaded && !venueBookingsError && !venueBookingsLoading;
+  const tasksKnown = checklistLoaded && !checklistError && !checklistLoading;
   const readOnly = state.currentUser?.role === 'COORDINATOR' && event?.coordinator != null
     && String(event.coordinator.id) !== String(state.currentUser.id);
   const actions = eventActions(event?.status, readOnly ? null : state.currentUser?.role);
   const nextAction = nextEventAction({
     status: event?.status, rows: services, vendorsKnown,
-    venueNeedsAttention: !event?.venueId || (venueBookingsLoaded && !venueBookingsError && !reservation.complete),
-    venueKnown: venueBookingsLoaded && !venueBookingsError && !venueBookingsLoading,
-    tasksKnown: checklistLoaded && !checklistError, tasksRemaining: checklist.length - completedTasks,
+    venueNeedsAttention: !event?.venueId || (venueKnown && !reservation.complete),
+    venueKnown,
+    tasksKnown, tasksRemaining: checklist.length - completedTasks,
   });
 
   const selectTab = (tab, category = null) => {
@@ -575,6 +583,26 @@ useEffect(() => {
   const noEligibleAlternative = nextAction.category && !decisionLoadingByCategory[nextAction.category]
     && !decisionErrorByCategory[nextAction.category] && Object.hasOwn(alternativesByCategory, nextAction.category)
     && alternativesByCategory[nextAction.category].length === 0;
+  const handoff = vendorsKnown ? latestOfferHandoff(services) : null;
+  const bookingDates = reservation.bookedDates;
+  const operationsSummary = {
+    venue: {
+      value: !event.venueId ? 'Venue unassigned' : !venueKnown ? 'Reservation unverified'
+        : reservation.complete ? 'Event dates booked' : 'Reservation incomplete',
+      detail: venueKnown && bookingDates.length
+        ? `${bookingDates.length} confirmed ${bookingDates.length === 1 ? 'day' : 'days'} · ${formatEventRange(bookingDates[0], bookingDates.at(-1))}`
+        : event.venue,
+    },
+    vendors: {
+      value: !vendorsKnown ? 'Offers unverified' : services.length ? `${confirmedServices} of ${services.length} services confirmed` : 'No external services required',
+      detail: vendorsKnown && services.length ? `${pendingServices} awaiting response · ${blockedServices} need review` : '',
+    },
+    tasks: {
+      value: checklistLoading ? 'Checking tasks…' : !tasksKnown ? 'Task progress unavailable'
+        : checklist.length ? `${completedTasks} of ${checklist.length} tasks complete` : 'No tasks recorded',
+      detail: tasksKnown && checklist.length > completedTasks ? `${checklist.length - completedTasks} remaining` : '',
+    },
+  };
   const tabs = [
     { id: 'overview', label: 'Overview' }, { id: 'vendors', label: 'Vendors' },
     { id: 'tasks', label: 'Tasks' }, { id: 'issues', label: 'Issues' }, { id: 'history', label: 'History' },
@@ -588,8 +616,7 @@ useEffect(() => {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-bold text-slate-900">{event.name}</h1>
-                <StatusBadge status={event.status} size="lg" showIcon />
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{event.name}</h1>
               </div>
               <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
                 <div><dt className="text-xs text-slate-500">Event dates</dt><dd className="mt-1 font-medium text-slate-800">{formatEventRange(event.date, event.endDate)}</dd></div>
@@ -614,21 +641,22 @@ useEffect(() => {
         {readOnly && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           Read only. {event.coordinator.name} is the lead coordinator. An administrator can reassign this event.
         </p>}
-        <section aria-labelledby="next-action-title" className={`rounded-xl border p-4 md:p-5 ${['intervene', 'venue'].includes(nextAction.kind) ? 'border-amber-200 bg-amber-50' : 'border-indigo-100 bg-indigo-50'}`}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-4xl">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Next action</p>
-              <h2 id="next-action-title" className="font-semibold text-slate-900">{nextAction.title}</h2>
-              <p className="mt-1 text-sm text-slate-700">{nextAction.description}</p>
-              {noEligibleAlternative && <p className="mt-2 text-sm font-medium text-amber-900">No eligible alternative currently passes the checks for {serviceLabel(nextAction.category)}. Review the exclusion reasons.</p>}
-              {vendorsKnown && nextAction.kind !== 'closed' && <p className="mt-3 text-xs text-slate-600">{confirmedServices}/{services.length} required services confirmed · {pendingServices} awaiting response · {blockedServices} {blockedServices === 1 ? 'needs' : 'need'} review</p>}
-            </div>
-            <button type="button" disabled={refreshingOperations} onClick={() => {
+        <EventOperationsPanel status={event.status} summary={operationsSummary}
+          handoff={handoff && { ...handoff, onHistory: () => selectTab('history', handoff.category) }}
+          decision={{
+            ...nextAction,
+            title: nextAction.kind === 'waiting' && handoff?.current.status === 'PENDING'
+              ? `Waiting for the ${handoff.service} replacement` : nextAction.title,
+            note: noEligibleAlternative ? `No eligible alternative currently passes the checks for ${serviceLabel(nextAction.category)}. Review the exclusion reasons.` : '',
+            disabled: refreshingOperations,
+            onClick: () => {
               if (nextAction.target === 'refresh') handleRefreshOperations();
-              else { selectTab(nextAction.target, nextAction.category); if (nextAction.kind === 'venue') setVenueOptionsExpanded(true); }
-            }} className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">{nextAction.action}</button>
-          </div>
-        </section>
+              else {
+                selectTab(nextAction.target, nextAction.category);
+                if (nextAction.kind === 'venue') setVenueOptionsExpanded(true);
+              }
+            },
+          }} />
 
         <div role="tablist" aria-label="Event detail sections" className="flex overflow-x-auto border-b border-slate-200">
           {tabs.map((tab, index) => (
@@ -673,10 +701,6 @@ useEffect(() => {
                   </div>;
                 })}
               </div>}
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-900">Vendor coordination</h2><p className="mt-2 text-sm text-slate-600">{vendorsKnown ? statusReason : 'Vendor status has not been verified.'}</p><button type="button" onClick={() => selectTab('vendors')} className="mt-3 text-sm font-medium text-indigo-700">View required services →</button></div>
-              <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-900">Preparation tasks</h2><p className="mt-2 text-sm text-slate-600">{checklistLoaded ? `${completedTasks} of ${checklist.length} tasks complete. Owners, deadlines and prerequisites are in Tasks.` : 'Task progress is unavailable.'}</p><button type="button" onClick={() => selectTab('tasks')} className="mt-3 text-sm font-medium text-indigo-700">View tasks →</button></div>
             </div>
           </>}
 
@@ -932,11 +956,11 @@ useEffect(() => {
         loadError={selectedAssignment ? decisionErrorByCategory[selectedAssignment.serviceCategory] || '' : ''}
         serviceCategory={selectedAssignment?.serviceCategory}
       />
-      <ChangeDateModal isOpen={!readOnly && showDateModal} onClose={() => setShowDateModal(false)} eventId={id} currentDate={event.date} onDateChanged={async (newDate, record) => {
+      {!readOnly && showDateModal && <ChangeDateModal onClose={() => setShowDateModal(false)} eventId={id} currentDate={event.date} onDateChanged={async (newDate, record) => {
         setEvent(previous => ({ ...previous, status: record?.status || previous.status, date: record?.eventDate || newDate, endDate: record?.endDate || previous.endDate }));
         setDateFeedback(`Event rescheduled to ${formatEventDate(newDate)}. Template task deadlines were refreshed where applicable.`);
         await refreshAfterAction();
-      }} />
+      }} />}
     </Layout>
   );
 }
