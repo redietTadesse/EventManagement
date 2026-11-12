@@ -213,7 +213,7 @@ class EventLifecycleApiIntegrationTest {
     @Test
     void followupsRemindPauseEscalateAndStopWithoutChangingTheLifecycle() throws Exception {
         long inquiry = acceptedInquiry();
-        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant now = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         followups.process(inquiry, now);
         for (int attempt = 0; attempt < 2; attempt++) followups.process(inquiry, now.plus(java.time.Duration.ofHours(48)));
         assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isEqualTo(1);
