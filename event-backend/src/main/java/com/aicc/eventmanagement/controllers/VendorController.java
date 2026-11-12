@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.User;
+import jakarta.validation.Valid;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.Role;
@@ -69,6 +70,13 @@ public class VendorController {
     @Operation(summary = "Get all vendors")
     public ResponseEntity<List<Vendor>> getAllVendors() {
         return ResponseEntity.ok(vendorService.getAllVendors());
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Vendor> updateVendor(@PathVariable Long id,
+            @Valid @RequestBody com.aicc.eventmanagement.payload.UpdateVendorRequest request) {
+        return ResponseEntity.ok(vendorService.updateVendor(id, request));
     }
 
     @GetMapping("/active")

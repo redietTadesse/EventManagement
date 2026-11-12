@@ -109,11 +109,8 @@ class InquiryFlowIntegrationTest {
         assertThat(changeRequested.getRequirements()).contains("Please revise the price");
 
         // 3. Client rejects the proposal
-        String rejectionReason = "Price too high for our budget";
-
         Inquiry rejected = inquiryService.rejectProposal(
                 withProposal.getId(),
-                rejectionReason,
                 Role.CLIENT
         );
 
