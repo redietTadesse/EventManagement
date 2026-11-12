@@ -18,6 +18,10 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
     @Query("select i from Inquiry i where i.id = :id")
     java.util.Optional<Inquiry> findForCoordinatorUpdate(@Param("id") Long id);
 
+
+    @Query("select i from Inquiry i left join fetch i.coordinator left join fetch i.event where i.createdAt >= :from and i.createdAt < :through")
+    List<Inquiry> receivedForManagement(@Param("from") LocalDateTime from, @Param("through") LocalDateTime through);
+
     List<Inquiry> findByStatus(EventStatus status);
 
     @Query("select i.status, count(i) from Inquiry i left join i.event e where e.id is null group by i.status")
