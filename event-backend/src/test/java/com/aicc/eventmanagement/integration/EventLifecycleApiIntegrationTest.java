@@ -20,8 +20,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -91,7 +89,16 @@ class EventLifecycleApiIntegrationTest {
         call(POST, path, admin, payload, 409);
     }
     @Autowired private com.aicc.eventmanagement.services.InquiryService inquiryService;
+
     @Autowired private ObjectMapper json;
+    @Autowired private com.aicc.eventmanagement.repositories.TransitionHistoryRepository managementHistory;
+    @Autowired private com.aicc.eventmanagement.services.ChecklistService assistanceChecklists;
+    @Autowired private com.aicc.eventmanagement.services.AutomaticAssistance assistance;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager assistanceTransactions;
+
+    @Autowired private com.aicc.eventmanagement.services.BookingFollowupService followups;
+    @Autowired private com.aicc.eventmanagement.repositories.BookingFollowupRepository followupStates;
+    @Autowired private com.aicc.eventmanagement.services.VendorService vendorService;
     @org.springframework.boot.test.mock.mockito.SpyBean
     private com.aicc.eventmanagement.services.EmailService workflowEmail;
     @Autowired private JwtUtils jwt;
@@ -125,6 +132,145 @@ class EventLifecycleApiIntegrationTest {
         coordinator = user("coordinator", Role.COORDINATOR);
         venue = venues.save(Venue.builder().name("Lifecycle Hall " + run).capacity(300)
                 .setupBufferDays(1).teardownBufferDays(1).active(true).build());
+    }
+
+
+
+
+
+    @Test
+    void managementReviewExplainsBookingOutcomesWaitingPartiesAndCurrentOwnership() throws Exception {
+        User admin = user("management-admin", Role.ADMIN);
+        String path = "/admin/dashboard/booking-performance?days=30&reviewDays=7";
+        call(GET, path, coordinator, null, 403);
+        call(GET, "/admin/dashboard/booking-performance?days=2", admin, null, 400);
+        int before = call(GET, path, admin, null, 200).path("bookings").size();
+        vendor("Review AV", "av", 4.0, date.plusYears(1));
+        vendor("Review Security", "security", 4.0, date.plusYears(1));
+        long paid = acceptedInquiry();
+        convert(paid, 200);
+        date = date.plusDays(14);
+        long pending = proposedInquiry();
+        var transitions = managementHistory.findByReferenceTypeAndReferenceIdOrderByOccurredAtDesc("INQUIRY", Long.toString(pending));
+        var proposalSent = transitions.stream().filter(change -> change.getToStatus() == EventStatus.PROPOSAL_SENT).findFirst().orElseThrow();
+        jdbc.update("UPDATE transition_history SET occurred_at = ? WHERE id = ?",
+                java.time.LocalDateTime.now().minusDays(9), proposalSent.getId());
+        long unassigned = submittedInquiry();
+        long old = submittedInquiry();
+        jdbc.update("UPDATE inquiries SET created_at = ? WHERE id = ?", java.time.LocalDateTime.now().minusDays(200), old);
+        JsonNode report = call(GET, path, admin, null, 200);
+        assertThat(report.path("bookings").size()).isEqualTo(before + 3);
+        assertThat(nodes(report.path("bookings"))).anySatisfy(row -> {
+            assertThat(row.path("inquiryId").asLong()).isEqualTo(paid);
+            assertThat(row.path("paidBooking").asBoolean()).isTrue();
+            assertThat(row.path("coordinatorId").asLong()).isEqualTo(coordinator.getId());
+            assertThat(row.path("waitingOn").asText()).isEqualTo("Vendor");
+        });
+        assertThat(nodes(report.path("bookings"))).anySatisfy(row -> {
+            assertThat(row.path("inquiryId").asLong()).isEqualTo(pending);
+            assertThat(row.path("waitingOn").asText()).isEqualTo("Client");
+            assertThat(row.path("daysInStage").asLong()).isGreaterThanOrEqualTo(8);
+            assertThat(row.path("review").asBoolean()).isTrue();
+        });
+        assertThat(nodes(report.path("bookings"))).anySatisfy(row -> {
+            assertThat(row.path("inquiryId").asLong()).isEqualTo(unassigned);
+            assertThat(row.path("coordinator").asText()).isEqualTo("Unassigned");
+            assertThat(row.path("reviewReason").asText()).contains("No coordinator");
+        });
+        assertThat(nodes(report.path("bookings"))).noneMatch(row -> row.path("inquiryId").asLong() == old);
+        assertThat(nodes(report.path("coordinators"))).anySatisfy(row -> {
+            assertThat(row.path("id").asLong()).isEqualTo(coordinator.getId());
+            assertThat(row.path("inquiries").asLong()).isEqualTo(2);
+            assertThat(row.path("paidBookings").asLong()).isEqualTo(1);
+            assertThat(row.path("waitingForClient").asLong()).isEqualTo(1);
+        });
+    }
+
+    @Test
+    void assistanceShowsCommittedActionsOnlyToTheCoordinatorHandlingTheWork() throws Exception {
+        VendorActor first = vendor("First AV", "av", 5.0, date.plusYears(1));
+        vendor("Backup AV", "av", 4.0, date.plusYears(1));
+        vendor("Security", "security", 4.0, date.plusYears(1));
+        long inquiry = acceptedInquiry();
+        long event = convert(inquiry, 200).path("id").asLong();
+        respond(currentOffer(event, "av"), first.user(), "DECLINED");
+        assistanceChecklists.generateMissingTemplateTasks(event);
+        String path = "/automatic-assistance";
+        JsonNode overview = call(GET, path, coordinator, null, 200);
+        assertThat(nodes(overview.path("activity"))).anyMatch(row -> row.path("title").asText().equals("A replacement vendor was selected"));
+        assertThat(nodes(overview.path("activity")).stream().filter(row -> row.path("category").asText().equals("PREPARATION")).count()).isEqualTo(1);
+        call(GET, path, client, null, 403);
+        User outsider = user("assistance-outsider", Role.COORDINATOR);
+        assertThat(nodes(call(GET, path, outsider, null, 200).path("activity"))).isEmpty();
+        new org.springframework.transaction.support.TransactionTemplate(assistanceTransactions).executeWithoutResult(status -> {
+            assistance.record(inquiries.findById(inquiry).orElseThrow(), event, "VENDORS", "Rolled back action", "Must not appear", false);
+            status.setRollbackOnly();
+        });
+        assertThat(nodes(call(GET, path, coordinator, null, 200).path("activity")))
+                .noneMatch(row -> row.path("title").asText().equals("Rolled back action"));
+    }
+
+    @Test
+    void followupsRemindPauseEscalateAndStopWithoutChangingTheLifecycle() throws Exception {
+        long inquiry = acceptedInquiry();
+        java.time.Instant now = java.time.Instant.now();
+        followups.process(inquiry, now);
+        for (int attempt = 0; attempt < 2; attempt++) followups.process(inquiry, now.plus(java.time.Duration.ofHours(48)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isEqualTo(1);
+        call(PATCH, "/booking-followups/" + inquiry + "/pause", client, Map.of("paused", true), 403);
+        User outsider = user("followup-outsider", Role.COORDINATOR);
+        call(PATCH, "/booking-followups/" + inquiry + "/pause", outsider, Map.of("paused", true), 403);
+        call(PATCH, "/booking-followups/" + inquiry + "/pause", coordinator, Map.of("paused", true), 200);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(96)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isEqualTo(1);
+        call(PATCH, "/booking-followups/" + inquiry + "/pause", coordinator, Map.of("paused", false), 200);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(97)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isEqualTo(2);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(146)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getEscalatedAt()).isNotNull();
+        assertThat(inquiries.findById(inquiry).orElseThrow().getStatus()).isEqualTo(EventStatus.PROPOSAL_ACCEPTED);
+        var agreement = agreements.findById(inquiry).orElseThrow();
+        agreement.setClientSignedAt(now);
+        agreements.saveAndFlush(agreement);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(147)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getStage()).isEqualTo("Coordinator signature");
+        assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isZero();
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(196)));
+        assertThat(nodes(call(GET, "/notifications", coordinator, null, 200).path("items")))
+                .anyMatch(item -> item.path("title").asText().equals("Booking follow-up: Coordinator signature"));
+        agreement = agreements.findById(inquiry).orElseThrow();
+        agreement.setCoordinatorSignedAt(now);
+        agreements.saveAndFlush(agreement);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(197)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getStage()).isEqualTo("Payment receipt");
+        agreement = agreements.findById(inquiry).orElseThrow();
+        agreement.setReceiptUploadedAt(now);
+        agreement.setRejectionReason("Upload the complete receipt");
+        agreements.saveAndFlush(agreement);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(198)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getStage()).isEqualTo("Replacement receipt");
+        agreement = agreements.findById(inquiry).orElseThrow();
+        agreement.setRejectionReason(null);
+        agreements.saveAndFlush(agreement);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(199)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getStage()).isEqualTo("Receipt verification");
+        agreement = agreements.findById(inquiry).orElseThrow();
+        agreement.setVerifiedAt(now);
+        agreements.saveAndFlush(agreement);
+        followups.process(inquiry, now.plus(java.time.Duration.ofHours(250)));
+        assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isZero();
+        assertThat(nodes(call(GET, "/booking-followups", coordinator, null, 200))).isEmpty();
+    }
+
+    @Test
+    void coordinatorCanInspectVenueBlocksButOnlyAdminCanChangeThem() throws Exception {
+        User admin = user("venue-admin", Role.ADMIN);
+        String path = "/venues/" + venue.getId() + "/unavailable-dates";
+        call(POST, path, admin, Map.of("date", date.toString(), "reason", "Maintenance"), 201);
+        assertThat(nodes(call(GET, path, coordinator, null, 200)))
+                .anyMatch(item -> item.path("reason").asText().equals("Maintenance"));
+        call(GET, path, client, null, 403);
+        call(POST, path, coordinator, Map.of("date", date.plusDays(1).toString(), "reason", "Maintenance"), 403);
     }
 
     @Test
@@ -293,9 +439,51 @@ class EventLifecycleApiIntegrationTest {
         assertThat(byCategory(trail.path("categories"), "av").path("attempts").size()).isEqualTo(2);
     }
 
-    @ParameterizedTest(name = "Exhausted pool recovers through {0} coordinator assignment")
-    @ValueSource(strings = {"manual", "force"})
-    void exhaustedPoolCanBeResolvedAndCancellationReleasesCommitments(String action) throws Exception {
+    @Test
+    void declinesAndExpiryTryOnlyThreeRankedBackupsAndNotifyTheAssignedCoordinator() throws Exception {
+        List<VendorActor> ranked = List.of(
+                vendor("AV One", "av", 5.0, date.plusYears(1)), vendor("AV Two", "av", 4.0, date.plusYears(1)),
+                vendor("AV Three", "av", 3.0, date.plusYears(1)), vendor("AV Four", "av", 2.0, date.plusYears(1)),
+                vendor("AV Five", "av", 1.0, date.plusYears(1)), vendor("AV Six", "av", 0.5, date.plusYears(1)));
+        vendor("Available Security", "security", 4.0, date.plusYears(1));
+        long event = convert(acceptedInquiry(), 200).path("id").asLong();
+        for (int index = 0; index < 4; index++) {
+            assertEventStatus(event, "AWAITING_VENDORS");
+            JsonNode offer = currentOffer(event, "av");
+            assertThat(offer.path("status").asText()).isEqualTo("PENDING");
+            assertThat(offer.path("vendorId").asLong()).isEqualTo(ranked.get(index).vendor().getId());
+            if (index == 1) {
+                var expiredOffer = assignments.findById(offer.path("id").asLong()).orElseThrow();
+                expiredOffer.setExpiresAt(java.time.LocalDateTime.now().minusMinutes(1));
+                assignments.saveAndFlush(expiredOffer);
+                call(PATCH, "/assignments/" + offer.path("id").asLong() + "/respond", ranked.get(index).user(),
+                        Map.of("response", "ACCEPTED"), 400);
+                assertThat(vendorService.expireStaleOffers()).isEqualTo(1);
+            } else {
+                respond(offer, ranked.get(index).user(), "DECLINED");
+            }
+        }
+        assertEventStatus(event, "NEEDS_COORDINATOR");
+        assertThat(call(POST, "/assignments/event/" + event + "/auto", coordinator, null, 200).size()).isZero();
+        assertThat(nodes(offers(event)).stream().filter(item -> item.path("serviceCategory").asText().equals("av"))
+                .map(item -> item.path("status").asText())).containsExactlyInAnyOrder("DECLINED", "EXPIRED", "DECLINED", "DECLINED");
+        assertThat(nodes(call(GET, "/notifications", coordinator, null, 200).path("items")))
+                .anyMatch(item -> item.path("title").asText().equals("Vendor service needs coordinator action")
+                        && item.path("path").asText().equals("/coordinator/events/" + event)
+                        && item.path("message").asText().contains("three automatic backup offers"));
+        User outsider = user("other-coordinator", Role.COORDINATOR);
+        String manual = "/assignments/event/" + event + "/manual";
+        var request = Map.of("category", "av", "vendorId", ranked.get(4).vendor().getId(), "reason", "Confirmed availability by phone");
+        call(POST, manual, outsider, request, 409);
+        call(POST, manual, coordinator, request, 200);
+        assertEventStatus(event, "AWAITING_VENDORS");
+        respond(currentOffer(event, "av"), ranked.get(4).user(), "DECLINED");
+        assertEventStatus(event, "NEEDS_COORDINATOR");
+        assertThat(currentOffer(event, "av").path("vendorId").asLong()).isEqualTo(ranked.get(4).vendor().getId());
+    }
+
+    @Test
+    void exhaustedPoolCanBeResolvedAndCancellationReleasesCommitments() throws Exception {
         VendorActor av = vendor("Only AV", "av", 4.0, date.plusYears(1));
         VendorActor firstSecurity = vendor("First Security", "security", 4.0, date.plusYears(1));
         long inquiry = acceptedInquiry();
@@ -305,13 +493,11 @@ class EventLifecycleApiIntegrationTest {
         JsonNode declined = currentOffer(event, "security");
         respond(declined, firstSecurity.user(), "DECLINED");
         assertEventStatus(event, "NEEDS_COORDINATOR");
-        JsonNode pool = currentOffer(event, "security");
-        assertThat(pool.path("status").asText()).isEqualTo("OPEN");
+        assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("DECLINED");
         VendorActor lateVendor = vendor("New Security", "security", 4.0, date.plusYears(1));
-        String path = action.equals("force") ? "/assignments/" + pool.path("id").asLong() + "/force-assign"
-                : "/assignments/event/" + event + "/manual";
+        String path = "/assignments/event/" + event + "/manual";
         call(POST, path, coordinator, Map.of("vendorId", lateVendor.vendor().getId(), "category", "security", "reason", ""), 400);
-        assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("OPEN");
+        assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("DECLINED");
         call(POST, path, coordinator, Map.of("vendorId", lateVendor.vendor().getId(), "category", "security",
                 "reason", "New eligible vendor reviewed by coordinator"), 200);
         assertEventStatus(event, "AWAITING_VENDORS");

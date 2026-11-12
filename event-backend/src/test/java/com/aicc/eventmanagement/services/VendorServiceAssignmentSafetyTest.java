@@ -45,41 +45,22 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class VendorServiceAssignmentSafetyTest {
 
-    @Mock
-    private VendorRepository vendorRepository;
+    @Mock private VendorRepository vendorRepository;
+    @Mock private VendorBookedDateRepository bookedDateRepository;
+    @Mock private VendorAssignmentRepository assignmentRepository;
+    @Mock private EventRepository eventRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private WorkflowEngine workflowEngine;
+    @Mock private VendorRankingService rankingService;
+    @Mock private VendorEligibilityService eligibilityService;
+    @Mock private VendorRatingService ratingService;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private NotificationService notifications;
 
-    @Mock
-    private VendorBookedDateRepository bookedDateRepository;
+    @Mock private AutomaticAssistance assistance;
 
-    @Mock
-    private VendorAssignmentRepository assignmentRepository;
-
-    @Mock
-    private EventRepository eventRepository;
-
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private ApplicationEventPublisher eventPublisher;
-
-    @Mock
-    private WorkflowEngine workflowEngine;
-
-    @Mock
-    private VendorRankingService rankingService;
-
-    @Mock
-    private VendorEligibilityService eligibilityService;
-
-    @Mock
-    private VendorRatingService ratingService;
-
-    @Mock
-    private PasswordEncoder passwordEncoder;
-
-    @InjectMocks
-    private VendorService vendorService;
+    @InjectMocks private VendorService vendorService;
 
     @BeforeEach
     void allowEligibleVendorByDefault() {
@@ -127,11 +108,8 @@ class VendorServiceAssignmentSafetyTest {
     }
 
     private void stubEventAndVendor(Event event, Vendor vendor) {
-        when(eventRepository.findById(event.getId()))
-                .thenReturn(Optional.of(event));
-
-        when(vendorRepository.findById(vendor.getId()))
-                .thenReturn(Optional.of(vendor));
+        when(eventRepository.findByIdForUpdate(event.getId())).thenReturn(Optional.of(event));
+        when(vendorRepository.findById(vendor.getId())).thenReturn(Optional.of(vendor));
     }
 
     @Test
@@ -354,7 +332,7 @@ class VendorServiceAssignmentSafetyTest {
     }
 
     @Test
-    void exhaustedRankingOpensAnUnclaimedPoolAttempt() {
+    void exhaustedRankingFlagsTheServiceWithoutCreatingAnotherOffer() {
         Event event = event();
 
         Vendor oldVendor = vendor(
@@ -365,38 +343,14 @@ class VendorServiceAssignmentSafetyTest {
         );
 
         VendorAssignment failed = VendorAssignment.builder()
-                .id(10L)
-                .event(event)
-                .vendor(oldVendor)
-                .vendorName(oldVendor.getCompanyName())
-                .serviceCategory("av")
-                .status(VendorAssignmentStatus.DECLINED)
-                .build();
-
-        when(rankingService.selectForEvent(
-                1L,
-                "conference",
-                "av",
-                event.getInquiry().getEventDate()
-        )).thenReturn(Optional.empty());
-
-        when(assignmentRepository.findByEventIdAndServiceCategory(
-                1L,
-                "av"
-        )).thenReturn(List.of(failed));
-
-        ArgumentCaptor<VendorAssignment> captor =
-                ArgumentCaptor.forClass(VendorAssignment.class);
+                .id(10L).event(event).vendor(oldVendor).vendorName(oldVendor.getCompanyName())
+                .serviceCategory("av").status(VendorAssignmentStatus.DECLINED).build();
+        when(rankingService.selectForEvent(1L, "conference", "av", event.getInquiry().getEventDate()))
+                .thenReturn(Optional.empty());
 
         vendorService.advanceAfterFailedAttempt(failed, Role.VENDOR);
 
-        verify(assignmentRepository).save(captor.capture());
-
-        assertThat(captor.getValue().getStatus())
-                .isEqualTo(VendorAssignmentStatus.OPEN);
-
-        assertThat(captor.getValue().getVendor()).isNull();
-
+        verify(assignmentRepository, org.mockito.Mockito.never()).save(any(VendorAssignment.class));
         assertThat(event.getUnfilledCategories()).isEqualTo("av");
     }
 }

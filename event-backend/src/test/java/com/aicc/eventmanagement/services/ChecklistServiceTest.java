@@ -37,6 +37,8 @@ class ChecklistServiceTest {
 
     @Mock private ChecklistRepository checklistRepository;
     @Mock private EventRepository eventRepository;
+    @Mock private AutomaticAssistance assistance;
+
     @InjectMocks private ChecklistService checklistService;
 
     private Event event;
