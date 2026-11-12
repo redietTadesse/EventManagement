@@ -31,9 +31,11 @@ const navigation = {
     ['/coordinator/dashboard', 'Overview', Squares2X2Icon],
     ['/coordinator/inquiries', 'Inquiries', InboxStackIcon],
     ['/coordinator/events', 'Events', ClipboardDocumentListIcon],
+    ['/coordinator/assistance', 'Automatic assistance', InboxStackIcon],
     ['/coordinator/calendar', 'Calendar', CalendarDaysIcon],
     ['/coordinator/vendors', 'Vendor directory', UsersIcon],
-    ['/coordinator/venues', 'Venues', BuildingOffice2Icon],
+    ['/coordinator/venue-schedule', 'Venue schedule', BuildingOffice2Icon],
+    ['/coordinator/venues', 'Venue directory', BuildingOffice2Icon],
     ['/coordinator/availability', 'Availability', CalendarDaysIcon],
   ],
   VENDOR: [

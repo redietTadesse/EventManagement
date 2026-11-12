@@ -23,6 +23,9 @@ import InquiryDetail from './coordinator/InquiryDetail';
 import Events from './coordinator/Events';
 import EventDetail from './coordinator/EventDetail';
 import Venues from './coordinator/Venues';
+import VenueSchedule from './coordinator/VenueSchedule';
+import BookingFollowups from './coordinator/BookingFollowups';
+import AutomaticAssistance from './coordinator/AutomaticAssistance';
 import VenueDetail from './coordinator/VenueDetail';
 import MasterCalendar from './components/MasterCalendar';
 import AvailabilityGrid from './coordinator/AvailabilityGrid';
@@ -64,6 +67,9 @@ function AppRoutes() {
         <Route path="/coordinator/inquiries/:id" element={<InquiryDetail />} />
         <Route path="/coordinator/events" element={<Events />} />
         <Route path="/coordinator/events/:id" element={<EventDetail />} />
+        <Route path="/coordinator/assistance" element={<AutomaticAssistance />} />
+        <Route path="/coordinator/follow-ups" element={<BookingFollowups />} />
+        <Route path="/coordinator/venue-schedule" element={<VenueSchedule />} />
         <Route path="/coordinator/venues" element={<Venues />} />
         <Route path="/coordinator/venues/:id" element={<VenueDetail />} />
         <Route path="/coordinator/calendar" element={<MasterCalendar />} />

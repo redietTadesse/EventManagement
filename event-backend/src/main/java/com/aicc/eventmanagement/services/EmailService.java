@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -459,10 +460,11 @@ public class EmailService {
 
         // Log the email regardless
         String logEntry = String.format("TO: %s | SUBJECT: %s", actualRecipient, subject);
-        emailLog.add(logEntry);
+        recordDelivery("ATTEMPTING", actualRecipient, subject);
         log.info("📧 {}", logEntry);
 
         if (!emailEnabled) {
+            recordDelivery("DISABLED", actualRecipient, subject);
             log.info("Email disabled. Would have sent: {}", subject);
             return;
         }
@@ -475,9 +477,12 @@ public class EmailService {
             message.setText(body);
 
             mailSender.send(message);
+            recordDelivery("ACCEPTED_BY_MAIL_SERVER", actualRecipient, subject);
             log.info("Email sent successfully to: {}", actualRecipient);
 
         } catch (MailException e) {
+            recordDelivery(e instanceof MailAuthenticationException ? "FAILED_AUTHENTICATION" : "FAILED_DELIVERY",
+                    actualRecipient, subject);
             log.error("Failed to send email to {}: {}", actualRecipient, e.getMessage());
         }
     }
@@ -502,6 +507,7 @@ public class EmailService {
         log.info("📧 {}", logEntry);
 
         if (!emailEnabled) {
+            recordDelivery("DISABLED", actualRecipient, subject);
             log.info("Email disabled. Would have sent HTML: {}", subject);
             return;
         }
@@ -515,13 +521,17 @@ public class EmailService {
             helper.setText(htmlBody, true); // true = isHtml
 
             mailSender.send(message);
+            recordDelivery("ACCEPTED_BY_MAIL_SERVER", actualRecipient, subject);
             log.info("HTML email sent successfully to: {}", actualRecipient);
 
         } catch (MessagingException e) {
+            recordDelivery("FAILED_MESSAGE_CREATION", actualRecipient, subject);
             log.error("Failed to create HTML email to {}: {}", actualRecipient, e.getMessage());
             // Fallback to plain text
             sendEmail(to, subject, "Please view this email in an HTML-capable client.");
         } catch (MailException e) {
+            recordDelivery(e instanceof MailAuthenticationException ? "FAILED_AUTHENTICATION" : "FAILED_DELIVERY",
+                    actualRecipient, subject);
             log.error("Failed to send HTML email to {}: {}", actualRecipient, e.getMessage());
         }
     }
@@ -531,8 +541,19 @@ public class EmailService {
     /**
      * Get the email log for testing/demo purposes.
      */
+
+    private void recordDelivery(String status, String recipient, String subject) {
+        String entry = java.time.Instant.now() + " | " + status + " | TO: " + recipient + " | SUBJECT: " + subject;
+        synchronized (emailLog) {
+            emailLog.add(entry);
+            while (emailLog.size() > 200) emailLog.remove(0);
+        }
+    }
+
     public List<String> getEmailLog() {
-        return List.copyOf(emailLog);
+        synchronized (emailLog) {
+            return List.copyOf(emailLog);
+        }
     }
 
     /**

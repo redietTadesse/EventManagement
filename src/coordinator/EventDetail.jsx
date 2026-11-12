@@ -90,7 +90,7 @@ export default function EventDetail() {
 
   useEffect(() => {
     const tab = new URLSearchParams(search).get('tab');
-    setActiveTab(['vendors', 'issues'].includes(tab) ? tab : 'overview');
+    setActiveTab(['vendors', 'issues', 'tasks'].includes(tab) ? tab : 'overview');
     setHighlightedCategory(null);
     setHistoryCategory(null);
   }, [id, search]);

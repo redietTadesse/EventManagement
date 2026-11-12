@@ -40,7 +40,7 @@ test('a previous decline followed by a pending replacement is handled automatica
   ]);
   const action = nextEventAction({ ...context, rows });
   assert.equal(action.kind, 'waiting');
-  assert.match(action.description, /replacement after a decline or expiry/);
+  assert.match(action.description, /up to three ranked backups/);
   assert.equal(action.action, 'View pending offers');
 });
 
@@ -122,4 +122,12 @@ test('a reservation requires every calendar day; holds, cancellations and anothe
     { eventId: 8, bookingDate: '2028-03-01', status: 'CONFIRMED' },
   ], 8, '2028-02-28', '2028-03-01').complete, true);
   assert.equal(venueReservation([], 8, undefined, undefined).complete, false);
+});
+
+test('ranked backups are numbered and the final failed backup requests intervention', () => {
+  const offers = [1, 2, 3, 4].map(id => ({ id, vendorId: id, serviceCategory: 'av', status: 'DECLINED' }));
+  const pending = [...offers.slice(0, -1), { ...offers.at(-1), status: 'PENDING' }];
+  assert.equal(buildServiceRows(['av'], pending)[0].backupLabel, 'Backup 3 of 3');
+  assert.match(buildServiceRows(['av'], offers)[0].reason, /all three automatic backups/);
+  assert.match(buildServiceRows(['av'], offers.slice(0, 1))[0].reason, /no eligible untried vendor/);
 });

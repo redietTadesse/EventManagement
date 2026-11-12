@@ -1,6 +1,7 @@
 
 package com.aicc.eventmanagement.services;
 
+import com.aicc.eventmanagement.entities.AppNotification.Destination;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.User;
@@ -37,6 +38,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.lang.Nullable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -56,6 +58,8 @@ import java.util.stream.Collectors;
 @Transactional
 public class VendorService {
 
+    private static final int MAX_RANKED_BACKUPS = 3;
+
     private final VendorRepository vendorRepository;
     private final VendorBookedDateRepository bookedDateRepository;
     private final VendorAssignmentRepository assignmentRepository;
@@ -66,6 +70,8 @@ public class VendorService {
     private final VendorRankingService rankingService;
     private final VendorEligibilityService eligibilityService;
     private final VendorRatingService ratingService;
+    private final NotificationService notifications;
+    private final AutomaticAssistance assistance;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
@@ -322,8 +328,7 @@ public class VendorService {
     }
 
     public List<VendorAssignment> autoAssignForEvent(Long eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
+        Event event = lockEvent(eventId);
 
         return autoAssignForEvent(event);
     }
@@ -346,9 +351,9 @@ public class VendorService {
         List<Long> preferredVendorIds = parsePreferredVendors(event.getInquiry());
 
         List<VendorAssignment> assignments = new ArrayList<>();
-        List<String> unfilledCategories = new ArrayList<>();
 
         for (String category : requiredCategories) {
+            if (!escalationFor(event, category).attempts().isEmpty()) continue;
             VendorAssignment assignment = null;
             Set<Long> alreadyTried = Set.copyOf(
                     assignmentRepository.findTriedVendorIds(event.getId(), category));
@@ -413,8 +418,9 @@ public class VendorService {
 
             if (assignment != null) {
                 assignments.add(assignment);
+                clearCoordinatorAction(event, category);
             } else {
-                unfilledCategories.add(category);
+                flagCoordinatorAction(event, category, "No eligible vendor was available for the initial offer.");
                 log.warn("No vendor available for category {} on date {} for event {}",
                         category, eventDate, event.getId());
             }
@@ -426,10 +432,6 @@ public class VendorService {
             saved.forEach(a -> eventPublisher.publishEvent(new VendorAssignmentEvent(this, a)));
         }
 
-        if (!unfilledCategories.isEmpty()) {
-            event.setUnfilledCategories(String.join(",", unfilledCategories));
-            log.warn("Event {} needs coordinator for categories: {}", event.getId(), unfilledCategories);
-        }
         eventRepository.save(event);
         evaluateEventRollup(event, Role.COORDINATOR);
 
@@ -556,8 +558,7 @@ public class VendorService {
 
     public VendorAssignment manualAssign(Long eventId, String category, Long vendorId,
                                          String reason, String serviceOrder, Long coordinatorId, String coordinatorUsername) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
+        Event event = lockEvent(eventId);
 
         Vendor vendor = getVendorById(vendorId);
         LocalDate eventDate = event.getInquiry().getEventDate();
@@ -610,12 +611,7 @@ public class VendorService {
 
         eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
 
-        if (event.getUnfilledCategories() != null) {
-            List<String> unfilled = new ArrayList<>(List.of(event.getUnfilledCategories().split(",")));
-            unfilled.remove(category);
-            event.setUnfilledCategories(unfilled.isEmpty() ? null : String.join(",", unfilled));
-        }
-
+        clearCoordinatorAction(event, category);
         eventRepository.save(event);
         evaluateEventRollup(event, Role.COORDINATOR);
         log.info("Manual assignment: {} for event {} category {}",
@@ -624,8 +620,13 @@ public class VendorService {
         return saved;
     }
 
-    @Transactional
+    // ============ VENDOR RESPONSE ============
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public VendorAssignment respondToAssignment(Long assignmentId, String response, String declineReason) {
+        Long eventId = assignmentRepository.findEventIdForAssignment(assignmentId)
+                .orElseThrow(() -> new EntityNotFoundException("Assignment", assignmentId));
+        lockEvent(eventId);
         VendorAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new EntityNotFoundException("Assignment", assignmentId));
 
@@ -634,6 +635,10 @@ public class VendorService {
                     String.format("Assignment is not pending (current status: %s)", assignment.getStatus()),
                     "ASSIGNMENT_NOT_PENDING"
             );
+        }
+
+        if (assignment.getExpiresAt() != null && !assignment.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new BusinessException("This offer has passed its response deadline", "OFFER_EXPIRED");
         }
 
         LocalDate eventDate = assignment.getEvent().getInquiry().getEventDate();
@@ -683,6 +688,9 @@ public class VendorService {
         return assignment;
     }
 
+    // ============ ADVANCE AFTER A FAILED ATTEMPT ============
+
+    /** Try the next ranked candidate within the automatic offer limit. */
     @Transactional
     public void advanceAfterFailedAttempt(VendorAssignment failedAttempt, Role triggeringRole) {
         Event event = failedAttempt.getEvent();
@@ -692,11 +700,23 @@ public class VendorService {
         log.info("Advancing category {} for event {} after attempt {} ended as {}",
                 category, event.getId(), failedAttempt.getId(), failedAttempt.getStatus());
 
+        SelectionReason reason = failedAttempt.getSelectionReason();
+        if (reason == SelectionReason.COORDINATOR_MANUAL || reason == SelectionReason.COORDINATOR_FORCED
+                || reason == SelectionReason.POOL_CLAIM) {
+            flagCoordinatorAction(event, category, "The follow-up offer ended without acceptance.");
+            return;
+        }
+
+        if (assignmentRepository.findTriedVendorIds(event.getId(), category).size() >= 1 + MAX_RANKED_BACKUPS) {
+            flagCoordinatorAction(event, category, "All three automatic backup offers ended without acceptance.");
+            return;
+        }
+
         Optional<VendorRankingService.Selection> selection =
                 rankingService.selectForEvent(event.getId(), event.getInquiry().getEventType(), category, eventDate);
 
         if (selection.isEmpty()) {
-            openCategoryToPool(event, category);
+            flagCoordinatorAction(event, category, "No eligible untried vendor was available.");
             return;
         }
 
@@ -728,65 +748,71 @@ public class VendorService {
         advanceAfterFailedAttempt(declinedAssignment, Role.VENDOR);
     }
 
-    private void openCategoryToPool(Event event, String category) {
-        CategoryEscalation escalation = escalationFor(event, category);
-
-        boolean alreadyOpen = escalation.currentAttempt()
-                .map(a -> a.getStatus() == VendorAssignmentStatus.OPEN)
-                .orElse(false);
-
-        if (!alreadyOpen) {
-            VendorAssignment poolRow = VendorAssignment.builder()
-                    .event(event)
-                    .serviceCategory(category)
-                    .status(VendorAssignmentStatus.OPEN)
-                    .selectionReason(SelectionReason.POOL_OPENED)
-                    .build();
-            assignmentRepository.save(poolRow);
-            log.warn("Category {} for event {} exhausted its ranked list - opened to the vendor pool",
-                    category, event.getId());
-        }
-
-        String unfilled = event.getUnfilledCategories();
-        List<String> unfilledCategories = unfilled == null || unfilled.isBlank()
-                ? new ArrayList<>()
-                : new ArrayList<>(List.of(unfilled.split(",")));
-        if (!unfilledCategories.contains(category)) {
-            unfilledCategories.add(category);
-            event.setUnfilledCategories(String.join(",", unfilledCategories));
-        }
-        eventRepository.save(event);
+    private Event lockEvent(Long eventId) {
+        return eventRepository.findByIdForUpdate(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
     }
 
-    @Transactional
+    private void clearCoordinatorAction(Event event, String category) {
+        List<String> unfilled = new ArrayList<>(CategoryUtils.split(event.getUnfilledCategories()));
+        if (unfilled.remove(category)) {
+            event.setUnfilledCategories(unfilled.isEmpty() ? null : String.join(",", unfilled));
+        }
+    }
+
+    private void flagCoordinatorAction(Event event, String category, String reason) {
+        List<String> unfilled = new ArrayList<>(CategoryUtils.split(event.getUnfilledCategories()));
+        if (unfilled.contains(category)) return;
+        unfilled.add(category);
+        assistance.record(event.getInquiry(), event.getId(), "VENDORS", "A service needs coordinator review",
+                category + " · " + reason, true);
+        event.setUnfilledCategories(String.join(",", unfilled));
+        eventRepository.save(event);
+        User coordinator = event.getInquiry().getCoordinator();
+        if (coordinator != null) {
+            notifications.notifyUser(coordinator.getId(), Destination.COORDINATOR_EVENT, event.getId(),
+                    "Vendor service needs coordinator action", category + " for " + event.getName() + ". " + reason);
+        }
+    }
+
+    // ============ OFFER EXPIRY ============
+
+    /**
+     * Expire offers whose deadline has passed and advance each category.
+     *
+     * Attributed to VENDOR because the cause is the vendor failing to act, the same
+     * actor as a decline. That also keeps the resulting event rollup inside the roles
+     * already permitted for AWAITING_VENDORS to NEEDS_COORDINATOR.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public int expireStaleOffers() {
-        List<VendorAssignment> stale =
-                assignmentRepository.findExpiredPendingOffers(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        List<VendorAssignmentRepository.DueOffer> stale = assignmentRepository.findExpiredPendingOffers(now);
 
         int expired = 0;
 
-        for (VendorAssignment assignment : stale) {
-            try {
-                workflowEngine.validateAssignmentTransition(
-                        VendorAssignmentStatus.PENDING, VendorAssignmentStatus.EXPIRED, Role.VENDOR);
+        for (VendorAssignmentRepository.DueOffer offer : stale) {
+            lockEvent(offer.getEventId());
+            VendorAssignment assignment = assignmentRepository.findById(offer.getId()).orElse(null);
+            if (assignment == null || assignment.getStatus() != VendorAssignmentStatus.PENDING
+                    || assignment.getExpiresAt() == null || assignment.getExpiresAt().isAfter(now)) continue;
+            workflowEngine.validateAssignmentTransition(
+                    VendorAssignmentStatus.PENDING, VendorAssignmentStatus.EXPIRED, Role.VENDOR);
 
-                assignment.setStatus(VendorAssignmentStatus.EXPIRED);
-                assignmentRepository.save(assignment);
+            assignment.setStatus(VendorAssignmentStatus.EXPIRED);
+            assignmentRepository.save(assignment);
 
-                eventPublisher.publishEvent(new VendorAssignmentEvent(this, assignment));
+            eventPublisher.publishEvent(new VendorAssignmentEvent(this, assignment));
 
-                advanceAfterFailedAttempt(assignment, Role.VENDOR);
-                evaluateEventRollup(assignment.getEvent(), Role.VENDOR);
+            advanceAfterFailedAttempt(assignment, Role.VENDOR);
+            evaluateEventRollup(assignment.getEvent(), Role.VENDOR);
 
-                expired++;
-                log.info("Expired assignment {} (vendor {}, category {}, deadline {})",
-                        assignment.getId(),
-                        assignment.getVendorName(),
-                        assignment.getServiceCategory(),
-                        assignment.getExpiresAt());
-            } catch (Exception e) {
-                log.error("Failed to expire assignment {}: {}", assignment.getId(), e.getMessage());
-            }
+            expired++;
+            log.info("Expired assignment {} (vendor {}, category {}, deadline {})",
+                    assignment.getId(),
+                    assignment.getVendorName(),
+                    assignment.getServiceCategory(),
+                    assignment.getExpiresAt());
         }
 
         return expired;
@@ -1261,7 +1287,7 @@ public class VendorService {
             case DECLINED:
             case EXPIRED:
                 if (next == null) {
-                    return "no further action yet";
+                    return "needs coordinator action";
                 }
                 SelectionReason nextReason = next.getSelectionReason();
                 if (nextReason == SelectionReason.POOL_OPENED

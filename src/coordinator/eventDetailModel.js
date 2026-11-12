@@ -1,4 +1,6 @@
 const terminalStatuses = new Set(['CANCELLED', 'COMPLETED', 'CLOSED', 'PROPOSAL_REJECTED']);
+const maxRankedBackups = 3;
+const manualSelections = new Set(['COORDINATOR_MANUAL', 'COORDINATOR_FORCED', 'POOL_CLAIM']);
 const cancellableStatuses = new Set(['AWAITING_VENDORS', 'NEEDS_COORDINATOR', 'CONFIRMED']);
 
 export const serviceLabel = (value = '') => value.toLowerCase() === 'av'
@@ -20,6 +22,9 @@ export function buildServiceRows(requiredCategories = [], assignments = []) {
     const current = attempts.at(-1) || null;
     const state = ['ACCEPTED', 'COMPLETED'].includes(current?.status)
       ? 'resolved' : current?.status === 'PENDING' ? 'pending' : 'exhausted';
+    const manual = manualSelections.has(current?.selectionReason);
+    const vendorCount = new Set(attempts.map(item => item.vendorId).filter(id => id != null)).size;
+    const backupsUsed = Math.max(0, vendorCount - 1);
     const reasons = {
       OPEN: 'the vendor-pool offer has not been claimed',
       DECLINED: 'the latest vendor offer was declined',
@@ -29,7 +34,14 @@ export function buildServiceRows(requiredCategories = [], assignments = []) {
     return {
       category, attempts, current, state,
       vendorName: current?.vendorName || 'a vendor',
-      reason: reasons[current?.status] || 'no active vendor offer exists',
+      backupLabel: state === 'pending' && !manual && backupsUsed > 0 && backupsUsed <= maxRankedBackups
+        ? `Backup ${backupsUsed} of ${maxRankedBackups}` : null,
+      manual,
+      reason: state === 'exhausted' && ['DECLINED', 'EXPIRED'].includes(current?.status)
+        ? manual ? 'the follow-up offer ended without acceptance'
+          : backupsUsed >= maxRankedBackups ? 'all three automatic backups ended without acceptance'
+            : 'no eligible untried vendor remained after the last offer'
+        : reasons[current?.status] || 'no active vendor offer exists',
     };
   });
 }
@@ -101,7 +113,7 @@ export function nextEventAction({ status, rows, vendorsKnown, venueNeedsAttentio
   const pending = rows.filter(row => row.state === 'pending');
   if (pending.length) return {
     kind: 'waiting', title: 'Waiting for vendor responses',
-    description: `${pending.length} service ${pending.length === 1 ? 'offer is' : 'offers are'} pending. The system attempts a replacement after a decline or expiry; coordinator intervention is needed if the eligible pool is exhausted.`,
+    description: `${pending.length} service ${pending.length === 1 ? 'offer is' : 'offers are'} pending. Automatic sourcing tries up to three ranked backups. A coordinator handles the service if the limit is reached or no eligible vendor remains.`,
     target: 'vendors', action: 'View pending offers',
   };
   if (!venueKnown) return {

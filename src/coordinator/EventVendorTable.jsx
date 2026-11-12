@@ -65,7 +65,8 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
         <div className="space-y-1">
           <p className="text-xs text-slate-500 md:hidden">Offer status</p>
           {current ? <StatusBadge status={current.status} /> : <span className="text-sm text-rose-700">No offer</span>}
-          {current?.status === 'OPEN' && <p className="text-xs font-medium text-rose-800">No eligible replacement was found. The offer is open to the vendor pool.</p>}
+          {row.backupLabel && <p className="text-xs font-semibold text-indigo-700">{row.backupLabel} · Awaiting response</p>}
+          {row.state === 'exhausted' && <p className="text-xs font-medium text-rose-800">Needs coordinator action · {row.reason}.</p>}
           {previous && <p className="text-xs text-slate-600">Previous offer: {previous.vendorName || 'Vendor'} · {previous.status.toLowerCase()}</p>}
         </div>
         <div className="text-sm text-slate-600"><p className="text-xs text-slate-500 md:hidden">Response deadline</p>
@@ -73,7 +74,7 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
         </div>
         <div className="space-y-2 text-sm">
           <button type="button" onClick={() => setReviewing(value => !value)} aria-expanded={reviewing} className="font-medium text-indigo-700 hover:underline">{reviewing ? 'Hide alternatives' : 'Review alternatives'}</button>
-          {row.state === 'pending' && canAssign && <p className="text-xs text-amber-800">Automatic follow-up after decline or expiry.</p>}
+          {row.state === 'pending' && canAssign && <p className="text-xs text-amber-800">{row.manual ? 'Coordinator follow-up offer' : 'Automatic follow-up after decline or expiry'}</p>}
           {row.attempts.length > 1 && <button type="button" onClick={() => onHistory(row.category)} className="block text-xs text-slate-600 underline">{row.attempts.length - 1} previous {row.attempts.length === 2 ? 'attempt' : 'attempts'}</button>}
           {feedback && <p role={feedback.type === 'error' ? 'alert' : 'status'} className={`text-xs ${feedback.type === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}>{feedback.message}</p>}
         </div>
@@ -82,7 +83,7 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
         <p className="text-xs text-slate-600">Current eligibility for this event. These results can differ from the recorded selection decision.</p>
         {loading && <p role="status" className="text-sm text-slate-500">Checking vendor eligibility…</p>}
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
-        {!loading && !error && alternatives.length === 0 && <p className="text-sm text-slate-700">No eligible alternative is currently available.</p>}
+        {!loading && !error && alternatives.length === 0 && <p className="text-sm text-slate-700">No eligible alternative is currently available. Follow up with procurement about approved vendors.</p>}
         {alternatives.map(vendor => <div key={vendor.vendorId || vendor.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="font-medium text-slate-900">#{vendor.rank} {vendor.companyName}</p>

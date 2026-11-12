@@ -36,11 +36,12 @@ export default function Venues() {
   return (
     <Layout title="Venues">
       <div className="space-y-6">
+        <Link className="btn-outline" to="/coordinator/venue-schedule">Open venue schedule</Link>
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Venue Management</h1>
+            <h1 className="text-2xl font-bold text-gray-800">Venue directory</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Browse and manage event venues
+              Browse venue details and capacities
             </p>
           </div>
         </div>

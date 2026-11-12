@@ -165,7 +165,7 @@ public class VenueController {
     }
 
     @GetMapping("/{id}/unavailable-dates")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     public ResponseEntity<List<VenueUnavailableDateResponse>> getUnavailableDates(@PathVariable Long id) {
         return ResponseEntity.ok(venueService.getUnavailableDates(id).stream().map(VenueUnavailableDateResponse::from).toList());
     }
