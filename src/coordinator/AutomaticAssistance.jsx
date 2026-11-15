@@ -7,8 +7,8 @@ import PageHeader from '../components/PageHeader';
 import useApiResource from '../hooks/useApiResource';
 
 const groups = [
-  { key: 'VENDORS', title: 'Finding vendors', icon: UsersIcon, description: 'Eligible replacements are offered the work when a vendor declines or misses a deadline.' },
-  { key: 'REMINDERS', title: 'Following up on bookings', icon: BellIcon, description: 'Clients and coordinators are reminded about signatures, receipts, and verification.' },
+  { key: 'VENDORS', title: 'Finding vendors', icon: UsersIcon, description: 'The next suitable vendor gets an offer if a vendor declines or does not reply on time.' },
+  { key: 'REMINDERS', title: 'Following up on bookings', icon: BellIcon, description: 'Clients and coordinators are reminded about contract signatures, payment receipts, and receipt checks.' },
   { key: 'PREPARATION', title: 'Planning preparation', icon: ClipboardDocumentListIcon, description: 'Preparation tasks and their deadlines are created from the event type.' },
 ];
 
@@ -19,9 +19,9 @@ export default function AutomaticAssistance() {
   const activity = overview?.activity || [];
   const shown = filter === 'ALL' ? activity : activity.filter(item => item.category === filter);
 
-  return <Layout title="Automatic assistance">
+  return <Layout title="Automatic updates">
     <div className="space-y-6">
-      <PageHeader eyebrow="Your coordination workspace" title="A little less chasing."
+      <PageHeader eyebrow="Your work" title="Work the system does for you"
         subtitle="See the work the system has taken care of for your inquiries and events."
         action={<button type="button" className="btn-outline" onClick={resource.reload}><ArrowPathIcon className="h-4 w-4" />Refresh</button>} />
       <section className="overflow-hidden rounded-2xl bg-[#173b3b] p-6 text-white sm:p-8">
@@ -70,7 +70,7 @@ export default function AutomaticAssistance() {
               <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-sm font-semibold text-slate-900">{item.title}</h3><time dateTime={item.createdAt} className="text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</time></div>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.detail}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-                {item.needsAttention && <span className="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-900">Personal follow-up was requested</span>}
+                {item.needsAttention && <span className="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-900">Coordinator follow-up needed</span>}
                 <Link className="font-semibold text-indigo-700 hover:underline" to={item.eventId ? '/coordinator/events/' + item.eventId + '?tab=' + (item.category === 'PREPARATION' ? 'tasks' : 'vendors') : '/coordinator/inquiries/' + item.inquiryId}>{item.eventId ? 'View event' : 'View inquiry'} →</Link>
               </div>
             </div>
@@ -78,11 +78,11 @@ export default function AutomaticAssistance() {
         })}</ol>
       </section>
       {overview && <details className="surface p-5 text-sm">
-        <summary className="cursor-pointer font-semibold text-slate-700">How automatic assistance works</summary>
+        <summary className="cursor-pointer font-semibold text-slate-700">What the system does for you</summary>
         <div className="mt-4 space-y-3 leading-relaxed text-slate-600">
-          <p>Vendor offers allow {overview.vendorHours} hours for a response. Up to three ranked backups are tried before coordinator review is requested. Offers already issued keep their recorded deadlines.</p>
+          <p>Vendor offers allow {overview.vendorHours} hours for a response. The system tries up to three replacement vendors, in recommended order, before asking the coordinator to step in. Offers already issued keep their recorded deadlines.</p>
           <p>{overview.remindersEnabled ? 'Booking reminders run every ' + overview.reminderHours + ' hours, with up to ' + overview.reminderLimit + ' reminders per outstanding action before personal follow-up is requested.' : 'Automatic booking reminders are currently disabled.'} You can pause or resume reminders for each inquiry you handle.</p>
-          <p>Preparation plans add missing tasks while preserving existing work and coordinator edits.</p>
+          <p>The system adds missing preparation tasks and keeps your existing tasks and changes.</p>
           <p>The administrator can check email delivery if a reminder has not arrived.</p>
           <Link className="inline-block font-semibold text-indigo-700 underline" to="/coordinator/follow-ups">View reminder schedules and pause controls</Link>
         </div>

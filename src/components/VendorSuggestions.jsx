@@ -137,7 +137,7 @@ export default function VendorSuggestions({
             {excludedCandidates.map(candidate => (
               <li key={candidate.vendorId} className="text-xs text-rose-800">
                 <span className="font-medium">{candidate.companyName || 'Vendor'}</span>
-                <span> — {candidate.reason || 'Not eligible for this event.'}</span>
+                <span> — {candidate.reason || 'Does not meet the requirements for this event.'}</span>
               </li>
             ))}
           </ul>

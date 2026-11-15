@@ -18,7 +18,7 @@ function DateResult({ result, selected, onSelect, disabled }) {
         {blocked ? 'Scheduling conflict' : 'No scheduling conflicts found'}
       </p>
       <p className="mt-2 text-sm text-slate-700">Venue: {impact.venueAvailable ? 'No conflict found' : 'Unavailable'}</p>
-      <p className="mt-1 text-sm text-slate-700">Vendor reconfirmations: {reconfirmations.length}</p>
+      <p className="mt-1 text-sm text-slate-700">Vendors who must accept the new date: {reconfirmations.length}</p>
       {[...conflicts, ...reconfirmations].length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-slate-600">
         {[...conflicts, ...reconfirmations].map((message, index) => <li key={index}>{message}</li>)}
       </ul>}

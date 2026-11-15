@@ -153,6 +153,7 @@ export default function InquiryDetail() {
                 <p className="font-medium capitalize">{inquiry.requestedCategories.join(', ')}</p>
               </div>
             )}
+            {inquiry.tableSetup && <p className="text-sm"><strong>Table and seating setup:</strong> {inquiry.tableSetup.replaceAll('_', ' ').toLowerCase()}</p>}
             {inquiry.requirements && (
               <div>
                 <p className="text-sm text-gray-500">Client Requirements</p>

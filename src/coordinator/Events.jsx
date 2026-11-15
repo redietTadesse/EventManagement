@@ -5,6 +5,8 @@ import StatusBadge from '../components/StatusBadge';
 import ResponsiveTable from '../components/ResponsiveTable';
 import EmptyState from '../components/EmptyState';
 import api from '../api/axios';
+import { eventPage } from '../utils/eventPages';
+import EventPageControls from '../components/EventPageControls';
 import { useApp } from '../context/AppContext';
 
 const EVENT_STATUS_OPTIONS = [
@@ -35,6 +37,7 @@ const formatEventDate = (value) => {
 export default function Events() {
   const { state } = useApp();
   const [ownership, setOwnership] = useState('all');
+  const [pageNumber, setPageNumber] = useState(1);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -42,6 +45,7 @@ export default function Events() {
   const [dateTo, setDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const requestController = useRef(null);
+  useEffect(() => { setPageNumber(1); }, [ownership, dateFrom, dateTo, statusFilter]);
 
   const loadEvents = useCallback(async () => {
     requestController.current?.abort();
@@ -85,6 +89,7 @@ export default function Events() {
   });
 
   const invalidDateRange = dateFrom && dateTo && dateFrom > dateTo;
+  const page = eventPage(filteredEvents, pageNumber);
 
   return (
     <Layout title="Events">
@@ -206,10 +211,11 @@ export default function Events() {
                   </Link>
                 )},
               ]}
-              data={invalidDateRange ? [] : filteredEvents}
+              data={invalidDateRange ? [] : page.rows}
             />
           )}
         </div>
+        {!loading && !loadError && !invalidDateRange && <EventPageControls page={page} onChange={setPageNumber} />}
       </div>
     </Layout>
   );

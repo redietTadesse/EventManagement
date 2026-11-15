@@ -31,7 +31,7 @@ const navigation = {
     ['/coordinator/dashboard', 'Overview', Squares2X2Icon],
     ['/coordinator/inquiries', 'Inquiries', InboxStackIcon],
     ['/coordinator/events', 'Events', ClipboardDocumentListIcon],
-    ['/coordinator/assistance', 'Automatic assistance', InboxStackIcon],
+    ['/coordinator/assistance', 'Automatic updates', InboxStackIcon],
     ['/coordinator/calendar', 'Calendar', CalendarDaysIcon],
     ['/coordinator/vendors', 'Vendor directory', UsersIcon],
     ['/coordinator/venue-schedule', 'Venue schedule', BuildingOffice2Icon],

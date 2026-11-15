@@ -12,7 +12,7 @@ function Evidence({ booking, onClose }) {
   const changes = [...timeline.data, ...eventTimeline.data].sort((a,b) => new Date(b.occurredAt) - new Date(a.occurredAt));
   return <section ref={panel} tabIndex={-1} className="surface space-y-4 border-l-4 border-indigo-500 p-5" aria-label="Booking review evidence" aria-live="polite">
     <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">Inquiry #{booking.inquiryId}{booking.eventId && ' · Event #' + booking.eventId}</p><h3 className="mt-1 text-lg font-semibold">{booking.client}</h3></div><button className="text-sm underline" onClick={onClose}>Close details</button></div>
-    <p className="text-sm"><strong>Current owner</strong> · {booking.coordinator}</p>
+    <p className="text-sm"><strong>Coordinator handling the work</strong> · {booking.coordinator}</p>
     <p className="text-sm"><strong>Next action</strong> · {booking.nextAction}</p>
     <div className="rounded-lg bg-indigo-50 p-4 text-sm text-indigo-950">
       <p className="font-semibold">Questions for the review</p>
@@ -64,7 +64,7 @@ export default function BookingPerformance() {
         <label className="text-sm font-medium">Inquiries received<select className="ml-2 rounded-lg border border-slate-300 p-2" value={days} onChange={event => setDays(Number(event.target.value))}>{[30,90,180].map(value => <option key={value} value={value}>Last {value} days</option>)}</select></label>
         <label className="text-sm font-medium">Review waiting stages after<select className="ml-2 rounded-lg border border-slate-300 p-2" value={reviewDays} onChange={event => setReviewDays(Number(event.target.value))}>{[3,7,14].map(value => <option key={value} value={value}>{value} days</option>)}</select></label>
       </div>
-      {report && <p className="mt-4 text-xs leading-relaxed text-slate-500">Inquiries received {report.from} through {report.through}, with their outcomes as of today. Paid bookings have verified payment records and may include later cancellations. Current owners receive the workload attribution, including transferred inquiries. The waiting threshold is a review aid.</p>}
+      {report && <p className="mt-4 text-xs leading-relaxed text-slate-500">Inquiries received {report.from} through {report.through}, with their outcomes as of today. Paid bookings have payment receipts checked by a coordinator. Some may have been cancelled later. Work is counted under the coordinator handling it now, including work handed over to them. Choose how many days to wait before highlighting a record for review.</p>}
     </section>
     {resource.loading && <p role="status">Loading booking performance…</p>}
     {resource.error && <p role="alert" className="surface p-5 text-rose-800">{resource.error}</p>}
@@ -73,14 +73,14 @@ export default function BookingPerformance() {
         {[
           ['Inquiries received', bookings.length, previous + ' in the preceding ' + days + ' days'],
           ['Paid bookings', paid, bookings.length ? (100 * paid / bookings.length).toFixed(1) + '% of inquiries received in this period' : 'No inquiries in this period'],
-          ['Need a review', reviews, 'Unassigned work, waiting stages, sourcing issues, or past dates'],
+          ['Need a review', reviews, 'Work with no coordinator, long waits, missing vendors, or dates that have passed'],
           ['Declined / cancelled', bookings.filter(row => row.rejected || row.cancelled).length, 'Outcomes within these inquiries'],
         ].map(([label, value, note]) => <div key={label} className="surface p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p><p className="mt-2 text-xs leading-relaxed text-slate-500">{note}</p></div>)}
       </div>
       <section className="surface overflow-hidden">
-        <div className="section-heading"><div><h2>Coordinator review</h2><p>Select a coordinator to inspect their records. Waiting on a client or vendor remains visible beside staff actions.</p></div></div>
+        <div className="section-heading"><div><h2>Work by coordinator</h2><p>Select a coordinator to inspect their records. Waiting on a client or vendor remains visible beside staff actions.</p></div></div>
         <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs text-slate-600"><tr>{['Current owner','Inquiries','Active','Paid','Staff action','Client action','Vendor response','Review'].map(label => <th className="whitespace-nowrap px-4 py-3" key={label}>{label}</th>)}</tr></thead>
+          <thead className="bg-slate-50 text-xs text-slate-600"><tr>{['Coordinator handling the work','Inquiries','Active','Paid','Waiting on staff','Waiting on client','Waiting on vendor','Review'].map(label => <th className="whitespace-nowrap px-4 py-3" key={label}>{label}</th>)}</tr></thead>
           <tbody className="divide-y divide-slate-100">{report.coordinators.map(person => <tr key={person.id ?? 'UNASSIGNED'} className={owner === String(person.id ?? 'UNASSIGNED') ? 'bg-indigo-50' : ''}>
             <th className="px-4 py-4 font-medium"><button className="text-indigo-700 underline" onClick={() => { setOwner(String(person.id ?? 'UNASSIGNED')); setSelected(null); }}>{person.name}</button></th>
             {[person.inquiries,person.active,person.paidBookings,person.waitingForCoordinator,person.waitingForClient,person.waitingForVendor,person.review].map((value,index) => <td className="px-4 py-4 tabular-nums" key={index}>{value}</td>)}
@@ -105,7 +105,7 @@ export default function BookingPerformance() {
         </div>
         {missingAge > 0 && <p className="px-5 pt-3 text-xs text-amber-800">{missingAge} records have no known stage entry date. Their age is shown as unavailable.</p>}
         <div className="max-h-[32rem] overflow-auto"><table className="w-full text-left text-sm">
-          <thead className="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr>{['Booking / inquiry','Stage','Days in stage','Next action','Current owner'].map(label => <th className="px-4 py-3" key={label}>{label}</th>)}</tr></thead>
+          <thead className="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr>{['Booking / inquiry','Stage','Days at this step','Next action','Coordinator handling the work'].map(label => <th className="px-4 py-3" key={label}>{label}</th>)}</tr></thead>
           <tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={row.inquiryId} className={row.review ? 'bg-amber-50/40' : ''}>
             <th className="px-4 py-4 font-medium"><button className="text-left text-indigo-700 underline" onClick={() => setSelected(row)}>#{row.inquiryId} · {row.client}</button><p className="mt-1 text-xs font-normal text-slate-500">{row.eventDate} · {row.type}</p></th>
             <td className="px-4 py-4"><StatusBadge status={row.status} />{row.reviewReason && <p className="mt-2 max-w-48 text-xs text-amber-900">{row.reviewReason}</p>}</td>

@@ -83,7 +83,7 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
         <p className="text-xs text-slate-600">Current eligibility for this event. These results can differ from the recorded selection decision.</p>
         {loading && <p role="status" className="text-sm text-slate-500">Checking vendor eligibility…</p>}
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
-        {!loading && !error && alternatives.length === 0 && <p className="text-sm text-slate-700">No eligible alternative is currently available. Follow up with procurement about approved vendors.</p>}
+        {!loading && !error && alternatives.length === 0 && <p className="text-sm text-slate-700">No suitable replacement is available now. Contact procurement to discuss other approved vendors.</p>}
         {alternatives.map(vendor => <div key={vendor.vendorId || vendor.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="font-medium text-slate-900">#{vendor.rank} {vendor.companyName}</p>

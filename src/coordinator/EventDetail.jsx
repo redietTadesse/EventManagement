@@ -939,7 +939,7 @@ useEffect(() => {
 
           {activeTab === 'issues' && <EventIssues key={id} eventId={id} staff={!readOnly} readOnly={readOnly} assignments={assignments} tasks={checklist} canReport={!readOnly && !['CANCELLED', 'CLOSED', 'COMPLETED'].includes(event.status)} />}
           {activeTab === 'history' && <>
-            <AuditTimeline referenceType="EVENT" referenceId={id} refreshKey={historyRefresh} title="Lifecycle history" />
+            <AuditTimeline referenceType="EVENT" referenceId={id} refreshKey={historyRefresh} title="Event history" />
             <VendorDecisionHistory eventId={id} refreshKey={historyRefresh} expandedCategory={historyCategory} />
           </>}
         </section>

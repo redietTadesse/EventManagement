@@ -24,9 +24,9 @@ export default function BookingFollowups() {
   return <Layout title="Booking follow-ups">
     <div className="space-y-6">
       <PageHeader eyebrow="Automatic follow-ups" title="Keep accepted bookings moving"
-        subtitle="Signature, receipt, and verification reminders for inquiries you handle."
+        subtitle="Reminders about contract signatures, payment receipts, and receipt checks for your inquiries."
         action={<button className="btn-outline" onClick={reload}>Refresh</button>} />
-      <p className="surface p-5 text-sm text-slate-600">The system checks outstanding actions every minute. Each action receives its own reminder cycle, then requests personal follow-up if it remains unresolved. Pausing suspends all automated reminders for the inquiry. Reminders are recorded here when queued. Email delivery outcomes are available in the administrator diagnostics.</p>
+      <p className="surface p-5 text-sm text-slate-600">The system checks unfinished steps every minute. It sends reminders, then asks you to follow up if a step is still unfinished. Pause stops all automatic reminders for that inquiry. A reminder appears here when it is ready to send. The administrator can check whether the email was sent.</p>
       {(error || actionError) && <p role="alert" className="text-rose-700">{error || actionError}</p>}
       {loading && <p role="status">Loading follow-ups…</p>}
       {!loading && !error && !data.length && <div className="surface p-8 text-center text-slate-500">No accepted inquiries need booking follow-up.</div>}

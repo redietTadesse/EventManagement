@@ -56,7 +56,7 @@ export default function OpenAssignments() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Open assignments</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Categories where the automatic escalation ladder was exhausted. First claim wins.
+            Available work you can accept. The first suitable vendor to accept gets the work.
           </p>
         </div>
 

@@ -27,9 +27,9 @@ function EmailDiagnostics() {
   return (
     <section className="rounded-xl border bg-white p-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-slate-900">Email delivery diagnostics</h2>
+        <h2 className="font-semibold text-slate-900">Email delivery status</h2>
         <button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { status.reload(); log.reload(); }}>
-          Refresh email diagnostics
+          Refresh email status
         </button>
       </div>
       {status.error && <p role="alert" className="text-rose-700">{status.error}</p>}
@@ -37,7 +37,7 @@ function EmailDiagnostics() {
       {typeof status.data.enabled === 'boolean' && (
         <p className="mt-2 text-sm text-slate-600">Email delivery is {status.data.enabled ? 'enabled' : 'disabled'}.</p>
       )}
-      <p className="mt-2 text-xs text-slate-500">Recent attempts from this server session. Accepted by mail server confirms submission to the mail provider.</p>
+      <p className="mt-2 text-xs text-slate-500">Recent attempts from this server session. Accepted means the email provider received the message for delivery. It does not confirm arrival in the inbox.</p>
       {log.error && <p role="alert" className="text-rose-700">{log.error}</p>}
       {log.loading && <p>Loading email log…</p>}
       {!log.loading && !log.error && log.data.length === 0 && <p className="mt-2 text-sm text-slate-600">No email delivery attempts recorded.</p>}

@@ -22,6 +22,7 @@ export default function NewInquiry() {
       expectedAttendees: plan.attendees,
       requirements: preferredVenue ? `Preferred venue: ${preferredVenue}` : '',
       requestedCategories: [],
+      tableSetup: 'UNDECIDED',
     };
   });
   const [availableCategories, setAvailableCategories] = useState([]);
@@ -32,14 +33,14 @@ export default function NewInquiry() {
   useEffect(() => {
     let active = true;
     const eventType = form.eventType;
-    api.get('/vendors/service-categories', { params: { eventType } })
-      .then((response) => {
+    Promise.all([api.get('/vendors/service-categories'), api.get('/vendors/service-categories', { params: { eventType } })])
+      .then(([response, defaults]) => {
         if (!active) return;
         const categories = response.data || [];
         setAvailableCategories(categories);
         if (!touchedCategories) {
           setForm((previous) => previous.eventType === eventType
-            ? { ...previous, requestedCategories: categories }
+            ? { ...previous, requestedCategories: defaults.data || [] }
             : previous);
         }
       })
@@ -112,6 +113,12 @@ export default function NewInquiry() {
           action={<Link className="btn-outline" to="/client/inquiries">My inquiries</Link>} />
         <form onSubmit={handleSubmit} className="surface p-5 sm:p-7">
           <h2 className="form-section-title">Event details</h2>
+          <label className="mb-4 block text-sm font-medium">Table and seating setup
+            <select name="tableSetup" value={form.tableSetup} onChange={handleChange} className="mt-2 w-full rounded-lg border p-3">
+              {[['UNDECIDED','Help me choose'],['THEATRE','Theatre — rows of chairs'],['CLASSROOM','Classroom — tables facing the front'],['BANQUET','Banquet — round dining tables'],['CABARET','Cabaret — round tables facing the stage'],['BOARDROOM','Boardroom — one shared meeting table'],['U_SHAPE','U-shape — tables arranged in a U']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <span className="mt-1 block text-xs font-normal text-slate-500">Your coordinator will check the room capacity for your chosen setup.</span>
+          </label>
           <p className="form-section-note">Choose the event type and estimated attendance to check venue availability.</p>
           {error && (
             <div role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">

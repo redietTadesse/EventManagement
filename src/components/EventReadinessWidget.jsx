@@ -16,22 +16,22 @@ export default function EventReadinessWidget({ eventId, refreshKey = 0 }) {
         }
       })
       .catch(() => {
-        if (!cancelled) setError('Event readiness could not be loaded.');
+        if (!cancelled) setError('Preparation progress could not be loaded.');
       });
     return () => { cancelled = true; };
   }, [eventId, refreshKey]);
 
   if (error) return <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>;
-  if (!readiness) return <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-400">Loading event readiness…</div>;
+  if (!readiness) return <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-400">Loading preparation progress…</div>;
 
   const percentage = Math.max(0, Math.min(100, readiness.readinessPercentage || 0));
   const barColor = percentage >= 80 ? 'bg-emerald-500' : percentage >= 50 ? 'bg-amber-500' : 'bg-rose-500';
 
   return (
-    <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Event readiness">
+    <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Preparation progress">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Event readiness</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Preparation progress</h2>
           <p className="text-sm text-slate-500">Venue, vendor confirmations, and checklist progress</p>
         </div>
         <span className="text-3xl font-bold text-slate-800">{percentage}%</span>

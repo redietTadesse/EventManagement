@@ -130,6 +130,11 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
             <span>{label}<span className="sr-only">{done ? ', complete' : ', pending'}</span></span>
           </li>)}
         </ol>
+        {contract.paymentDueAt && !booked && <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-950">
+          {contract.paymentHoldActive ? 'Venue held for you until ' : new Date(contract.paymentDueAt) > new Date() ? 'Payment deadline: ' : 'The payment hold ended on '}
+          <strong>{new Date(contract.paymentDueAt).toLocaleString()}</strong>.
+          {' '}{contract.paymentHoldActive ? 'The hold covers setup, event days, and takedown.' : 'There is no active payment hold. Venue availability must be checked.'} Upload payment and allow time for receipt review before this deadline. After it ends, availability must be checked again.
+        </p>}
         <dl className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 [&_dt]:mb-1 [&_dt]:text-xs [&_dt]:font-medium [&_dt]:text-slate-500 [&_dd]:font-medium">
           <div><dt>Proposal</dt><dd>{terms.proposalNumber}</dd></div>
           <div><dt>Client</dt><dd>{terms.client}</dd></div>

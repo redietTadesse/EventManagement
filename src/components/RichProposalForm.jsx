@@ -286,9 +286,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
       {step === 2 && (
         <div>
-          <h3 className="font-semibold text-lg mb-4">Step 2: Vendor Shortlist</h3>
+          <h3 className="font-semibold text-lg mb-4">Step 2: Preferred vendors</h3>
           <p className="text-sm text-slate-500 mb-4">
-            Suggest preferred vendors for each category (client will see these recommendations).
+            Choose vendors to try first for each service. The client will see these choices. After acceptance and payment review, the system checks them before sending offers. Saved client preferences come first. If these vendors cannot take the work, the system tries other suitable vendors.
           </p>
           {inquiry?.requestedCategories?.length > 0 && (
             <p className="text-xs text-slate-500 mb-3">
