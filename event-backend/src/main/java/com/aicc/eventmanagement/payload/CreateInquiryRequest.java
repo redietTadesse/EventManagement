@@ -41,6 +41,8 @@ public class CreateInquiryRequest {
 
     @Pattern(regexp = "THEATRE|CLASSROOM|BANQUET|CABARET|BOARDROOM|U_SHAPE|UNDECIDED", message = "Choose a supported table setup")
     private String tableSetup;
+    @Size(max = 200)
+    private String eventName;
 
     private List<String> requestedCategories;
 }

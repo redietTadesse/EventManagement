@@ -154,6 +154,57 @@ class EventLifecycleApiIntegrationTest {
     }
 
     @Test
+    void revisedSignedProposalPreservesHistoryAndRequiresNewAcceptance() throws Exception {
+        venue.setLayoutCapacities("{\"THEATRE\":300,\"CLASSROOM\":132}");venues.saveAndFlush(venue);
+        long inquiry=acceptedInquiry();
+        String originalRevision=call(GET,agreementPath(inquiry),client,null,200).path("revision").asText();
+        signAndUpload(inquiry);
+        assertThat(nodes(call(GET,"/venues/available?date="+date+"&endDate="+date.plusDays(1)+"&attendees=150&tableSetup=THEATRE&inquiryId="+inquiry,coordinator,null,200)))
+                .anyMatch(row->row.path("id").asLong()==venue.getId());
+        Map<String,Object> revision=new java.util.HashMap<>(proposal());
+        revision.put("price",140000);revision.put("expectedVersion",1);
+        revision.put("eventName","Annual Health Conference");revision.put("expectedAttendees",120);
+        revision.put("tableSetup","CLASSROOM");revision.put("eventDate",date.plusDays(30).toString());
+        revision.put("endDate",date.plusDays(30).toString());
+        JsonNode changed=call(PUT,"/inquiries/"+inquiry+"/proposal",coordinator,revision,200);
+        assertThat(changed.path("status").asText()).isEqualTo("PROPOSAL_SENT");
+        assertThat(changed.path("proposalVersion").asInt()).isEqualTo(2);
+        assertThat(agreements.findById(inquiry)).isEmpty();
+        assertThat(bookings.findByVenueId(venue.getId())).allSatisfy(row->assertThat(row.getStatus()).isEqualTo(VenueBooking.BookingStatus.CANCELLED));
+        JsonNode history=call(GET,"/inquiries/"+inquiry+"/proposal-history",client,null,200);
+        assertThat(history.size()).isEqualTo(1);assertThat(history.get(0).has("agreementArchive")).isFalse();
+        call(PATCH,"/inquiries/"+inquiry+"/accept",client,Map.of("proposalVersion",1),400);
+        call(PATCH,"/inquiries/"+inquiry+"/accept",client,Map.of("proposalVersion",2),200);
+        call(POST,agreementPath(inquiry)+"/signature",client,Map.of("name","Client","revision",originalRevision,"consent",true),400);
+        JsonNode event=convert(inquiry,200);
+        assertThat(event.path("name").asText()).isEqualTo("Annual Health Conference");
+    }
+
+    @Test
+    void unmetRequestsAndOneTapFeedbackAreSavedAndTentativeRequestsDoNotBlock() throws Exception {
+        User admin=user("demand-admin",Role.ADMIN);
+        long accepted=acceptedInquiry();
+        var tentative=call(GET,"/venues/tentative?start="+date.minusDays(2)+"&end="+date.plusDays(3),client,null,200);
+        assertThat(nodes(tentative)).anyMatch(row->row.path("venueId").asLong()==venue.getId());
+        assertThat(tentative.toString()).doesNotContain(client.getFullName());
+        assertThat(bookings.findByVenueId(venue.getId())).isEmpty();
+        Map<String,Object> request=new java.util.HashMap<>();
+        request.put("clientId",client.getId());request.put("clientName",client.getFullName());
+        request.put("eventType","meeting");request.put("eventName","A very large meeting");
+        request.put("eventDate",date.toString());request.put("expectedAttendees",2000000000);
+        request.put("requestedCategories",List.of("tv"));
+        JsonNode created=call(POST,"/inquiries",client,request,201);long id=created.path("id").asLong();
+        assertThat(created.path("unmetNeeds").asText()).contains("No suitable venue","tv");
+        call(POST,"/inquiries/"+id+"/experience",client,Map.of("experience","GOOD"),200);
+        call(POST,"/inquiries/"+id+"/experience",coordinator,Map.of("experience","POOR"),403);
+        User other=user("other-feedback",Role.CLIENT);
+        call(POST,"/inquiries/"+id+"/experience",other,Map.of("experience","POOR"),403);
+        JsonNode report=call(GET,"/admin/dashboard/unmet-demand",admin,null,200);
+        assertThat(nodes(report.path("requests"))).anyMatch(row->row.path("inquiryId").asLong()==id);
+        call(GET,"/admin/dashboard/unmet-demand",client,null,403);
+    }
+
+    @Test
     void inactiveAccountCannotLogIn() throws Exception {
         User inactive = user("inactive-demo", Role.VENDOR);
         inactive.setPasswordHash("$2a$10$dJJpR6hKAkNAeF2taOXXoe5hG07oemMECVB4lAv/43F3a7Ur9frQC");

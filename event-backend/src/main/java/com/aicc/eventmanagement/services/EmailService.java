@@ -63,7 +63,7 @@ public class EmailService {
      * 1. New Inquiry → Coordinator gets notified
      */
     public void sendNewInquiryNotification(Inquiry inquiry, String coordinatorEmail) {
-        String subject = "📋 New Event Inquiry: " + inquiry.getEventType();
+        String subject = "📋 New Event Inquiry: " + (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType());
 
         String body = String.format("""
                 Hello Coordinator,
@@ -82,7 +82,7 @@ public class EmailService {
 
                 AICC Event Management System
                 """,
-                inquiry.getEventType(),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getClientName(),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 inquiry.getExpectedAttendees(),
@@ -168,8 +168,8 @@ public class EmailService {
                 </html>
                 """,
                 inquiry.getClientName(),
-                inquiry.getEventType(),
-                inquiry.getEventType(),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 venue,
                 price,
@@ -186,7 +186,7 @@ public class EmailService {
      * 3. Proposal Accepted → Coordinator gets notified
      */
     public void sendProposalAcceptedNotification(Inquiry inquiry, String coordinatorEmail) {
-        String subject = "✅ Proposal Accepted: " + inquiry.getEventType();
+        String subject = "✅ Proposal Accepted: " + (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType());
 
         String body = String.format("""
                 Hello Coordinator,
@@ -204,7 +204,7 @@ public class EmailService {
 
                 AICC Event Management System
                 """,
-                inquiry.getEventType(),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getClientName(),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 inquiry.getExpectedAttendees(),
@@ -216,7 +216,7 @@ public class EmailService {
     }
 
     public void sendProposalChangeRequestedNotification(Inquiry inquiry, String coordinatorEmail) {
-        String subject = "✏️ Proposal change requested: " + inquiry.getEventType();
+        String subject = "✏️ Proposal change requested: " + (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType());
         String body = String.format("""
                 Hello Coordinator,
 
@@ -231,7 +231,7 @@ public class EmailService {
 
                 AICC Event Management System
                 """,
-                inquiry.getId(), inquiry.getClientName(), inquiry.getEventType(),
+                inquiry.getId(), inquiry.getClientName(), (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 inquiry.getRequirements() == null ? "None specified" : inquiry.getRequirements(),
                 baseUrl, inquiry.getId());

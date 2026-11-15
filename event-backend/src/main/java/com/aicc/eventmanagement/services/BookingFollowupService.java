@@ -19,6 +19,12 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class BookingFollowupService {
+    private String paymentDeadline(Long id) {
+        var agreement=agreements.findById(id).orElse(null);
+        if(agreement==null||agreement.getClientSignedAt()==null||agreement.getCoordinatorSignedAt()==null)return "";
+        Instant latest=agreement.getClientSignedAt().isAfter(agreement.getCoordinatorSignedAt())?agreement.getClientSignedAt():agreement.getCoordinatorSignedAt();
+        return " Contract hold deadline: "+latest.plus(Duration.ofDays(7)).atZone(java.time.ZoneId.of("Africa/Addis_Ababa"))+". After the deadline, venue availability must be checked again.";
+    }
     private final InquiryRepository inquiries;
     private final BookingAgreementRepository agreements;
     private final BookingFollowupRepository followups;
@@ -89,7 +95,7 @@ public class BookingFollowupService {
             notifications.notifyUser(action.recipient(), action.destination(), inquiryId,
                     "Booking follow-up: " + action.label(),
                     "Inquiry #" + inquiryId + " for " + inquiry.getClientName()
-                            + " is awaiting " + action.label().toLowerCase() + ". Open the inquiry to continue."
+                            + " is awaiting " + action.label().toLowerCase() + ". Open the inquiry to continue." + paymentDeadline(inquiryId)
                             + ("Replacement receipt".equals(action.label()) ? " Correction requested: " + agreements.findById(inquiryId).orElseThrow().getRejectionReason() : ""));
             assistance.record(inquiry, null, "REMINDERS", "A booking reminder was queued",
                     action.label() + " · Reminder " + (state.getSentCount() + 1) + " for " + inquiry.getClientName() + ".", false);

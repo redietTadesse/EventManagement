@@ -183,6 +183,8 @@ public class QuotePdfService {
         details.setSpacingAfter(20);
         addDetail(details, "Client", valueOr(inquiry.getClientName(), "Not provided"));
         addDetail(details, "Event type", valueOr(inquiry.getEventType(), "Not provided"));
+        addDetail(details, "Event name", valueOr(inquiry.getEventName(), "Not provided"));
+        addDetail(details, "Seating setup", valueOr(inquiry.getTableSetup(), "Needs confirmation"));
         addDetail(details, "Event date", formatDate(inquiry.getEventDate()));
         addDetail(details, "Attendees", inquiry.getExpectedAttendees() == null
                 ? "Not provided" : inquiry.getExpectedAttendees().toString());

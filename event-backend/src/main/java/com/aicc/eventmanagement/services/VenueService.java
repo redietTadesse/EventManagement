@@ -69,6 +69,7 @@ public class VenueService {
                 .description(request.getDescription())
                 .resources(request.getResources())
                 .capacity(request.getCapacity())
+                .layoutCapacities(LayoutCapacity.validate(request.getLayoutCapacities(),request.getCapacity()))
                 .location(request.getLocation())
                 .hourlyRate(request.getHourlyRate())
                 .setupBufferDays(request.getSetupBufferDays() != null ? request.getSetupBufferDays() : 1)
@@ -124,6 +125,12 @@ public class VenueService {
         if (request.getDescription() != null) venue.setDescription(request.getDescription());
         if (request.getResources() != null) venue.setResources(request.getResources());
         if (request.getCapacity() != null) venue.setCapacity(request.getCapacity());
+        if(request.getLayoutCapacities()!=null && !java.util.Objects.equals(request.getLayoutCapacities(),venue.getLayoutCapacities())) {
+            if(venueBookingRepository.findByVenueId(id).stream().anyMatch(row->row.isActiveHold(LocalDateTime.now())
+                ||(row.getStatus()==VenueBooking.BookingStatus.CONFIRMED&&!row.getBookingDate().isBefore(LocalDate.now()))))
+                throw new BusinessException("Seating capacities cannot change while future bookings or active holds exist.","VENUE_CAPACITY_CONFLICT");
+            venue.setLayoutCapacities(LayoutCapacity.validate(request.getLayoutCapacities(),venue.getCapacity()));
+        }
         if (request.getLocation() != null) venue.setLocation(request.getLocation());
         if (request.getHourlyRate() != null) venue.setHourlyRate(request.getHourlyRate());
         if (request.getSetupBufferDays() != null) venue.setSetupBufferDays(request.getSetupBufferDays());
@@ -148,6 +155,40 @@ public class VenueService {
     }
 
     // --- Availability ---
+    public List<Venue> getAvailableForProposal(LocalDate start, LocalDate end, Integer attendees, String type, String setup, Long inquiryId) {
+        if(inquiryId==null)return getAvailableVenues(start,end,attendees,type,setup);
+        return venueRepository.findAll().stream().filter(Venue::isActive).filter(v->{
+            Integer seats=LayoutCapacity.capacity(v,setup);if(seats==null||(attendees!=null&&attendees>seats))return false;
+            var window=bookingWindow(v,type,start,end==null?start:end);
+            if(unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(v.getId(),window.from(),window.through()))return false;
+            if(eventRepository.countVenueEventsInRangeExcludingEvent(v.getId(),window.from(),window.through(),DEAD_STATUSES,-1L)>0)return false;
+            return venueBookingRepository.findBlockingRowsInRange(window.from(),window.through(),LocalDateTime.now()).stream()
+                .filter(row->row.getVenue().getId().equals(v.getId())).noneMatch(row->row.getStatus()==VenueBooking.BookingStatus.CONFIRMED
+                    ||!java.util.Objects.equals(row.getHeldBy(),"contract:"+inquiryId));
+        }).toList();
+    }
+    public List<Venue> getAvailableVenues(LocalDate start, LocalDate end, Integer attendees, String type, String setup) {
+        return getAvailableVenues(start, end, attendees, type).stream()
+                .filter(v -> LayoutCapacity.capacity(v, setup) != null && (attendees == null || LayoutCapacity.capacity(v, setup) >= attendees)).toList();
+    }
+
+    public List<VenueFitResponse> explainVenueFit(LocalDate start, LocalDate end, Integer attendees,
+            Long exclude, String type, String setup) {
+        return explainVenueFit(start, end, attendees, exclude, type).stream().map(fit -> {
+            var capacity = LayoutCapacity.capacity(getById(fit.venueId()), setup);
+            var blockers = new ArrayList<>(fit.blockers());
+            if (capacity == null) blockers.add("Capacity for " + setup + " setup needs confirmation.");
+            else if (attendees != null && capacity < attendees) blockers.add("Seats " + capacity + " in " + setup + " setup; " + attendees + " requested.");
+            return new VenueFitResponse(fit.venueId(), fit.name(), fit.location(), capacity, fit.active(), blockers.isEmpty(),
+                    fit.blockedFrom(), fit.blockedThrough(), fit.explanation(), blockers);
+        }).toList();
+    }
+
+    public List<DayAvailability> getAvailabilityCalendar(LocalDate start, LocalDate end, Integer attendees, String type, String setup) {
+        var dates = getAvailabilityCalendar(start, end, attendees, type);
+        return dates.stream().map(day -> new DayAvailability(day.date(), day.available() &&
+                !getAvailableVenues(day.date(), day.date(), attendees, type, setup).isEmpty())).toList();
+    }
 
     public boolean isVenueAvailable(Long venueId, LocalDate date) {
 
@@ -577,6 +618,7 @@ public class VenueService {
 
         Integer expectedAttendees = event.getInquiry() != null
                 ? event.getInquiry().getExpectedAttendees() : null;
+        if (event.getInquiry() != null) LayoutCapacity.requireFit(venue, event.getInquiry().getTableSetup(), expectedAttendees);
         if (exceedsCapacity(venue, expectedAttendees)) {
             throw new BusinessException(
                     String.format("Venue capacity is %d, but this event expects %d attendees.",
@@ -668,6 +710,14 @@ public class VenueService {
                 .filter(row -> !row.getBookingDate().isBefore(from) && !row.getBookingDate().isAfter(through))
                 .filter(row -> row.isActiveHold(LocalDateTime.now()) && java.util.Objects.equals(row.getHeldBy(), "contract:" + inquiryId))
                 .count() == java.time.temporal.ChronoUnit.DAYS.between(from, through) + 1;
+    }
+
+    @Transactional
+    public void releaseContractHolds(Long inquiryId) {
+        var rows = venueBookingRepository.findAll().stream().filter(row -> ("contract:" + inquiryId).equals(row.getHeldBy())
+                && row.getStatus() == VenueBooking.BookingStatus.HELD).toList();
+        for (var row : rows) { getByIdForUpdate(row.getVenue().getId()); row.setStatus(VenueBooking.BookingStatus.CANCELLED); }
+        venueBookingRepository.saveAll(rows);
     }
 
     @Transactional

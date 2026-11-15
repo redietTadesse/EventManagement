@@ -349,8 +349,10 @@ public class InquiryController {
         Role userRole = extractRoleFromPrincipal(principal);
         recordAccessService.requireInquiryAccess(id, principal.getUsername());
         List<String> finalCategories = body != null ? body.getCategories() : null;
+        if (body != null && body.getProposalVersion() != null && body.getProposalVersion() != inquiryService.getInquiryById(id).getProposalVersion())
+            throw new com.aicc.eventmanagement.exceptions.BusinessException("This proposal changed. Refresh and review the latest version.", "STALE_PROPOSAL");
 
-        Inquiry updated = inquiryService.acceptProposal(id, finalCategories, userRole);
+        Inquiry updated = inquiryService.acceptProposal(id, finalCategories, userRole, body==null?null:body.getProposalVersion());
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 

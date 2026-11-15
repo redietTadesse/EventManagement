@@ -25,7 +25,7 @@ public class ManagementReviewService {
     public record Booking(Long inquiryId, Long eventId, String client, String type, LocalDate eventDate,
                           Long coordinatorId, String coordinator, String status, String nextAction,
                           String waitingOn, Long daysInStage, boolean review, String reviewReason,
-                          boolean paidBooking, boolean createdEvent, boolean rejected, boolean cancelled) {}
+                          boolean paidBooking, boolean createdEvent, boolean rejected, boolean cancelled, String eventName) {}
     public record Coordinator(Long id, String name, long inquiries, long active, long paidBookings,
                               long waitingForCoordinator, long waitingForClient, long waitingForVendor,
                               long review, long unknownStageAge) {}
@@ -114,6 +114,6 @@ public class ManagementReviewService {
                         ? inquiry.getCoordinator().getUsername() : inquiry.getCoordinator().getFullName(),
                 status.name(), action, waiting, age, review, reason,
                 agreement != null && agreement.getVerifiedAt() != null, event != null,
-                inquiry.getStatus() == EventStatus.PROPOSAL_REJECTED, status == EventStatus.CANCELLED);
+                inquiry.getStatus() == EventStatus.PROPOSAL_REJECTED, status == EventStatus.CANCELLED, inquiry.getEventName());
     }
 }

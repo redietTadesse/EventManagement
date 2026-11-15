@@ -39,7 +39,9 @@ public class BookingAgreementService {
     public record Terms(String proposalNumber, String client, String eventType, LocalDate eventDate,
                         LocalDate endDate, Integer attendees, Long venueId, String venue, String venueDetails,
                         LocalDate bookedFrom, LocalDate bookedThrough, int totalEtb,
-                        List<String> services, String proposalTerms) {}
+                        List<String> services, String proposalTerms,
+                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String eventName,
+                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String tableSetup) {}
     public record View(String state, Terms terms, String revision, String clientSignature, Instant clientSignedAt,
                        String coordinatorSignature, Instant coordinatorSignedAt, Instant receiptUploadedAt,
                        String rejectionReason, Instant verifiedAt, boolean client, boolean canManage,
@@ -244,6 +246,7 @@ public class BookingAgreementService {
                 throw error("The accepted proposal must include a venue and a positive total in ETB.");
             }
             Venue venue = venues.getById(venueId.asLong());
+            LayoutCapacity.requireFit(venue, inquiry.getTableSetup(), inquiry.getExpectedAttendees());
             LocalDate start = inquiry.getEventDate();
             LocalDate end = inquiry.getEndDate() == null ? start : inquiry.getEndDate();
             if (end.isBefore(start)) throw error("The event end date cannot precede the start date.");
@@ -255,7 +258,7 @@ public class BookingAgreementService {
             return new Terms(proposal.path("proposalNumber").asText(), inquiry.getClientName(), inquiry.getEventType(),
                     start, end, inquiry.getExpectedAttendees(), venue.getId(), proposal.path("venue").asText(venue.getName()),
                     proposal.path("venueDetails").asText(null), window.from(), window.through(), price.asInt(),
-                    services, proposal.path("terms").asText(""));
+                    services, proposal.path("terms").asText(""), inquiry.getEventName(), inquiry.getTableSetup());
         } catch (IOException | IllegalArgumentException e) {
             throw error("The accepted proposal has no readable contract terms.");
         }

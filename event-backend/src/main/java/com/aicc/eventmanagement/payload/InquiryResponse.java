@@ -26,6 +26,10 @@ public class InquiryResponse {
     private Integer expectedAttendees;
     private String requirements;
     private String tableSetup;
+    private String eventName;
+    private String unmetNeeds;
+    private String experience;
+    private int proposalVersion;
     private List<String> requestedCategories;
     private List<String> categories;
     private EventStatus status;
@@ -49,6 +53,10 @@ public class InquiryResponse {
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
         response.setTableSetup(inquiry.getTableSetup());
+        response.setEventName(inquiry.getEventName());
+        response.setUnmetNeeds(inquiry.getUnmetNeeds());
+        response.setExperience(inquiry.getExperience());
+        response.setProposalVersion(inquiry.getProposalVersion());
         response.setRequestedCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getRequestedCategories()));
         response.setCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getCategories()));
         response.setStatus(inquiry.getStatus());

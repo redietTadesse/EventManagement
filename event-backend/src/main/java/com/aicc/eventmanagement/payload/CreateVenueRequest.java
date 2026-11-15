@@ -25,6 +25,7 @@ public class CreateVenueRequest {
 
     @PositiveOrZero
     private Integer capacity;
+    @Size(max=2000) private String layoutCapacities;
 
     @Size(max = 255)
     private String location;
