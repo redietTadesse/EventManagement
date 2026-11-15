@@ -5,6 +5,7 @@ import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 import InquiryDateCalendar from './InquiryDateCalendar';
+import TentativeVenueRequests from '../components/TentativeVenueRequests';
 import { EVENT_TYPES, MAX_ATTENDEES, readEventPlan } from '../utils/eventPlan';
 
 export default function NewInquiry() {
@@ -22,7 +23,8 @@ export default function NewInquiry() {
       expectedAttendees: plan.attendees,
       requirements: preferredVenue ? `Preferred venue: ${preferredVenue}` : '',
       requestedCategories: [],
-      tableSetup: 'UNDECIDED',
+      tableSetup: plan.tableSetup || 'UNDECIDED',
+      eventName: '',
     };
   });
   const [availableCategories, setAvailableCategories] = useState([]);
@@ -113,6 +115,12 @@ export default function NewInquiry() {
           action={<Link className="btn-outline" to="/client/inquiries">My inquiries</Link>} />
         <form onSubmit={handleSubmit} className="surface p-5 sm:p-7">
           <h2 className="form-section-title">Event details</h2>
+          <TentativeVenueRequests start={form.eventDate} end={form.endDate||form.eventDate}/>
+          <label className="mb-4 block text-sm font-medium">Event name
+            <input name="eventName" value={form.eventName} onChange={handleChange} required maxLength={200}
+              placeholder="e.g. Medical Equipment Exhibition 2027" className="mt-2 w-full rounded-lg border p-3" />
+          </label>
+          <p className="mb-4 text-sm text-slate-600">You can send your request even if no suitable venue or service is available. A coordinator can discuss alternatives with you.</p>
           <label className="mb-4 block text-sm font-medium">Table and seating setup
             <select name="tableSetup" value={form.tableSetup} onChange={handleChange} className="mt-2 w-full rounded-lg border p-3">
               {[['UNDECIDED','Help me choose'],['THEATRE','Theatre — rows of chairs'],['CLASSROOM','Classroom — tables facing the front'],['BANQUET','Banquet — round dining tables'],['CABARET','Cabaret — round tables facing the stage'],['BOARDROOM','Boardroom — one shared meeting table'],['U_SHAPE','U-shape — tables arranged in a U']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
@@ -161,7 +169,7 @@ export default function NewInquiry() {
           <p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-relaxed text-indigo-900">
             Available dates can be requested by multiple clients. An inquiry does not reserve a venue. The coordinator checks availability again when verifying payment and booking.
           </p>
-          <InquiryDateCalendar eventType={form.eventType} start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
+          <InquiryDateCalendar tableSetup={form.tableSetup} eventType={form.eventType} start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
             onChange={(eventDate, endDate) => setForm((previous) => ({ ...previous, eventDate, endDate }))} />
 
           <div className="mb-4">

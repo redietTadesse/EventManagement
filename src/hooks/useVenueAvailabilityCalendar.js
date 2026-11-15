@@ -6,16 +6,16 @@ export function calendarDateKey(date) {
     .map((part) => String(part).padStart(2, '0')).join('-');
 }
 
-export default function useVenueAvailabilityCalendar(start, end, attendees, revision, eventType) {
+export default function useVenueAvailabilityCalendar(start, end, attendees, revision, eventType, tableSetup) {
   const [result, setResult] = useState(null);
-  const key = [start, end, attendees, revision, eventType].join('/');
+  const key = [start, end, attendees, revision, eventType, tableSetup].join('/');
 
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
         const { data } = await api.get('/venues/availability/calendar', {
-          params: { start, end, attendees, eventType },
+          params: { start, end, attendees, eventType, tableSetup },
           signal: controller.signal,
         });
         if (!controller.signal.aborted) {

@@ -1,3 +1,4 @@
+import InquiryBusinessDetails from '../components/InquiryBusinessDetails';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
@@ -90,7 +91,7 @@ export default function InquiryDetail() {
   const canConvert = inquiry?.status === 'PROPOSAL_ACCEPTED';
   const readOnly = inquiry.coordinator != null && String(inquiry.coordinator.id) !== String(state.currentUser?.id);
   const canSendProposal = !readOnly && inquiry.status === 'INQUIRY_SUBMITTED';
-  const canEditProposal = !readOnly && inquiry.status === 'PROPOSAL_SENT';
+  const canEditProposal = !readOnly && ['PROPOSAL_SENT','PROPOSAL_ACCEPTED'].includes(inquiry.status);
 
   return (
     <Layout title="Inquiry Detail">
@@ -153,6 +154,7 @@ export default function InquiryDetail() {
                 <p className="font-medium capitalize">{inquiry.requestedCategories.join(', ')}</p>
               </div>
             )}
+            <InquiryBusinessDetails inquiry={inquiry} />
             {inquiry.tableSetup && <p className="text-sm"><strong>Table and seating setup:</strong> {inquiry.tableSetup.replaceAll('_', ' ').toLowerCase()}</p>}
             {inquiry.requirements && (
               <div>

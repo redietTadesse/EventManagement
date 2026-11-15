@@ -40,6 +40,12 @@ export default function EventPlanForm({ plan, dateRequired = false, className, o
       <input name="endDate" type="date" min={earliestDate} defaultValue={plan.endDate}
         className="w-full min-w-0 font-normal" />
     </label>
+    <label className={labelStyle}>Seating setup
+      <select name="tableSetup" defaultValue={plan.tableSetup||'UNDECIDED'} className="w-full font-normal">
+        <option value="UNDECIDED">Help me choose</option>
+        {['THEATRE','CLASSROOM','BANQUET','CABARET','BOARDROOM','U_SHAPE'].map(value=><option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}
+      </select>
+    </label>
     {children}
   </form>;
 }

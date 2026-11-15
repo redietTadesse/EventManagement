@@ -25,6 +25,7 @@ export function readEventPlan(params, earliestDate = tomorrowDateKey()) {
   const count = params.get('attendees') || '';
   const date = isDate(start) && start >= earliestDate ? start : '';
   return {
+    ...(['THEATRE','CLASSROOM','BANQUET','CABARET','BOARDROOM','U_SHAPE','UNDECIDED'].includes(params.get('tableSetup')) ? {tableSetup:params.get('tableSetup')} : {}),
     eventType: EVENT_TYPES.some(([value]) => value === type) ? type : 'conference',
     date,
     endDate: date && isDate(end) && end >= date ? end : '',

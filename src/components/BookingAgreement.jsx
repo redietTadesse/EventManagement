@@ -137,6 +137,8 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
         </p>}
         <dl className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 [&_dt]:mb-1 [&_dt]:text-xs [&_dt]:font-medium [&_dt]:text-slate-500 [&_dd]:font-medium">
           <div><dt>Proposal</dt><dd>{terms.proposalNumber}</dd></div>
+          {terms.eventName&&<div><dt>Event</dt><dd>{terms.eventName}</dd></div>}
+          {terms.tableSetup&&<div><dt>Seating setup</dt><dd>{terms.tableSetup.replaceAll('_',' ')}</dd></div>}
           <div><dt>Client</dt><dd>{terms.client}</dd></div>
           <div><dt>Event dates</dt><dd>{terms.eventDate} through {terms.endDate}</dd></div>
           <div><dt>Venue</dt><dd>{terms.venue}</dd></div>
@@ -149,7 +151,7 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
         <p>Client signature: {contract.clientSignature || 'Pending'}{contract.clientSignedAt && ` (${new Date(contract.clientSignedAt).toLocaleString()})`}</p>
         <p>AICC coordinator signature: {contract.coordinatorSignature || 'Pending'}{contract.coordinatorSignedAt && ` (${new Date(contract.coordinatorSignedAt).toLocaleString()})`}</p>
         {contract.state !== 'BOOKED' && <p className="text-sm text-slate-600">
-          The venue is not reserved until the assigned coordinator verifies payment and the booking succeeds.
+          An accepted proposal is tentative. Both signatures create a seven-day hold. The booking becomes final after the assigned coordinator verifies payment.
         </p>}
         {contract.availabilityWarning && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">
           {contract.availabilityWarning}{' '}

@@ -6,11 +6,12 @@ import EventPlanForm from '../components/EventPlanForm';
 import useApiResource from '../hooks/useApiResource';
 import { formatDate } from '../utils/helpers';
 import { readEventPlan } from '../utils/eventPlan';
+function seats(venue,setup){if(!setup||setup==='UNDECIDED')return venue.capacity;try{return JSON.parse(venue.layoutCapacities||'{}')[setup]??(setup==='THEATRE'?venue.capacity:null);}catch{return null;}}
 
 function VenueResults({ query, plan }) {
   const resource = useApiResource(plan.date ? `/venues/available?${query}` : '/venues');
   const venues = resource.data.filter(venue => venue.active &&
-    (plan.date || !plan.attendees || venue.capacity == null || venue.capacity >= Number(plan.attendees)))
+    (plan.date || !plan.attendees || (seats(venue,plan.tableSetup)!=null&&seats(venue,plan.tableSetup)>=Number(plan.attendees))))
     .sort((first, second) => (first.capacity ?? Infinity) - (second.capacity ?? Infinity) || first.name.localeCompare(second.name));
 
   if (resource.loading) return <p role="status" className="surface p-6 text-sm text-slate-600">Loading venues…</p>;
@@ -36,7 +37,7 @@ function VenueResults({ query, plan }) {
         <h3 className="text-lg font-semibold">{venue.name}</h3>
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-600">
           <span className="inline-flex items-center gap-1.5"><UserGroupIcon className="h-4 w-4" aria-hidden="true" />
-            {venue.capacity == null ? 'Capacity on request' : `Up to ${venue.capacity.toLocaleString()} attendees`}
+            {seats(venue,plan.tableSetup) == null ? 'Capacity needs confirmation for this setup' : `Up to ${seats(venue,plan.tableSetup).toLocaleString()} attendees${plan.tableSetup&&plan.tableSetup!=='UNDECIDED'?' in '+plan.tableSetup.toLowerCase()+' setup':' (maximum; depends on setup)'}`}
           </span>
           {venue.location && <span className="inline-flex items-center gap-1.5"><MapPinIcon className="h-4 w-4" aria-hidden="true" />{venue.location}</span>}
         </div>

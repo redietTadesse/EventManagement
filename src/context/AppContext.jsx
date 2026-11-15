@@ -173,6 +173,7 @@ export const AppProvider = ({ children }) => {
       const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
       const body = {
+        ...proposal,
         venue,
         venueId: venueId ?? null,
         venueDetails: venueDetails == null
@@ -207,6 +208,7 @@ export const AppProvider = ({ children }) => {
       const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
       const body = {
+        ...proposal,
         venue,
         venueId: venueId ?? null,
         venueDetails: venueDetails == null

@@ -107,7 +107,7 @@ export default function BookingPerformance() {
         <div className="max-h-[32rem] overflow-auto"><table className="w-full text-left text-sm">
           <thead className="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr>{['Booking / inquiry','Stage','Days at this step','Next action','Coordinator handling the work'].map(label => <th className="px-4 py-3" key={label}>{label}</th>)}</tr></thead>
           <tbody className="divide-y divide-slate-100">{rows.map(row => <tr key={row.inquiryId} className={row.review ? 'bg-amber-50/40' : ''}>
-            <th className="px-4 py-4 font-medium"><button className="text-left text-indigo-700 underline" onClick={() => setSelected(row)}>#{row.inquiryId} · {row.client}</button><p className="mt-1 text-xs font-normal text-slate-500">{row.eventDate} · {row.type}</p></th>
+            <th className="px-4 py-4 font-medium"><button className="text-left text-indigo-700 underline" onClick={() => setSelected(row)}>#{row.inquiryId} · {row.eventName || row.client}</button><p className="mt-1 text-xs font-normal text-slate-500">{row.eventDate} · {row.type}</p></th>
             <td className="px-4 py-4"><StatusBadge status={row.status} />{row.reviewReason && <p className="mt-2 max-w-48 text-xs text-amber-900">{row.reviewReason}</p>}</td>
             <td className="px-4 py-4 tabular-nums">{row.daysInStage ?? 'Unavailable'}</td>
             <td className="px-4 py-4"><p>{row.nextAction}</p><p className="mt-1 text-xs text-slate-500">{row.waitingOn}</p></td>

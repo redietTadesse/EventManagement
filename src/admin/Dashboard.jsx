@@ -1,3 +1,4 @@
+import UnmetDemand from './UnmetDemand';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
@@ -69,7 +70,7 @@ export default function AdminDashboard() {
       {[['business','Business overview'],['revenue','Revenue'],['administration','Administration']].map(([key,label]) => <button key={key} role="tab" id={'management-tab-' + key} aria-controls={'management-panel-' + key} aria-selected={tab === key} className={'rounded-lg px-4 py-2 text-sm font-semibold ' + (tab === key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50')} onClick={() => setTab(key)}>{label}</button>)}
     </div>
     <section role="tabpanel" id={'management-panel-' + tab} aria-labelledby={'management-tab-' + tab} className="space-y-6">
-      {tab === 'business' && <><RevenueSnapshot onDetails={() => setTab('revenue')} /><BookingPerformance /><LifecycleDashboard /><ManagementOutlook /></>}
+      {tab === 'business' && <><RevenueSnapshot onDetails={() => setTab('revenue')} /><BookingPerformance /><UnmetDemand /><LifecycleDashboard /><ManagementOutlook /></>}
       {tab === 'revenue' && <Suspense fallback={<p role="status">Loading revenue dashboard…</p>}><RevenueDashboard /></Suspense>}
       {tab === 'administration' && <>
         <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">System administration</h2><button className="btn-outline" disabled={loading} onClick={load}>Refresh summary</button></div>

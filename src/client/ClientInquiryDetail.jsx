@@ -1,3 +1,4 @@
+import InquiryBusinessDetails from '../components/InquiryBusinessDetails';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
@@ -122,7 +123,7 @@ export default function ClientInquiryDetail() {
     setResponseNotice('');
     try {
       const updated = decision === 'accept'
-        ? await acceptProposal(id)
+        ? await acceptProposal(id, {proposalVersion: inquiry.proposalVersion})
         : decision === 'changes'
           ? await rejectProposal(id, changeReason)
           : await rejectProposal(id);
@@ -241,6 +242,7 @@ export default function ClientInquiryDetail() {
             <div><p className="text-gray-500">Handled by</p><p className="font-medium">{inquiry.coordinator?.name || 'Coordinator assignment pending'}</p></div>
             <div><p className="text-gray-500">Requested services</p><p className="font-medium">{inquiry.requestedCategories?.join(', ') || '—'}</p></div>
           </div>
+          <InquiryBusinessDetails inquiry={inquiry} client />
           {inquiry.tableSetup && <p className="text-sm"><strong>Table and seating setup:</strong> {inquiry.tableSetup.replaceAll('_', ' ').toLowerCase()}</p>}
           {inquiry.requirements && <div className="text-sm"><p className="text-gray-500">Requirements</p><p className="mt-1 text-gray-800">{inquiry.requirements}</p></div>}
         </section>
