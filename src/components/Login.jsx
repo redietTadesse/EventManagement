@@ -8,6 +8,8 @@ import {
 } from 'react-router-dom';
 
 import { useApp } from '../context/AppContext';
+import GoogleClientSignIn from './GoogleClientSignIn';
+import api from '../api/axios';
 import { ROLE_DASHBOARDS } from '../utils/roles';
 
 import {
@@ -48,7 +50,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { login, registerClient } = useApp();
+  const { login, registerClient, dispatch } = useApp();
 
   const [mode, setMode] = useState('signin');
 
@@ -215,6 +217,13 @@ export default function Login() {
           </p>
 
           {/* Success notice */}
+          {signupAllowed && <GoogleClientSignIn onSignedIn={async token=>{
+            localStorage.setItem('token',token);
+            try { const {data}=await api.get('/users/me');dispatch({type:'LOGIN',payload:data});
+              const destination=location.state?.returnTo;
+              navigate(typeof destination==='string'&&destination.startsWith('/client/')?destination:'/client/dashboard',{replace:true});
+            } catch(error){localStorage.removeItem('token');throw error;}
+          }}/>}
           {notice && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl mb-4 text-sm flex items-center gap-2">
               <svg
