@@ -51,7 +51,7 @@ public class VendorController {
             @RequestParam(required = false) String eventType) {
         return ResponseEntity.ok(eventType == null || eventType.isBlank()
                 ? CategoryUtils.allCategories()
-                : CategoryUtils.categoriesForEventType(eventType));
+                  : CategoryUtils.categoriesForEventType(eventType));
     }
 
     @GetMapping("/availability-grid")

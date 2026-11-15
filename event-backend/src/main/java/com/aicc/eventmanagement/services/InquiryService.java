@@ -103,6 +103,7 @@ public class InquiryService {
                 .endDate(request.getEndDate())
                 .expectedAttendees(request.getExpectedAttendees())
                 .requirements(request.getRequirements())
+                .tableSetup(request.getTableSetup())
                 .requestedCategories(CategoryUtils.join(requestedCategories))
                 .categories(CategoryUtils.join(requestedCategories))
                 .status(EventStatus.INQUIRY_SUBMITTED)

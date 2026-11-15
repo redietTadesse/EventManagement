@@ -32,6 +32,7 @@ public class AuthController {
         if (user == null || !encoder.matches(loginRequest.getPassword(), user.getPasswordHash())) {
             return ResponseEntity.badRequest().body("Error: Invalid username or password!");
         }
+        if (!user.isActive()) return ResponseEntity.status(403).body("This account is inactive. Contact the administrator.");
 
         String jwt = jwtUtils.generateJwtToken(user.getUsername(), user.getRole().name());
         return ResponseEntity.ok(new JwtResponse(jwt, user.getRole().name()));

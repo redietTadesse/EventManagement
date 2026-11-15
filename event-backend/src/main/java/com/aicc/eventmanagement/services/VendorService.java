@@ -365,9 +365,13 @@ public class VendorService {
             Set<Long> alreadyTried = Set.copyOf(
                     assignmentRepository.findTriedVendorIds(event.getId(), category));
 
-            if (!preferredVendorIds.isEmpty()) {
+            List<Long> requestedVendors = new ArrayList<>(preferredVendorIds);
+            for (Long proposalVendor : proposalVendors(event.getInquiry(), category)) {
+                if (!requestedVendors.contains(proposalVendor)) requestedVendors.add(proposalVendor);
+            }
+            if (!requestedVendors.isEmpty()) {
                 List<Map<String, Object>> excludedPreferences = new ArrayList<>();
-                for (Long vendorId : preferredVendorIds) {
+                for (Long vendorId : requestedVendors) {
                     Optional<Vendor> prefVendor = vendorId == null
                             ? Optional.empty()
                             : vendorRepository.findById(vendorId);
@@ -386,9 +390,11 @@ public class VendorService {
                                 .vendorName(candidate.getCompanyName())
                                 .serviceCategory(category)
                                 .status(VendorAssignmentStatus.PENDING)
-                                .selectionReason(SelectionReason.CLIENT_PREFERRED)
+                                .selectionReason(preferredVendorIds.contains(vendorId)
+                                        ? SelectionReason.CLIENT_PREFERRED : SelectionReason.COORDINATOR_MANUAL)
                                 .decisionSnapshot(buildClientPreferredSnapshot(
-                                        category, eventDate, candidate, excludedPreferences))
+                                        category, eventDate, candidate, excludedPreferences,
+                                        preferredVendorIds.contains(vendorId)))
                                 .assignedAt(LocalDateTime.now())
                                 .expiresAt(offerDeadline())
                                 .build();
@@ -518,22 +524,25 @@ public class VendorService {
     }
 
     private String buildClientPreferredSnapshot(String category, LocalDate eventDate, Vendor selected,
-                                                List<Map<String, Object>> excluded) {
+                                                List<Map<String, Object>> excluded, boolean clientPreferred) {
+        String source = clientPreferred ? "Selected from the client's preferred vendor list"
+                : "Selected from the vendors listed in the accepted proposal";
         Map<String, Object> selectedCandidate = new LinkedHashMap<>();
         selectedCandidate.put("vendorId", selected.getId());
         selectedCandidate.put("vendorName", selected.getCompanyName());
         selectedCandidate.put("score", null);
         selectedCandidate.put("rank", null);
         selectedCandidate.put("status", "Selected");
-        selectedCandidate.put("reason", "Selected from the client's preferred vendor list");
+        selectedCandidate.put("reason", source);
 
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("category", category);
         snapshot.put("eventDate", eventDate.toString());
         snapshot.put("selectedVendorId", selected.getId());
         snapshot.put("selectedVendorName", selected.getCompanyName());
-        snapshot.put("selectionReason", SelectionReason.CLIENT_PREFERRED.name());
-        snapshot.put("reasoning", "Selected from the client's preferred vendor list");
+        snapshot.put("selectionReason", (clientPreferred ? SelectionReason.CLIENT_PREFERRED
+                : SelectionReason.COORDINATOR_MANUAL).name());
+        snapshot.put("reasoning", source);
         snapshot.put("considered", List.of(selectedCandidate));
         snapshot.put("excluded", excluded);
 
@@ -541,6 +550,28 @@ public class VendorService {
             return objectMapper.writeValueAsString(snapshot);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not serialize preferred vendor decision snapshot", e);
+        }
+    }
+
+    private List<Long> proposalVendors(Inquiry inquiry, String category) {
+        if (inquiry.getProposal() == null || inquiry.getProposal().isBlank()) return List.of();
+        try {
+            var shortlist = objectMapper.readTree(inquiry.getProposal()).path("vendorShortlist");
+            var selected = shortlist.isArray()
+                    ? java.util.stream.StreamSupport.stream(shortlist.spliterator(), false)
+                        .filter(group -> category.equals(group.path("category").asText()))
+                        .map(group -> group.path("vendors")).findFirst().orElse(null)
+                    : shortlist.path(category);
+            if (selected == null || !selected.isArray()) return List.of();
+            List<Long> ids = new ArrayList<>();
+            for (var value : selected) {
+                var id = value.isObject() ? value.path("id") : value;
+                if (id.canConvertToLong() && id.asLong() > 0) ids.add(id.asLong());
+            }
+            return ids;
+        } catch (JsonProcessingException ex) {
+            log.warn("Could not read proposal vendor choices for inquiry {}", inquiry.getId());
+            return List.of();
         }
     }
 

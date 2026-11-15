@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
@@ -110,6 +111,34 @@ class VendorServiceAssignmentSafetyTest {
     private void stubEventAndVendor(Event event, Vendor vendor) {
         when(eventRepository.findByIdForUpdate(event.getId())).thenReturn(Optional.of(event));
         when(vendorRepository.findById(vendor.getId())).thenReturn(Optional.of(vendor));
+    }
+
+    @Test
+    void initialOfferUsesTheAcceptedProposalVendorBeforeGeneralRanking() {
+        Event event = event();
+        Vendor chosen = vendor(14L, "av", true, null);
+        event.getInquiry().setProposal("{\"vendorShortlist\":[{\"category\":\"av\",\"vendors\":[{\"id\":14}]}]}");
+        when(vendorRepository.findById(14L)).thenReturn(Optional.of(chosen));
+        when(assignmentRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        var offers = vendorService.autoAssignForEvent(event);
+        assertThat(offers).hasSize(1);
+        assertThat(offers.get(0).getVendor()).isSameAs(chosen);
+        assertThat(offers.get(0).getStatus()).isEqualTo(VendorAssignmentStatus.PENDING);
+        assertThat(offers.get(0).getDecisionSnapshot()).contains("accepted proposal");
+        org.mockito.Mockito.verifyNoInteractions(rankingService);
+    }
+
+    @Test
+    void explicitClientPreferenceStillComesBeforeProposalChoices() {
+        Event event = event();
+        Vendor chosen = vendor(15L, "av", true, null);
+        event.getInquiry().setPreferredVendorIds("[15]");
+        event.getInquiry().setProposal("{\"vendorShortlist\":{\"av\":[14]}}");
+        when(vendorRepository.findById(15L)).thenReturn(Optional.of(chosen));
+        when(assignmentRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        var offers = vendorService.autoAssignForEvent(event);
+        assertThat(offers.get(0).getVendor()).isSameAs(chosen);
+        assertThat(offers.get(0).getSelectionReason()).isEqualTo(SelectionReason.CLIENT_PREFERRED);
     }
 
     @Test

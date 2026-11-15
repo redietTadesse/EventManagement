@@ -481,7 +481,7 @@ public class VenueService {
             throw new BusinessException("Cannot hold a date in the past: " + startDate);
         }
 
-        Venue venue = getById(venueId);
+        Venue venue = getByIdForUpdate(venueId);
         if (!venue.isActive()) {
             throw new BusinessException("Venue is not active: " + venue.getName());
         }
@@ -559,6 +559,7 @@ public class VenueService {
 
         Long venueId = booking.getVenue().getId();
         LocalDate date = booking.getBookingDate();
+        requireReleasableHold(booking);
         venueBookingRepository.delete(booking);
         log.info("Released hold {} on venue {} for {}", bookingId, venueId, date);
     }
@@ -626,6 +627,9 @@ public class VenueService {
                             throw new BusinessException("Venue is already booked on " + bookingDate, "VENUE_CONFLICT");
                         }
                         existing.setEvent(event);
+                        if (existing.isActiveHold(LocalDateTime.now()) && !java.util.Objects.equals(
+                                existing.getHeldBy(), "contract:" + event.getInquiry().getId()))
+                            throw new BusinessException("The venue is held for another booking on " + bookingDate, "VENUE_HELD");
                         existing.setStatus(VenueBooking.BookingStatus.CONFIRMED);
                         return existing;
                     })
@@ -648,9 +652,29 @@ public class VenueService {
     }
 
     @Transactional
+    public void holdForContract(Long inquiryId, Long venueId, LocalDate from, LocalDate through, java.time.Instant deadline) {
+        getByIdForUpdate(venueId);
+        if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(venueId, from, through))
+            throw new BusinessException("The venue is blocked during the requested booking window.", "VENUE_UNAVAILABLE");
+        int days = Math.toIntExact(java.time.temporal.ChronoUnit.DAYS.between(from, through) + 1);
+        var rows = holdVenue(venueId, from, days, "contract:" + inquiryId);
+        var expiry = java.time.LocalDateTime.ofInstant(deadline, java.time.ZoneId.systemDefault());
+        rows.forEach(row -> row.setExpiresAt(expiry));
+        venueBookingRepository.saveAll(rows);
+    }
+
+    public boolean hasContractHold(Long inquiryId, Long venueId, LocalDate from, LocalDate through) {
+        return venueBookingRepository.findByVenueId(venueId).stream()
+                .filter(row -> !row.getBookingDate().isBefore(from) && !row.getBookingDate().isAfter(through))
+                .filter(row -> row.isActiveHold(LocalDateTime.now()) && java.util.Objects.equals(row.getHeldBy(), "contract:" + inquiryId))
+                .count() == java.time.temporal.ChronoUnit.DAYS.between(from, through) + 1;
+    }
+
+    @Transactional
     public void cancelVenueBooking(Long bookingId) {
         VenueBooking booking = venueBookingRepository.findById(bookingId)
                 .orElseThrow(() -> new EntityNotFoundException("VenueBooking", bookingId));
+        requireReleasableHold(booking);
 
         booking.setStatus(VenueBooking.BookingStatus.CANCELLED);
         venueBookingRepository.save(booking);
@@ -666,6 +690,11 @@ public class VenueService {
         }
         venueBookingRepository.saveAll(bookings);
         log.info("Cancelled {} venue bookings for event {}", bookings.size(), eventId);
+    }
+
+    private void requireReleasableHold(VenueBooking booking) {
+        if (booking.isActiveHold(LocalDateTime.now()) && booking.getHeldBy() != null && booking.getHeldBy().startsWith("contract:"))
+            throw new BusinessException("This signed contract protects the venue until the payment deadline.", "CONTRACT_HOLD_PROTECTED");
     }
 
 

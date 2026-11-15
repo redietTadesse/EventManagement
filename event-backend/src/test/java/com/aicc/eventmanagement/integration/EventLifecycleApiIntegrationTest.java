@@ -139,6 +139,31 @@ class EventLifecycleApiIntegrationTest {
 
 
     @Test
+    void inquiryStoresTableSetupAndAcceptsTheNewServiceCategories() throws Exception {
+        Map<String, Object> request = new java.util.HashMap<>();
+        request.put("clientId", client.getId()); request.put("clientName", client.getFullName());
+        request.put("eventType", "meeting"); request.put("eventDate", date.toString());
+        request.put("expectedAttendees", 100); request.put("tableSetup", "BANQUET");
+        request.put("requestedCategories", List.of("tv", "screen", "booth builder"));
+        JsonNode created = call(POST, "/inquiries", client, request, 201);
+        JsonNode stored = call(GET, "/inquiries/" + created.path("id").asLong(), coordinator, null, 200);
+        assertThat(stored.path("tableSetup").asText()).isEqualTo("BANQUET");
+        assertThat(stored.path("requestedCategories").toString()).contains("tv", "screen", "booth_builder");
+        request.put("tableSetup", "unsupported");
+        call(POST, "/inquiries", client, request, 400);
+    }
+
+    @Test
+    void inactiveAccountCannotLogIn() throws Exception {
+        User inactive = user("inactive-demo", Role.VENDOR);
+        inactive.setPasswordHash("$2a$10$dJJpR6hKAkNAeF2taOXXoe5hG07oemMECVB4lAv/43F3a7Ur9frQC");
+        inactive.setActive(false); users.saveAndFlush(inactive);
+        http.perform(MockMvcRequestBuilders.post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsBytes(Map.of("username", inactive.getUsername(), "password", "Admin@123"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void managementReviewExplainsBookingOutcomesWaitingPartiesAndCurrentOwnership() throws Exception {
         User admin = user("management-admin", Role.ADMIN);
         String path = "/admin/dashboard/booking-performance?days=30&reviewDays=7";
@@ -528,9 +553,15 @@ class EventLifecycleApiIntegrationTest {
         vendor("Security", "security", 4.0, date.plusYears(1));
         long first = acceptedInquiry();
         long second = acceptedInquiry(); // Both proposals were prepared before the venue was reserved.
-        long firstEvent = convert(first, 200).path("id").asLong();
+        String firstReceipt = signAndUpload(first);
+        expireContractHolds(first);
+        String secondReceipt = signAndUpload(second);
+        expireContractHolds(second);
+        long firstEvent = call(POST, agreementPath(first) + "/receipt/verify", coordinator,
+                Map.of("receiptUploadedAt", firstReceipt), 200).path("id").asLong();
         long eventCount = events.count(), taskCount = tasks.count(), offerCount = assignments.count();
-        JsonNode failure = convert(second, 400);
+        JsonNode failure = call(POST, agreementPath(second) + "/receipt/verify", coordinator,
+                Map.of("receiptUploadedAt", secondReceipt), 400);
         assertThat(failure.path("code").asText()).isEqualTo("VENUE_CONFLICT");
         assertThat(events.findByInquiryId(second)).isEmpty();
         assertThat(events.count()).isEqualTo(eventCount);
@@ -571,7 +602,11 @@ class EventLifecycleApiIntegrationTest {
         vendor("Security", "security", 4.0, date.plusYears(1));
         long first = acceptedInquiry(), second = acceptedInquiry();
         long eventCount = events.count(), taskCount = tasks.count(), offerCount = assignments.count();
-        var receipts = Map.of(first, signAndUpload(first), second, signAndUpload(second));
+        String firstReceipt = signAndUpload(first);
+        expireContractHolds(first);
+        String secondReceipt = signAndUpload(second);
+        expireContractHolds(second);
+        var receipts = Map.of(first, firstReceipt, second, secondReceipt);
         var executor = Executors.newFixedThreadPool(2);
         var start = new CountDownLatch(1);
         try {
@@ -974,6 +1009,52 @@ class EventLifecycleApiIntegrationTest {
 
     private String agreementPath(long inquiry) { return "/inquiries/" + inquiry + "/booking-agreement"; }
 
+    private void expireContractHolds(long inquiry) {
+        var holds = bookings.findByVenueId(venue.getId()).stream()
+                .filter(row -> ("contract:" + inquiry).equals(row.getHeldBy())).toList();
+        holds.forEach(row -> row.setExpiresAt(java.time.LocalDateTime.now().minusSeconds(1)));
+        bookings.saveAllAndFlush(holds);
+    }
+
+    @Test
+    void signedContractProtectsEveryDateForSevenDaysAndReleasesOnExpiry() throws Exception {
+        long first = acceptedInquiry(), second = acceptedInquiry();
+        String receipt = signAndUpload(first);
+        JsonNode agreement = call(GET, agreementPath(first), client, null, 200);
+        java.time.Instant lastSignature = java.time.Instant.parse(agreement.path("coordinatorSignedAt").asText());
+        assertThat(java.time.Duration.between(lastSignature,
+                java.time.Instant.parse(agreement.path("paymentDueAt").asText())).toHours()).isEqualTo(168);
+        assertThat(bookings.findByVenueId(venue.getId())).hasSize(4).allSatisfy(row -> {
+            assertThat(row.getStatus()).isEqualTo(VenueBooking.BookingStatus.HELD);
+            assertThat(row.getHeldBy()).isEqualTo("contract:" + first);
+        });
+        Long heldId = bookings.findByVenueId(venue.getId()).get(0).getId();
+        call(org.springframework.http.HttpMethod.DELETE, "/venues/holds/" + heldId, coordinator, null, 400);
+        call(POST, agreementPath(first) + "/receipt/reject", coordinator,
+                Map.of("reason", "Replace this test receipt", "receiptUploadedAt", receipt), 200);
+        byte[] receiptBytes = new byte[5 * 1024 * 1024 + 1];
+        System.arraycopy("%PDF-1.4".getBytes(java.nio.charset.StandardCharsets.UTF_8), 0, receiptBytes, 0, 8);
+        var oversized = new org.springframework.mock.web.MockMultipartFile("receipt", "large.pdf", "application/pdf",
+                receiptBytes);
+        http.perform(MockMvcRequestBuilders.multipart("/api/v1" + agreementPath(first) + "/receipt")
+                .file(oversized).header("Authorization", "Bearer " + jwt.generateJwtToken(client.getUsername(), "CLIENT")))
+                .andExpect(status().isBadRequest());
+        receipt = uploadReceipt(first, 200).path("receiptUploadedAt").asText();
+        String revision = call(GET, agreementPath(second), client, null, 200).path("revision").asText();
+        call(POST, agreementPath(second) + "/signature", client,
+                Map.of("name", "Client", "revision", revision, "consent", true), 200);
+        call(POST, agreementPath(second) + "/signature", coordinator,
+                Map.of("name", "Coordinator", "revision", revision, "consent", true), 400);
+        assertThat(agreements.findById(second).orElseThrow().getCoordinatorSignedAt()).isNull();
+        assertThat(events.findByInquiryId(second)).isEmpty();
+        expireContractHolds(first);
+        call(POST, agreementPath(second) + "/signature", coordinator,
+                Map.of("name", "Coordinator", "revision", revision, "consent", true), 200);
+        call(POST, agreementPath(first) + "/receipt/verify", coordinator,
+                Map.of("receiptUploadedAt", receipt), 400);
+        assertThat(events.findByInquiryId(first)).isEmpty();
+    }
+
     private String signAndUpload(long inquiry) throws Exception {
         return signAndUpload(inquiry, coordinator);
     }
@@ -1076,7 +1157,8 @@ class EventLifecycleApiIntegrationTest {
         var verification = Map.of("receiptUploadedAt", uploaded.path("receiptUploadedAt").asText());
         call(POST, path + "/receipt/verify", outsider, verification, 403);
         call(POST, path + "/receipt/verify", admin, verification, 403);
-        assertThat(bookings.findByVenueId(venue.getId())).isEmpty();
+        assertThat(bookings.findByVenueId(venue.getId())).hasSize(4)
+                .allSatisfy(row -> assertThat(row.getStatus()).isEqualTo(VenueBooking.BookingStatus.HELD));
         call(POST, path + "/receipt/reject", coordinator, Map.of("reason", "Amount not visible", "receiptUploadedAt", uploaded.path("receiptUploadedAt").asText()), 200);
         call(POST, path + "/receipt/verify", coordinator, verification, 400);
         JsonNode replacement = uploadReceipt(inquiry, 200);

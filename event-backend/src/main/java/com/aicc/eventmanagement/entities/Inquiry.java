@@ -69,6 +69,9 @@ public class Inquiry {
     @Column(columnDefinition = "TEXT")
     private String requirements;
 
+    @Column(name = "table_setup", length = 30)
+    private String tableSetup;
+
     // FIXED: Only one declaration of requestedCategories
     @Column(name = "requested_categories", columnDefinition = "TEXT")
     private String requestedCategories;

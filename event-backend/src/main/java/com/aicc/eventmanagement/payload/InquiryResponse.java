@@ -25,6 +25,7 @@ public class InquiryResponse {
     private LocalDate endDate;
     private Integer expectedAttendees;
     private String requirements;
+    private String tableSetup;
     private List<String> requestedCategories;
     private List<String> categories;
     private EventStatus status;
@@ -47,6 +48,7 @@ public class InquiryResponse {
         response.setEndDate(inquiry.getEndDate());
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
+        response.setTableSetup(inquiry.getTableSetup());
         response.setRequestedCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getRequestedCategories()));
         response.setCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getCategories()));
         response.setStatus(inquiry.getStatus());
