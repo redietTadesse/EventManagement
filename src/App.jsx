@@ -39,6 +39,7 @@ import OpenAssignments from './vendor/OpenAssignments';
 import AdminDashboard from './admin/Dashboard';
 import AdminCoordinators from './admin/Coordinators';
 import VendorManagement from './admin/VendorManagement';
+import VendorApplications from './admin/VendorApplications';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
 import AdminVenues from './admin/Venues';
@@ -88,6 +89,7 @@ function AppRoutes() {
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/coordinators" element={<AdminCoordinators />} />
         <Route path="/admin/vendors" element={<VendorManagement />} />
+        <Route path="/admin/vendor-applications" element={<VendorApplications />} />
         <Route path="/admin/vendors/new" element={<VendorForm />} />
         <Route path="/admin/vendors/:id/edit" element={<VendorForm />} />
         <Route path="/admin/vendors/:id" element={<VendorDetail />} />

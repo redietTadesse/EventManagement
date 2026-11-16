@@ -80,6 +80,12 @@ export default function VendorManagement() {
                     <p className="text-sm text-gray-500">Manage all service providers</p>
                 </div>
                 <div className="flex flex-wrap items-end gap-3">
+                    <Link
+                        to="/admin/vendor-applications"
+                        className="rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                    >
+                        Applicants
+                    </Link>
                     <section aria-label="Maintenance" className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Maintenance</p>
                         <button

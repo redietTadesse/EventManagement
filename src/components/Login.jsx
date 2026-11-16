@@ -376,6 +376,18 @@ export default function Login() {
                 </div>
               </div>
 
+              {(!portalKey || portalKey === 'vendor') && (
+                <p className="text-center text-sm text-slate-600">
+                  New vendor?{' '}
+                  <Link
+                    to="/vendor-application"
+                    className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
+                  >
+                    Register your company
+                  </Link>
+                </p>
+              )}
+
               {signupAllowed && (
                 <p className="text-center text-sm text-slate-600">
                   New client?{' '}
