@@ -42,14 +42,17 @@ class EventServiceTest {
     @Mock
     private ChecklistService checklistService;
 
-    @Mock
-    private WorkflowEngine workflowEngine;
+    @org.mockito.Spy
+    private WorkflowEngine workflowEngine = new WorkflowEngine();
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private EventService eventService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void initializeWorkflow() { workflowEngine.init(); }
 
     @Test
     @DisplayName("EventService rejects invalid status transitions")

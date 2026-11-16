@@ -43,6 +43,15 @@ public class VenueService {
     private final EventRepository eventRepository;
     private final VenueBookingRepository venueBookingRepository;
     private final VenueUnavailableDateRepository unavailableDateRepository;
+    private final jakarta.persistence.EntityManager entityManager;
+
+    private java.util.Optional<VenueBooking> currentBookingForUpdate(Long venueId, LocalDate date) {
+        // MySQL REPEATABLE READ must use a current locking read after waiting for the
+        // venue lock. Refresh also replaces any older managed copy loaded by a preview.
+        var row = venueBookingRepository.findByVenueAndDateForUpdate(venueId, date);
+        row.ifPresent(booking -> entityManager.refresh(booking, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
+        return row;
+    }
 
     /**
      * How long a coordinator hold survives before it stops blocking the date.
@@ -540,7 +549,7 @@ public class VenueService {
                         "VENUE_CONFLICT");
             }
 
-            VenueBooking existing = venueBookingRepository.findByVenueAndDate(venueId, date).orElse(null);
+            VenueBooking existing = currentBookingForUpdate(venueId, date).orElse(null);
 
             if (existing != null) {
                 if (existing.getStatus() == VenueBooking.BookingStatus.CONFIRMED) {
@@ -663,15 +672,15 @@ public class VenueService {
         LocalDate insertDate = blockStart;
         while (!insertDate.isAfter(blockEnd)) {
             LocalDate bookingDate = insertDate;
-            VenueBooking booking = venueBookingRepository.findByVenueAndDate(venueId, bookingDate)
+            VenueBooking booking = currentBookingForUpdate(venueId, bookingDate)
                     .map(existing -> {
                         if (existing.getStatus() == VenueBooking.BookingStatus.CONFIRMED) {
                             throw new BusinessException("Venue is already booked on " + bookingDate, "VENUE_CONFLICT");
                         }
-                        existing.setEvent(event);
                         if (existing.isActiveHold(LocalDateTime.now()) && !java.util.Objects.equals(
-                                existing.getHeldBy(), "contract:" + event.getInquiry().getId()))
+                                existing.getHeldBy(), event.getInquiry() == null ? null : "contract:" + event.getInquiry().getId()))
                             throw new BusinessException("The venue is held for another booking on " + bookingDate, "VENUE_HELD");
+                        existing.setEvent(event);
                         existing.setStatus(VenueBooking.BookingStatus.CONFIRMED);
                         return existing;
                     })

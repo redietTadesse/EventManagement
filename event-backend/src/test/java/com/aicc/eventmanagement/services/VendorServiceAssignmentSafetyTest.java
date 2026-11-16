@@ -52,7 +52,7 @@ class VendorServiceAssignmentSafetyTest {
     @Mock private EventRepository eventRepository;
     @Mock private UserRepository userRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private WorkflowEngine workflowEngine;
+    @org.mockito.Spy private WorkflowEngine workflowEngine = new WorkflowEngine();
     @Mock private VendorRankingService rankingService;
     @Mock private VendorEligibilityService eligibilityService;
     @Mock private VendorRatingService ratingService;
@@ -65,6 +65,7 @@ class VendorServiceAssignmentSafetyTest {
 
     @BeforeEach
     void allowEligibleVendorByDefault() {
+        workflowEngine.init();
         when(eligibilityService.evaluate(
                 any(),
                 anyString(),

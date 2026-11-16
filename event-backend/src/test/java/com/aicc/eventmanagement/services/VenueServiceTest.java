@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 class VenueServiceTest {
 
     @Mock private VenueRepository venueRepository;
+    @Mock private jakarta.persistence.EntityManager entityManager;
     @Mock private EventRepository eventRepository;
     @Mock private VenueBookingRepository venueBookingRepository;
     @Mock private VenueUnavailableDateRepository unavailableDateRepository;

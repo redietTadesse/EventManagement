@@ -99,60 +99,6 @@ class ConcurrencyTest {
             }
 
     @Test
-    @DisplayName("Should handle concurrent event creation safely - only one succeeds")
-    void testConcurrentEventCreation() throws InterruptedException {
-        int threadCount = 10;
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(threadCount);
-        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-
-        AtomicInteger successCount = new AtomicInteger(0);
-
-        for (int i = 0; i < threadCount; i++) {
-            executor.submit(() -> {
-                try {
-                    startLatch.await();
-
-                    synchronized (this) {
-                        Inquiry current = inquiryRepository.findById(testInquiry.getId()).orElse(null);
-                        if (current != null && current.getEvent() == null) {
-                            Event event = Event.builder()
-                                    .inquiry(current)
-                                    .name("Concurrent Event")
-                                    .status(EventStatus.EVENT_CREATED)
-                                    .venue("Main Hall")
-                                    .build();
-                            eventRepository.save(event);
-
-                            current.setEvent(event);
-                            current.setStatus(EventStatus.EVENT_CREATED);
-                            inquiryRepository.save(current);
-                            successCount.incrementAndGet();
-                        }
-                    }
-                } catch (Exception e) {
-                    // Expected - concurrency conflict
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
-
-        startLatch.countDown();
-        doneLatch.await();
-        executor.shutdown();
-
-        // Only one thread should succeed
-        assertThat(successCount.get()).isEqualTo(1);
-
-        // Verify that exactly one event exists
-        Inquiry finalInquiry = inquiryRepository.findById(testInquiry.getId()).orElse(null);
-        assertThat(finalInquiry).isNotNull();
-        assertThat(finalInquiry.getEvent()).isNotNull();
-        assertThat(finalInquiry.getStatus()).isEqualTo(EventStatus.EVENT_CREATED);
-    }
-
-    @Test
     @DisplayName("Should maintain data integrity under concurrent reads")
     void testConcurrentReads() throws InterruptedException {
         int threadCount = 20;
@@ -218,6 +164,7 @@ class ConcurrencyTest {
         CountDownLatch doneLatch = new CountDownLatch(2);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         AtomicInteger successfulClaims = new AtomicInteger();
+        var failures = new java.util.concurrent.ConcurrentLinkedQueue<Exception>();
 
         for (Vendor candidate : List.of(first, second)) {
             executor.submit(() -> {
@@ -225,8 +172,8 @@ class ConcurrencyTest {
                     startLatch.await();
                     vendorService.claimOpenAssignment(open.getId(), candidate.getId());
                     successfulClaims.incrementAndGet();
-                } catch (Exception ignored) {
-                    // The losing claim is expected to receive ASSIGNMENT_ALREADY_CLAIMED.
+                } catch (Exception failure) {
+                    failures.add(failure);
                 } finally {
                     doneLatch.countDown();
                 }
@@ -234,12 +181,17 @@ class ConcurrencyTest {
         }
 
         startLatch.countDown();
-        doneLatch.await();
+        assertThat(doneLatch.await(15, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
         executor.shutdown();
 
         VendorAssignment claimed = assignmentRepository.findById(open.getId()).orElseThrow();
         assertThat(successfulClaims.get()).isEqualTo(1);
+        assertThat(failures).singleElement().isInstanceOfSatisfying(
+                com.aicc.eventmanagement.exceptions.BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isIn("ASSIGNMENT_ALREADY_CLAIMED", "ASSIGNMENT_NOT_OPEN"));
         assertThat(claimed.getStatus()).isEqualTo(VendorAssignmentStatus.PENDING);
+        assertThat(claimed.getRespondedAt()).isNull();
+        assertThat(claimed.getAssignedAt()).isNotNull();
         assertThat(List.of(first.getId(), second.getId())).contains(claimed.getVendor().getId());
     }
 

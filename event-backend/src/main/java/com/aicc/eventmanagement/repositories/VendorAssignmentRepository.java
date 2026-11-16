@@ -131,7 +131,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     @Query(
             value = "UPDATE vendor_assignments SET status = 'PENDING', vendor_id = :vendorId, " +
                     "vendor_name = (SELECT company_name FROM vendors WHERE id = :vendorId), " +
-                    "responded_at = NOW(), expires_at = :expiresAt " +
+                    "responded_at = NULL, assigned_at = NOW(), expires_at = :expiresAt " +
                     "WHERE id = :assignmentId AND status = 'OPEN'",
             nativeQuery = true
     )

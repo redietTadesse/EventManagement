@@ -122,7 +122,9 @@ class EventLifecycleApiIntegrationTest {
     @BeforeEach
     void referenceData() throws Exception {
         try (var connection = jdbc.getDataSource().getConnection()) {
-            assertThat(connection.getMetaData().getURL()).startsWith("jdbc:h2:mem:lifecycle-http");
+            String url = connection.getMetaData().getURL();
+            assertThat(url.startsWith("jdbc:h2:mem:lifecycle-http")
+                    || url.matches("jdbc:mysql://(?:localhost|127\\.0\\.0\\.1):3306/aicc_validation_[a-f0-9]{8}")).isTrue();
         }
         // Prior scenarios stay available for audit assertions but cannot alter this ranking.
         jdbc.update("UPDATE vendors SET is_active = false");
@@ -173,7 +175,7 @@ class EventLifecycleApiIntegrationTest {
         assertThat(bookings.findByVenueId(venue.getId())).allSatisfy(row->assertThat(row.getStatus()).isEqualTo(VenueBooking.BookingStatus.CANCELLED));
         JsonNode history=call(GET,"/inquiries/"+inquiry+"/proposal-history",client,null,200);
         assertThat(history.size()).isEqualTo(1);assertThat(history.get(0).has("agreementArchive")).isFalse();
-        call(PATCH,"/inquiries/"+inquiry+"/accept",client,Map.of("proposalVersion",1),400);
+        call(PATCH,"/inquiries/"+inquiry+"/accept",client,Map.of("proposalVersion",1),409);
         call(PATCH,"/inquiries/"+inquiry+"/accept",client,Map.of("proposalVersion",2),200);
         call(POST,agreementPath(inquiry)+"/signature",client,Map.of("name","Client","revision",originalRevision,"consent",true),400);
         JsonNode event=convert(inquiry,200);
@@ -212,6 +214,59 @@ class EventLifecycleApiIntegrationTest {
         http.perform(MockMvcRequestBuilders.post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsBytes(Map.of("username", inactive.getUsername(), "password", "Admin@123"))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void vendorApplicationActivationAndPerformanceWorkThroughAuthorizedRoutes() throws Exception {
+        User admin = user("vendor-admin", Role.ADMIN);
+        String password = "Fixture-only-password";
+        var application = Map.of("companyName", "Applicant " + run, "contactPerson", "Applicant",
+                "email", "applicant-" + run + "@example.test", "phone", "0911000000",
+                "serviceCategory", "av", "description", "Audio and video services", "password", password);
+        var submitted = http.perform(MockMvcRequestBuilders.post("/api/v1/vendors/apply")
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(application)))
+                .andExpect(status().isCreated()).andReturn();
+        JsonNode result = json.readTree(submitted.getResponse().getContentAsByteArray());
+        assertThat(result.has("passwordHash")).isFalse();
+        long id = result.path("id").asLong();
+        User account = users.findByUsername(result.path("username").asText()).orElseThrow();
+        assertThat(account.isActive()).isFalse();
+        assertThat(vendors.findById(id).orElseThrow().isActive()).isFalse();
+        call(PATCH, "/vendors/" + id + "/toggle-active", coordinator, null, 403);
+        call(PATCH, "/vendors/" + id + "/toggle-active", client, null, 403);
+        JsonNode activated = call(PATCH, "/vendors/" + id + "/toggle-active", admin, null, 200);
+        assertThat(activated.path("active").asBoolean()).isTrue();
+        assertThat(users.findById(account.getId()).orElseThrow().isActive()).isTrue();
+        http.perform(MockMvcRequestBuilders.post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsBytes(Map.of("username", account.getUsername(), "password", password))))
+                .andExpect(status().isOk());
+        assertThat(call(GET, "/vendors/" + id + "/performance", coordinator, null, 200)
+                .path("completedAssignments").asLong()).isZero();
+        call(GET, "/vendors/" + id + "/performance", client, null, 403);
+        call(PATCH, "/vendors/" + id + "/toggle-active", admin, null, 200);
+        assertThat(users.findById(account.getId()).orElseThrow().isActive()).isFalse();
+        var creation = Map.of("username", "created-" + run, "email", "created-" + run + "@example.test",
+                "password", password, "companyName", "Created " + run, "serviceCategory", "security");
+        call(POST, "/vendors", coordinator, creation, 403);
+        assertThat(call(POST, "/vendors", admin, creation, 201).path("serviceCategory").asText()).isEqualTo("security");
+    }
+
+    @Test
+    void cancelledVenueRowsCanBeReusedForANewBooking() throws Exception {
+        long first = acceptedInquiry();
+        long firstEvent = convert(first, 200).path("id").asLong();
+        var originalIds = bookings.findByEventId(firstEvent).stream().map(VenueBooking::getId).toList();
+        assertThat(originalIds).hasSize(4);
+        call(PATCH, "/events/" + firstEvent + "/status?status=CANCELLED", coordinator, null, 200);
+        assertThat(bookings.findByEventId(firstEvent)).allSatisfy(row ->
+                assertThat(row.getStatus()).isEqualTo(VenueBooking.BookingStatus.CANCELLED));
+        long second = acceptedInquiry();
+        long secondEvent = convert(second, 200).path("id").asLong();
+        assertThat(bookings.findByEventId(secondEvent)).hasSize(4).allSatisfy(row -> {
+            assertThat(row.getStatus()).isEqualTo(VenueBooking.BookingStatus.CONFIRMED);
+            assertThat(originalIds).contains(row.getId());
+        });
+        assertThat(bookings.findByVenueId(venue.getId())).hasSize(4);
     }
 
     @Test
@@ -612,7 +667,7 @@ class EventLifecycleApiIntegrationTest {
                 Map.of("receiptUploadedAt", firstReceipt), 200).path("id").asLong();
         long eventCount = events.count(), taskCount = tasks.count(), offerCount = assignments.count();
         JsonNode failure = call(POST, agreementPath(second) + "/receipt/verify", coordinator,
-                Map.of("receiptUploadedAt", secondReceipt), 400);
+                Map.of("receiptUploadedAt", secondReceipt), 409);
         assertThat(failure.path("code").asText()).isEqualTo("VENUE_CONFLICT");
         assertThat(events.findByInquiryId(second)).isEmpty();
         assertThat(events.count()).isEqualTo(eventCount);
@@ -672,8 +727,8 @@ class EventLifecycleApiIntegrationTest {
             MvcResult firstResult = attempts.get(0).get(20, TimeUnit.SECONDS);
             MvcResult secondResult = attempts.get(1).get(20, TimeUnit.SECONDS);
             assertThat(List.of(firstResult.getResponse().getStatus(), secondResult.getResponse().getStatus()))
-                    .containsExactlyInAnyOrder(200, 400);
-            MvcResult failed = firstResult.getResponse().getStatus() == 400 ? firstResult : secondResult;
+                    .containsExactlyInAnyOrder(200, 409);
+            MvcResult failed = firstResult.getResponse().getStatus() == 409 ? firstResult : secondResult;
             assertThat(json.readTree(failed.getResponse().getContentAsByteArray()).path("code").asText()).isEqualTo("VENUE_CONFLICT");
             assertThat(events.count()).isEqualTo(eventCount + 1);
             assertThat(tasks.count()).isEqualTo(taskCount + 5);
@@ -1095,14 +1150,14 @@ class EventLifecycleApiIntegrationTest {
         call(POST, agreementPath(second) + "/signature", client,
                 Map.of("name", "Client", "revision", revision, "consent", true), 200);
         call(POST, agreementPath(second) + "/signature", coordinator,
-                Map.of("name", "Coordinator", "revision", revision, "consent", true), 400);
+                Map.of("name", "Coordinator", "revision", revision, "consent", true), 409);
         assertThat(agreements.findById(second).orElseThrow().getCoordinatorSignedAt()).isNull();
         assertThat(events.findByInquiryId(second)).isEmpty();
         expireContractHolds(first);
         call(POST, agreementPath(second) + "/signature", coordinator,
                 Map.of("name", "Coordinator", "revision", revision, "consent", true), 200);
         call(POST, agreementPath(first) + "/receipt/verify", coordinator,
-                Map.of("receiptUploadedAt", receipt), 400);
+                Map.of("receiptUploadedAt", receipt), 409);
         assertThat(events.findByInquiryId(first)).isEmpty();
     }
 

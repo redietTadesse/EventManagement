@@ -105,7 +105,7 @@ public class InquiryService {
             if (rankingService.rank(category, request.getEventDate(), Set.of(), request.getEventType()).isEmpty())
                 unmet.add("No available vendor for " + category);
 
-        Inquiry inquiry = Inquiry.builder()
+        Inquiry inquiry = workflowEngine.startInquiry(Inquiry.builder()
                 .clientId(request.getClientId())
                 .clientName(request.getClientName())
                 .eventType(request.getEventType())
@@ -118,8 +118,7 @@ public class InquiryService {
                 .unmetNeeds(unmet.isEmpty() ? null : String.join("; ", unmet))
                 .requestedCategories(CategoryUtils.join(requestedCategories))
                 .categories(CategoryUtils.join(requestedCategories))
-                .status(EventStatus.INQUIRY_SUBMITTED)
-                .build();
+                .build());
 
         Inquiry saved = inquiryRepository.save(inquiry);
         log.info("Created inquiry with id: {} for client: {}", saved.getId(), saved.getClientName());
@@ -233,9 +232,7 @@ public class InquiryService {
         Inquiry inquiry = getInquiryById(id);
         EventStatus oldStatus = inquiry.getStatus();
 
-        workflowEngine.validateTransition(oldStatus, newStatus, userRole);
-
-        inquiry.setStatus(newStatus);
+        workflowEngine.transition(inquiry, newStatus, userRole);
         Inquiry saved = inquiryRepository.save(inquiry);
 
         eventPublisher.publishEvent(new InquiryStatusChangedEvent(this, saved, oldStatus, newStatus));
@@ -264,16 +261,15 @@ public class InquiryService {
         String resolvedCategories = CategoryUtils.join(
                 CategoryUtils.externalVendorCategories(inquiry.getEventType(), selectedCategories));
 
-        Event event = Event.builder()
+        Event event = workflowEngine.startEvent(Event.builder()
                 .inquiry(inquiry)
                 .name(inquiry.getEventName() != null && !inquiry.getEventName().isBlank() ? inquiry.getEventName()
                         : request.getName() != null ? request.getName() : inquiry.getEventType() + " - " + inquiry.getClientName())
-                .status(EventStatus.EVENT_CREATED)
                 .venue(request.getVenue())
                 .venueId(request.getVenueId())
                 .venueDetails(request.getVenueDetails())
                 .requiredCategories(resolvedCategories)
-                .build();
+                .build());
 
         Event savedEvent = eventRepository.save(event);
         List<com.aicc.eventmanagement.entities.Checklist> checklistItems =
@@ -293,9 +289,7 @@ public class InquiryService {
         vendorService.autoAssignForEvent(savedEvent);
         log.info("Auto-assignment completed for event {}", savedEvent.getId());
 
-        workflowEngine.validateTransition(EventStatus.PROPOSAL_ACCEPTED, EventStatus.EVENT_CREATED, Role.COORDINATOR);
-
-        inquiry.setStatus(EventStatus.EVENT_CREATED);
+        workflowEngine.transition(inquiry, EventStatus.EVENT_CREATED, Role.COORDINATOR);
         inquiry.setEvent(savedEvent);
         inquiryRepository.save(inquiry);
 
@@ -479,7 +473,6 @@ public class InquiryService {
             throw new BusinessException(String.format("Cannot send proposal. Inquiry status is: %s (expected: INQUIRY_SUBMITTED)", inquiry.getStatus()), "INVALID_STATE");
         }
 
-        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_SENT, userRole);
         if(request.getEventName()!=null)inquiry.setEventName(request.getEventName().strip());
         if(request.getEventDate()!=null)inquiry.setEventDate(request.getEventDate());
         if(request.getEndDate()!=null)inquiry.setEndDate(request.getEndDate());
@@ -493,7 +486,7 @@ public class InquiryService {
                 request.getVendorShortlist(), inquiry);
         inquiry.setCategories(CategoryUtils.join(categories));
         inquiry.setProposal(proposalJson);
-        inquiry.setStatus(EventStatus.PROPOSAL_SENT);
+        workflowEngine.transition(inquiry, EventStatus.PROPOSAL_SENT, userRole);
         inquiry.setProposalVersion(inquiry.getProposalVersion() + 1);
 
         Inquiry saved = inquiryRepository.save(inquiry);
@@ -520,12 +513,11 @@ public class InquiryService {
         Inquiry inquiry = lockInquiry(id);
         if(version!=null && version!=inquiry.getProposalVersion())throw new BusinessException("This proposal changed. Refresh and review the latest version.","STALE_PROPOSAL");
 
-        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_ACCEPTED, userRole);
         if (finalCategories != null) {
             inquiry.setCategories(CategoryUtils.join(canonicalCategories(finalCategories)));
         }
 
-        inquiry.setStatus(EventStatus.PROPOSAL_ACCEPTED);
+        workflowEngine.transition(inquiry, EventStatus.PROPOSAL_ACCEPTED, userRole);
         Inquiry saved = inquiryRepository.save(inquiry);
 
         eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT,
@@ -565,8 +557,7 @@ public class InquiryService {
     @Transactional
     public Inquiry rejectProposal(Long id, Role userRole) {
         Inquiry inquiry = getInquiryById(id);
-        workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_REJECTED, userRole);
-        inquiry.setStatus(EventStatus.PROPOSAL_REJECTED);
+        workflowEngine.transition(inquiry, EventStatus.PROPOSAL_REJECTED, userRole);
         Inquiry saved = inquiryRepository.save(inquiry);
         eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_SENT,
                 EventStatus.PROPOSAL_REJECTED, String.valueOf(id), userRole));
@@ -603,7 +594,7 @@ public class InquiryService {
         validateInquiryDates(inquiry.getEventDate(), inquiry.getEndDate());
         LayoutCapacity.requireFit(venueService.getById(request.getVenueId()), inquiry.getTableSetup(), inquiry.getExpectedAttendees());
         if (inquiry.getStatus() == EventStatus.PROPOSAL_ACCEPTED) {
-            inquiry.setStatus(EventStatus.PROPOSAL_SENT);
+            workflowEngine.transition(inquiry, EventStatus.PROPOSAL_SENT, userRole);
             eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_ACCEPTED,
                     EventStatus.PROPOSAL_SENT, String.valueOf(id), userRole));
         }

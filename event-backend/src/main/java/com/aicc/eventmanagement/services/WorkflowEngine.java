@@ -3,6 +3,10 @@ package com.aicc.eventmanagement.services;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
+import com.aicc.eventmanagement.entities.Event;
+import com.aicc.eventmanagement.entities.Inquiry;
+import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -201,6 +205,55 @@ public class WorkflowEngine {
     }
 
     // ===== EVENT METHODS =====
+
+    /** Services keep transaction boundaries and side effects; the engine owns lifecycle state writes. */
+    public void transition(Inquiry inquiry, EventStatus to, Role role) {
+        validateTransition(inquiry.getStatus(), to, role);
+        inquiry.setStatus(to);
+    }
+
+    public void transition(Event event, EventStatus to, Role role) {
+        validateTransition(event.getStatus(), to, role);
+        event.setStatus(to);
+    }
+
+    public void transition(VendorAssignment assignment, VendorAssignmentStatus to, Role role) {
+        validateAssignmentTransition(assignment.getStatus(), to, role);
+        assignment.setStatus(to);
+    }
+
+    public Inquiry startInquiry(Inquiry inquiry) {
+        requireNew(inquiry.getId(), inquiry.getStatus());
+        inquiry.setStatus(EventStatus.INQUIRY_SUBMITTED);
+        return inquiry;
+    }
+
+    public Event startEvent(Event event) {
+        if (event.getId() != null || (event.getStatus() != null && event.getStatus() != EventStatus.EVENT_CREATED)) {
+            throw new IllegalStateException("A new event must start at EVENT_CREATED without an ID.");
+        }
+        event.setStatus(EventStatus.EVENT_CREATED);
+        return event;
+    }
+
+    public VendorAssignment startAssignment(VendorAssignment assignment) {
+        requireNew(assignment.getId(), assignment.getStatus());
+        assignment.setStatus(VendorAssignmentStatus.PENDING);
+        return assignment;
+    }
+
+    private void requireNew(Long id, Object status) {
+        if (id != null || status != null) {
+            throw new IllegalStateException("New workflow records must start without an ID or status.");
+        }
+    }
+
+    /** The conditional database write preserves one winner when two vendors claim together. */
+    public int claimOpenAssignment(VendorAssignmentRepository repository, Long id, Long vendorId,
+                                   java.time.LocalDateTime deadline, Role role) {
+        validateAssignmentTransition(VendorAssignmentStatus.OPEN, VendorAssignmentStatus.PENDING, role);
+        return repository.claimOpenAssignment(id, vendorId, deadline);
+    }
 
     public boolean isValidTransition(EventStatus from, EventStatus to) {
         return transitionTable.getOrDefault(from, Set.of()).contains(to);

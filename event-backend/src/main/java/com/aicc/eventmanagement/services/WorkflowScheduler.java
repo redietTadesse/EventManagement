@@ -51,8 +51,7 @@ public class WorkflowScheduler {
         for (Event event : pastEvents) {
             try {
                 EventStatus old = event.getStatus();
-                workflowEngine.validateTransition(old, EventStatus.COMPLETED, Role.ADMIN);
-                event.setStatus(EventStatus.COMPLETED);
+                workflowEngine.transition(event, EventStatus.COMPLETED, Role.ADMIN);
                 eventRepository.save(event);
 
                 eventPublisher.publishEvent(new WorkflowTransitionEvent(this, old, EventStatus.COMPLETED,

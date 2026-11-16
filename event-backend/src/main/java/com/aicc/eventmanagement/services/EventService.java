@@ -60,10 +60,8 @@ public class EventService {
                     "BOOKING_AGREEMENT_REQUIRED");
         }
 
-        // Set initial status if not set
-        if (event.getStatus() == null) {
-            event.setStatus(EventStatus.EVENT_CREATED);
-        }
+        // A direct create cannot inject a later workflow state.
+        workflowEngine.startEvent(event);
 
         Event saved = eventRepository.save(event);
 
@@ -215,9 +213,7 @@ public class EventService {
             return event;
         }
 
-        workflowEngine.validateTransition(oldStatus, status, userRole);
-
-        event.setStatus(status);
+        workflowEngine.transition(event, status, userRole);
         Event saved = eventRepository.save(event);
 
         // Cascade assignment status changes when event completes or cancels
@@ -369,8 +365,7 @@ public class EventService {
         }
         int reconfirmations = vendorService.requestVendorReconfirmationForEventDateChange(eventId);
         if (reconfirmations > 0 && event.getStatus() == EventStatus.CONFIRMED) {
-            workflowEngine.validateTransition(EventStatus.CONFIRMED, EventStatus.AWAITING_VENDORS, Role.COORDINATOR);
-            event.setStatus(EventStatus.AWAITING_VENDORS);
+            workflowEngine.transition(event, EventStatus.AWAITING_VENDORS, Role.COORDINATOR);
             eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.CONFIRMED,
                     EventStatus.AWAITING_VENDORS, "EVENT-" + eventId, Role.COORDINATOR));
         }

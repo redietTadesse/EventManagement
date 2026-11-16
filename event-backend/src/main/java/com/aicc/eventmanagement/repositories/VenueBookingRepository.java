@@ -23,6 +23,10 @@ public interface VenueBookingRepository extends JpaRepository<VenueBooking, Long
     @Query("SELECT vb FROM VenueBooking vb WHERE vb.venue.id = :venueId AND vb.bookingDate = :date")
     Optional<VenueBooking> findByVenueAndDate(@Param("venueId") Long venueId, @Param("date") LocalDate date);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT vb FROM VenueBooking vb WHERE vb.venue.id = :venueId AND vb.bookingDate = :date")
+    Optional<VenueBooking> findByVenueAndDateForUpdate(@Param("venueId") Long venueId, @Param("date") LocalDate date);
+
     @Query("SELECT vb.venue.id FROM VenueBooking vb WHERE vb.bookingDate = :date AND vb.status = 'CONFIRMED'")
     List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date);
 

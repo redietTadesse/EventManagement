@@ -16,6 +16,30 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 @DisplayName("WorkflowEngine Unit Tests")
 class WorkflowEngineTest {
 
+    @Test
+    void forbiddenTransitionsLeaveEveryEntityUnchanged() {
+        var event = com.aicc.eventmanagement.entities.Event.builder().status(EventStatus.CONFIRMED).build();
+        assertThatThrownBy(() -> workflowEngine.transition(event, EventStatus.COMPLETED, Role.CLIENT))
+                .isInstanceOf(SecurityException.class);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.CONFIRMED);
+        var inquiry = com.aicc.eventmanagement.entities.Inquiry.builder().status(EventStatus.PROPOSAL_ACCEPTED).build();
+        assertThatThrownBy(() -> workflowEngine.transition(inquiry, EventStatus.PROPOSAL_SENT, Role.ADMIN))
+                .isInstanceOf(SecurityException.class);
+        assertThat(inquiry.getStatus()).isEqualTo(EventStatus.PROPOSAL_ACCEPTED);
+        var assignment = com.aicc.eventmanagement.entities.VendorAssignment.builder().status(VendorAssignmentStatus.DECLINED).build();
+        assertThatThrownBy(() -> workflowEngine.transition(assignment, VendorAssignmentStatus.ACCEPTED, Role.VENDOR))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(assignment.getStatus()).isEqualTo(VendorAssignmentStatus.DECLINED);
+    }
+
+    @Test
+    void initializationCannotResetExistingRecordsOrInjectAConfirmedEvent() {
+        var event = com.aicc.eventmanagement.entities.Event.builder().status(EventStatus.CONFIRMED).build();
+        assertThatThrownBy(() -> workflowEngine.startEvent(event)).isInstanceOf(IllegalStateException.class);
+        var inquiry = com.aicc.eventmanagement.entities.Inquiry.builder().id(1L).build();
+        assertThatThrownBy(() -> workflowEngine.startInquiry(inquiry)).isInstanceOf(IllegalStateException.class);
+    }
+
     private WorkflowEngine workflowEngine;
 
     @BeforeEach

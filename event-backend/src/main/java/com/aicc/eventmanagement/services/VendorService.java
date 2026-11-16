@@ -384,12 +384,11 @@ public class VendorService {
                     }
 
                     if (candidate != null) {
-                        assignment = VendorAssignment.builder()
+                        assignment = workflowEngine.startAssignment(VendorAssignment.builder()
                                 .event(event)
                                 .vendor(candidate)
                                 .vendorName(candidate.getCompanyName())
                                 .serviceCategory(category)
-                                .status(VendorAssignmentStatus.PENDING)
                                 .selectionReason(preferredVendorIds.contains(vendorId)
                                         ? SelectionReason.CLIENT_PREFERRED : SelectionReason.COORDINATOR_MANUAL)
                                 .decisionSnapshot(buildClientPreferredSnapshot(
@@ -397,7 +396,7 @@ public class VendorService {
                                         preferredVendorIds.contains(vendorId)))
                                 .assignedAt(LocalDateTime.now())
                                 .expiresAt(offerDeadline())
-                                .build();
+                                .build());
                         log.info("Using CLIENT-PREFERRED vendor {} for category {} on event {}",
                                 candidate.getCompanyName(), category, event.getId());
                         break;
@@ -411,18 +410,17 @@ public class VendorService {
 
                 if (selection.isPresent()) {
                     VendorRankingService.Selection s = selection.get();
-                    assignment = VendorAssignment.builder()
+                    assignment = workflowEngine.startAssignment(VendorAssignment.builder()
                             .event(event)
                             .vendor(s.vendor())
                             .vendorName(s.vendor().getCompanyName())
                             .serviceCategory(category)
-                            .status(VendorAssignmentStatus.PENDING)
                             .rankingScore(s.score())
                             .selectionReason(s.reason())
                             .decisionSnapshot(s.reasoning())
                             .assignedAt(LocalDateTime.now())
                             .expiresAt(offerDeadline())
-                            .build();
+                            .build());
                     log.info("Auto-assigned {} to event {} for category {} (score {}, reason {})",
                             s.vendor().getCompanyName(), event.getId(), category,
                             s.score(), s.reason());
@@ -623,19 +621,16 @@ public class VendorService {
         escalation.currentAttempt()
                 .filter(a -> a.getStatus() == VendorAssignmentStatus.OPEN)
                 .ifPresent(open -> {
-                    workflowEngine.validateAssignmentTransition(
-                            VendorAssignmentStatus.OPEN, VendorAssignmentStatus.CANCELLED, Role.COORDINATOR);
-                    open.setStatus(VendorAssignmentStatus.CANCELLED);
+                    workflowEngine.transition(open, VendorAssignmentStatus.CANCELLED, Role.COORDINATOR);
                     assignmentRepository.save(open);
                     log.info("Cancelled open pool row {} superseded by manual assignment", open.getId());
                 });
 
-        VendorAssignment assignment = VendorAssignment.builder()
+        VendorAssignment assignment = workflowEngine.startAssignment(VendorAssignment.builder()
                 .event(event)
                 .vendor(vendor)
                 .vendorName(vendor.getCompanyName())
                 .serviceCategory(category)
-                .status(VendorAssignmentStatus.PENDING)
                 .selectionReason(SelectionReason.COORDINATOR_MANUAL)
                 .decisionSnapshot(buildCoordinatorDecisionSnapshot(
                         category, eventDate, vendor, normalizedReason, coordinatorId, coordinatorUsername,
@@ -643,7 +638,7 @@ public class VendorService {
                 .serviceOrder(serviceOrder)
                 .assignedAt(LocalDateTime.now())
                 .expiresAt(offerDeadline())
-                .build();
+                .build());
 
         VendorAssignment saved = assignmentRepository.save(assignment);
 
@@ -701,9 +696,7 @@ public class VendorService {
                         eligibility.reason(), eligibility.code()
                 );
             }
-            workflowEngine.validateAssignmentTransition(
-                    VendorAssignmentStatus.PENDING, VendorAssignmentStatus.ACCEPTED, Role.VENDOR);
-            assignment.setStatus(VendorAssignmentStatus.ACCEPTED);
+            workflowEngine.transition(assignment, VendorAssignmentStatus.ACCEPTED, Role.VENDOR);
             assignment.setRespondedAt(LocalDateTime.now());
             VendorAssignment saved = assignmentRepository.save(assignment);
             eventPublisher.publishEvent(new VendorAssignmentEvent(this, saved));
@@ -711,9 +704,7 @@ public class VendorService {
             return saved;
         }
 
-        workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.PENDING, VendorAssignmentStatus.DECLINED, Role.VENDOR);
-        assignment.setStatus(VendorAssignmentStatus.DECLINED);
+        workflowEngine.transition(assignment, VendorAssignmentStatus.DECLINED, Role.VENDOR);
         assignment.setDeclineReason(declineReason);
         assignment.setRespondedAt(LocalDateTime.now());
         assignmentRepository.save(assignment);
@@ -760,18 +751,17 @@ public class VendorService {
 
         VendorRankingService.Selection s = selection.get();
 
-        VendorAssignment newAssignment = VendorAssignment.builder()
+        VendorAssignment newAssignment = workflowEngine.startAssignment(VendorAssignment.builder()
                 .event(event)
                 .vendor(s.vendor())
                 .vendorName(s.vendor().getCompanyName())
                 .serviceCategory(category)
-                .status(VendorAssignmentStatus.PENDING)
                 .rankingScore(s.score())
                 .selectionReason(s.reason())
                 .decisionSnapshot(s.reasoning())
                 .assignedAt(LocalDateTime.now())
                 .expiresAt(offerDeadline())
-                .build();
+                .build());
 
         VendorAssignment saved = assignmentRepository.save(newAssignment);
 
@@ -834,10 +824,7 @@ public class VendorService {
             VendorAssignment assignment = assignmentRepository.findById(offer.getId()).orElse(null);
             if (assignment == null || assignment.getStatus() != VendorAssignmentStatus.PENDING
                     || assignment.getExpiresAt() == null || assignment.getExpiresAt().isAfter(now)) continue;
-            workflowEngine.validateAssignmentTransition(
-                    VendorAssignmentStatus.PENDING, VendorAssignmentStatus.EXPIRED, Role.VENDOR);
-
-            assignment.setStatus(VendorAssignmentStatus.EXPIRED);
+            workflowEngine.transition(assignment, VendorAssignmentStatus.EXPIRED, Role.VENDOR);
             assignmentRepository.save(assignment);
 
             eventPublisher.publishEvent(new VendorAssignmentEvent(this, assignment));
@@ -862,9 +849,7 @@ public class VendorService {
         int closed = 0;
         for (VendorAssignment a : assignments) {
             if (a.getStatus() == VendorAssignmentStatus.ACCEPTED) {
-                workflowEngine.validateAssignmentTransition(
-                        VendorAssignmentStatus.ACCEPTED, VendorAssignmentStatus.COMPLETED, triggeringRole);
-                a.setStatus(VendorAssignmentStatus.COMPLETED);
+                workflowEngine.transition(a, VendorAssignmentStatus.COMPLETED, triggeringRole);
                 assignmentRepository.save(a);
                 closed++;
             }
@@ -881,8 +866,7 @@ public class VendorService {
             if (s == VendorAssignmentStatus.ACCEPTED
                     || s == VendorAssignmentStatus.PENDING
                     || s == VendorAssignmentStatus.OPEN) {
-                workflowEngine.validateAssignmentTransition(s, VendorAssignmentStatus.CANCELLED, triggeringRole);
-                a.setStatus(VendorAssignmentStatus.CANCELLED);
+                workflowEngine.transition(a, VendorAssignmentStatus.CANCELLED, triggeringRole);
                 assignmentRepository.save(a);
                 cancelled++;
             }
@@ -923,8 +907,7 @@ public class VendorService {
             return;
         }
 
-        workflowEngine.validateTransition(current, target, triggeringRole);
-        event.setStatus(target);
+        workflowEngine.transition(event, target, triggeringRole);
         eventRepository.save(event);
 
         // Publish the rollup transition so the audit trail records it.
@@ -966,11 +949,8 @@ public class VendorService {
                 Set.copyOf(assignmentRepository.findTriedVendorIds(
                         assignment.getEvent().getId(), assignment.getServiceCategory())));
 
-        workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.OPEN, VendorAssignmentStatus.PENDING, Role.VENDOR);
-
-        int rowsUpdated = assignmentRepository.claimOpenAssignment(
-                assignmentId, vendorId, offerDeadline());
+        int rowsUpdated = workflowEngine.claimOpenAssignment(assignmentRepository,
+                assignmentId, vendorId, offerDeadline(), Role.VENDOR);
         if (rowsUpdated == 0) {
             throw new BusinessException(
                     "Assignment was claimed by another vendor",
@@ -1084,9 +1064,8 @@ public class VendorService {
 
             VendorAssignmentStatus oldStatus = assignment.getStatus();
             if (oldStatus == VendorAssignmentStatus.ACCEPTED) {
-                workflowEngine.validateAssignmentTransition(oldStatus, VendorAssignmentStatus.PENDING, Role.COORDINATOR);
+                workflowEngine.transition(assignment, VendorAssignmentStatus.PENDING, Role.COORDINATOR);
             }
-            assignment.setStatus(VendorAssignmentStatus.PENDING);
             assignment.setRespondedAt(null);
             assignment.setExpiresAt(newDeadline);
             VendorAssignment saved = assignmentRepository.save(assignment);
@@ -1211,10 +1190,8 @@ public class VendorService {
                         assignment.getEvent().getId(), assignmentCategory)));
         String normalizedReason = requireCoordinatorReason(reason);
 
-        workflowEngine.validateAssignmentTransition(
-                VendorAssignmentStatus.OPEN, VendorAssignmentStatus.PENDING, Role.COORDINATOR);
-        int rowsUpdated = assignmentRepository.claimOpenAssignment(
-                assignmentId, vendorId, offerDeadline());
+        int rowsUpdated = workflowEngine.claimOpenAssignment(assignmentRepository,
+                assignmentId, vendorId, offerDeadline(), Role.COORDINATOR);
         if (rowsUpdated == 0) {
             throw new BusinessException("Assignment is no longer open", "ASSIGNMENT_ALREADY_CLAIMED");
         }

@@ -44,8 +44,8 @@ class InquiryServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
-    @Mock
-    private WorkflowEngine workflowEngine;   // NEW: mock the engine
+    @org.mockito.Spy
+    private WorkflowEngine workflowEngine = new WorkflowEngine();
 
         @Mock
         private EmailService emailService;
@@ -73,6 +73,7 @@ class InquiryServiceTest {
 
     @BeforeEach
     void setUp() {
+        workflowEngine.init();
         validRequest = new CreateInquiryRequest();
         validRequest.setClientId(1L);
         validRequest.setClientName("John Doe");

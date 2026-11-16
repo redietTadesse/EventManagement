@@ -30,7 +30,10 @@ public class GlobalExceptionHandler {
         HttpStatus status = "ACCESS_DENIED".equals(ex.getErrorCode())
                 ? HttpStatus.FORBIDDEN
                 : HttpStatus.BAD_REQUEST;
-        if ("COORDINATOR_CONFLICT".equals(ex.getErrorCode())) status = HttpStatus.CONFLICT;
+        if (java.util.Set.of("COORDINATOR_CONFLICT", "VENUE_CONFLICT", "VENUE_HELD", "STALE_PROPOSAL",
+                "ASSIGNMENT_NOT_OPEN", "ASSIGNMENT_ALREADY_CLAIMED").contains(ex.getErrorCode())) {
+            status = HttpStatus.CONFLICT;
+        }
         return ResponseEntity.status(status)
                 .body(new ErrorResponse(ex.getErrorCode(), ex.getMessage(), LocalDateTime.now()));
     }
