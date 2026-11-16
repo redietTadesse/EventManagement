@@ -40,10 +40,12 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
       <div className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_1.2fr_1fr_1.2fr_1.2fr] md:items-start md:px-5">
         <div><p className="text-xs text-slate-500 md:hidden">Required service</p><p className="font-semibold capitalize text-slate-900">{serviceLabel(row.category)}</p></div>
         <div><p className="text-xs text-slate-500 md:hidden">Current vendor</p><p className="text-sm text-slate-800">{current?.vendorName || (current?.status === 'OPEN' ? 'Open vendor pool' : 'Not assigned')}</p>
+          {snapshot?.reasoning && <p className="mt-2 max-w-xs text-xs leading-relaxed text-slate-600">{snapshot.reasoning}</p>}
+          {selected?.score != null && <p className="mt-2 text-xs font-semibold text-indigo-700">Selection score: {Math.round(selected.score*10)/10} / 100</p>}
           {current?.vendorId && <div className="mt-2 text-xs">
             <button type="button" aria-expanded={evidenceOpen} onClick={() => setEvidenceOpen(value => !value)} className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100">
               <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5"><path d="m13.5 13.5 4 4M8.75 14.5a5.75 5.75 0 1 0 0-11.5 5.75 5.75 0 0 0 0 11.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>
-              Why selected?
+              See selection details
             </button>
             {evidenceOpen && <div className="mt-2 space-y-2 rounded-lg border border-indigo-100 bg-slate-50 p-3 text-slate-600">
               <div className="rounded-md bg-indigo-50 p-2.5">
@@ -79,6 +81,15 @@ function ServiceRow({ row, alternatives, excluded, loading, error, highlighted, 
           {feedback && <p role={feedback.type === 'error' ? 'alert' : 'status'} className={`text-xs ${feedback.type === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}>{feedback.message}</p>}
         </div>
       </div>
+      {row.attempts.length>0&&<div className="border-t border-slate-100 bg-slate-50/70 px-4 py-4 md:px-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{serviceLabel(row.category)} offer history</p><button type="button" onClick={()=>onHistory(row.category)} className="text-xs font-semibold text-indigo-700 hover:underline">Open full history →</button></div>
+        <ol className="flex gap-3 overflow-x-auto pb-1" aria-label={serviceLabel(row.category)+' offer sequence'}>{row.attempts.map((attempt,index)=><li key={attempt.id} className={'min-w-44 flex-1 rounded-xl border bg-white p-3 '+(index===row.attempts.length-1?'border-indigo-200 ring-1 ring-indigo-100':'border-slate-200')}>
+          <p className="flex items-center justify-between gap-3 text-[11px] text-slate-500"><span>{index===0?'First offer':'Offer '+(index+1)}</span>{index===row.attempts.length-1&&<span className="font-semibold text-indigo-700">Latest</span>}</p>
+          <p className="my-2 text-sm font-semibold text-slate-800">{attempt.vendorName||'Open request'}</p><StatusBadge status={attempt.status}/>
+          {attempt.declineReason&&<p className="mt-2 text-xs text-slate-500">{attempt.declineReason}</p>}
+        </li>)}</ol>
+        {row.attempts.length>1&&<p className="mt-2 text-xs text-slate-500">Each response stays recorded when the next vendor gets an offer.</p>}
+      </div>}
       {reviewing && <div className="mx-4 mb-4 space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 md:mx-5">
         <p className="text-xs text-slate-600">Current eligibility for this event. These results can differ from the recorded selection decision.</p>
         {loading && <p role="status" className="text-sm text-slate-500">Checking vendor eligibility…</p>}

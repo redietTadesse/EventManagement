@@ -587,6 +587,7 @@ useEffect(() => {
   const bookingDates = reservation.bookedDates;
   const operationsSummary = {
     venue: {
+      known: venueKnown, completed: reservation.complete ? 1 : 0, total: 1,
       value: !event.venueId ? 'Venue unassigned' : !venueKnown ? 'Reservation unverified'
         : reservation.complete ? 'Event dates booked' : 'Reservation incomplete',
       detail: venueKnown && bookingDates.length
@@ -594,10 +595,12 @@ useEffect(() => {
         : event.venue,
     },
     vendors: {
+      known: vendorsKnown, completed: confirmedServices, total: services.length,
       value: !vendorsKnown ? 'Offers unverified' : services.length ? `${confirmedServices} of ${services.length} services confirmed` : 'No external services required',
       detail: vendorsKnown && services.length ? `${pendingServices} awaiting response · ${blockedServices} need review` : '',
     },
     tasks: {
+      known: tasksKnown, completed: completedTasks, total: checklist.length,
       value: checklistLoading ? 'Checking tasks…' : !tasksKnown ? 'Task progress unavailable'
         : checklist.length ? `${completedTasks} of ${checklist.length} tasks complete` : 'No tasks recorded',
       detail: tasksKnown && checklist.length > completedTasks ? `${checklist.length - completedTasks} remaining` : '',
@@ -642,6 +645,7 @@ useEffect(() => {
           Read only. {event.coordinator.name} is the lead coordinator. An administrator can reassign this event.
         </p>}
         <EventOperationsPanel status={event.status} summary={operationsSummary}
+          onTrack={track => selectTab(track === 'venue' ? 'overview' : track === 'tasks' ? 'tasks' : 'vendors')}
           handoff={handoff && { ...handoff, onHistory: () => selectTab('history', handoff.category) }}
           decision={{
             ...nextAction,

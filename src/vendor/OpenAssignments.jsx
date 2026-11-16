@@ -35,7 +35,9 @@ export default function OpenAssignments() {
       navigate(`/vendor/assignments/${claimed.id}`);
     } catch (err) {
       const raw = err.response?.data;
-      setError((raw && (raw.message || raw.code)) || 'Could not claim assignment');
+      setError(err.response?.status === 409
+        ? 'This assignment has already been taken. The available work has been refreshed below.'
+        : (raw?.message || 'Could not claim assignment. Please try again.'));
       setClaiming(null);
       // Refresh in case it was claimed by another vendor
       load(true);

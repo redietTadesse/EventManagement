@@ -67,7 +67,11 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
     try { await action(); }
     catch (err) {
       const response = err.response?.data;
-      if (['VENUE_CONFLICT', 'VENUE_UNAVAILABLE'].includes(response?.code)) {
+      if (response?.code === 'VENUE_HELD') {
+        setReviewed(false);
+        setError('Another signed contract currently protects these dates. Your request is saved. Ask your coordinator about another venue or date.');
+        setRefresh(value => value + 1);
+      } else if (['VENUE_CONFLICT', 'VENUE_UNAVAILABLE'].includes(response?.code)) {
         setReviewed(false);
         setError('The venue could not be booked. The receipt is still on file. Review availability and contact the client before trying again.');
         setRefresh(value => value + 1);
