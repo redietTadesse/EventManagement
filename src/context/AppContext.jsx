@@ -62,21 +62,33 @@ export const AppProvider = ({ children }) => {
 
   // ===== AUTH =====
 
-  const login = async (username, password) => {
+   const login = async (username, password) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'CLEAR_ERROR' });
     try {
       const res = await authApi.post('/auth/login', { username, password });
-      const { accessToken, role } = res.data;
-      localStorage.setItem('token', accessToken);
+
+      // Backend returns JwtResponse { accessToken, tokenType, role }
+      const { accessToken, token, jwt, role } = res.data || {};
+      const tokenValue = accessToken || token || jwt;
+
+      if (!tokenValue) {
+        throw new Error('Login failed: no token returned by server');
+      }
+
+      localStorage.setItem('token', tokenValue);
 
       const me = await api.get('/users/me');
-      const user = { ...me.data, role: role || me.data.role };
+      const user = { ...me.data, role: role || me.data?.role };
+
       dispatch({ type: 'LOGIN', payload: user });
       return user;
     } catch (err) {
       const raw = err.response?.data;
-      const msg = (raw && typeof raw === 'object') ? (raw.message || 'Login failed') : raw;
+      const msg =
+        raw && typeof raw === 'object'
+          ? raw.message || 'Login failed'
+          : raw || err.message || 'Login failed';
       dispatch({ type: 'SET_ERROR', payload: typeof msg === 'string' ? msg : 'Login failed' });
       throw err;
     } finally {

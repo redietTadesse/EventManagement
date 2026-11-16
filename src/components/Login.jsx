@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { ROLE_DASHBOARDS } from '../utils/roles';
-import { BuildingOfficeIcon, UserGroupIcon, ClipboardDocumentListIcon, ShieldCheckIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+import {
+  BuildingOfficeIcon,
+  UserGroupIcon,
+  ClipboardDocumentListIcon,
+  ShieldCheckIcon,
+  ArrowLeftIcon,
+} from '@heroicons/react/24/outline';
 
 const PORTAL_LABELS = {
   client: { label: 'Client', icon: BuildingOfficeIcon, color: 'from-indigo-500 to-indigo-600' },
@@ -71,6 +77,18 @@ export default function Login() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const switchToSignup = () => {
+    setMode('signup');
+    setError('');
+    setNotice('');
+  };
+
+  const switchToSignin = () => {
+    setMode('signin');
+    setError('');
+    setNotice('');
   };
 
   const inputClass =
@@ -191,7 +209,7 @@ export default function Login() {
                   New client?{' '}
                   <button
                     type="button"
-                    onClick={() => { setMode('signup'); setError(''); }}
+                    onClick={switchToSignup}
                     className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
                   >
                     Create an account
@@ -279,7 +297,7 @@ export default function Login() {
                 Already have an account?{' '}
                 <button
                   type="button"
-                  onClick={() => { setMode('signin'); setError(''); }}
+                  onClick={switchToSignin}
                   className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
                 >
                   Sign in

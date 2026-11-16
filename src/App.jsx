@@ -41,6 +41,7 @@ import AdminVenues from './admin/Venues';
 function AppRoutes() {
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={<PortalSelect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/login/:portal?" element={<Login />} />
@@ -84,6 +85,7 @@ function AppRoutes() {
         <Route path="/admin/venues" element={<AdminVenues />} />
       </Route>
 
+      {/* Fallback */}
       <Route path="*" element={<RootRedirect />} />
     </Routes>
   );

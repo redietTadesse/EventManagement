@@ -6,6 +6,8 @@ import EventTimeline from '../components/EventTimeline';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 
+
+
 export default function ClientInquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -73,6 +75,8 @@ export default function ClientInquiryDetail() {
       </Layout>
     );
   }
+
+  
 
   const proposal = inquiry.proposal;
   const canRespond = inquiry.status === 'PROPOSAL_SENT' && proposal;

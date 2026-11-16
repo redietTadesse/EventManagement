@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
 import useApiResource from '../hooks/useApiResource';
 
 const FILTERS = ['ALL', 'EVENT_CREATED', 'AWAITING_VENDORS', 'NEEDS_COORDINATOR', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'CLOSED'];

@@ -1,5 +1,6 @@
+
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -7,15 +8,24 @@ import api from '../api/axios';
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
   const { currentUser, loading } = state;
+
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const selectedVenue = location.state?.selectedVenue;
+  const today = new Date().toISOString().split('T')[0];
+
   const [form, setForm] = useState({
     eventType: 'conference',
-    eventDate: '',
-    endDate: '',
-    expectedAttendees: '',
-    requirements: '',
+    eventDate: location.state?.eventDate || '',
+    endDate: location.state?.endDate || '',
+    expectedAttendees: location.state?.expectedAttendees || '',
+    requirements: selectedVenue
+      ? `Requested venue: ${selectedVenue.name || selectedVenue.venueName}`
+      : '',
     requestedCategories: [],
   });
+
   const [availableCategories, setAvailableCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -24,50 +34,81 @@ export default function NewInquiry() {
   useEffect(() => {
     let active = true;
     const eventType = form.eventType;
-    api.get('/vendors/service-categories', { params: { eventType } })
+
+    api.get('/vendors/service-categories', {
+      params: { eventType },
+    })
       .then((response) => {
         if (!active) return;
+
         const categories = response.data || [];
         setAvailableCategories(categories);
+
         if (!touchedCategories) {
-          setForm((previous) => previous.eventType === eventType
-            ? { ...previous, requestedCategories: categories }
-            : previous);
+          setForm((previous) =>
+            previous.eventType === eventType
+              ? { ...previous, requestedCategories: categories }
+              : previous
+          );
         }
       })
-      .catch(() => { if (active) setError('Could not load available event services.'); });
-    return () => { active = false; };
+      .catch(() => {
+        if (active) {
+          setError('Could not load available event services.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [form.eventType, touchedCategories]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     if (name === 'eventType') {
       setTouchedCategories(false);
-      setForm((prev) => ({
-        ...prev,
+      setForm((previous) => ({
+        ...previous,
         eventType: value,
       }));
       return;
     }
 
-    setForm({ ...form, [name]: value });
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   };
 
   const toggleCategory = (category) => {
     setTouchedCategories(true);
-    setForm((prev) => {
-      const existing = prev.requestedCategories || [];
+
+    setForm((previous) => {
+      const existing = previous.requestedCategories || [];
+
       const next = existing.includes(category)
         ? existing.filter((item) => item !== category)
         : [...existing, category];
-      return { ...prev, requestedCategories: next };
+
+      return {
+        ...previous,
+        requestedCategories: next,
+      };
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
     setError('');
+
+    if (form.endDate && form.endDate < form.eventDate) {
+      setError('The end date cannot be earlier than the start date.');
+      return;
+    }
+
+    setSubmitting(true);
+
     try {
       await createInquiry({
         clientId: currentUser?.id,
@@ -76,9 +117,12 @@ export default function NewInquiry() {
         requestedCategories: form.requestedCategories,
         expectedAttendees: Number(form.expectedAttendees),
       });
+
       navigate('/client/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit');
+      setError(
+        err.response?.data?.message || 'Failed to submit inquiry.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -95,11 +139,37 @@ export default function NewInquiry() {
   return (
     <Layout title="New Inquiry">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">New Inquiry</h1>
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">
+          New Inquiry
+        </h1>
+
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-xl shadow p-6"
+        >
           {error && (
             <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">
               {error}
+            </div>
+          )}
+
+          {selectedVenue && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4">
+              <h3 className="font-semibold text-indigo-800">
+                Selected Venue
+              </h3>
+
+              <p className="text-indigo-700 mt-1">
+                {selectedVenue.name || selectedVenue.venueName}
+              </p>
+
+              <p className="text-sm text-indigo-600">
+                Capacity: {selectedVenue.capacity} people
+              </p>
+
+              <p className="text-sm text-indigo-600">
+                Location: {selectedVenue.location || 'Not specified'}
+              </p>
             </div>
           )}
 
@@ -107,6 +177,7 @@ export default function NewInquiry() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Event Type
             </label>
+
             <select
               name="eventType"
               value={form.eventType}
@@ -126,11 +197,13 @@ export default function NewInquiry() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Event Start Date
             </label>
+
             <input
               type="date"
               name="eventDate"
               value={form.eventDate}
               onChange={handleChange}
+              min={today}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               required
             />
@@ -138,13 +211,15 @@ export default function NewInquiry() {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event End Date (Optional - for multi-day events)
+              Event End Date (Optional)
             </label>
+
             <input
               type="date"
               name="endDate"
-              value={form.endDate || ''}
+              value={form.endDate}
               onChange={handleChange}
+              min={form.eventDate || today}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             />
           </div>
@@ -153,6 +228,7 @@ export default function NewInquiry() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Expected Attendees
             </label>
+
             <input
               type="number"
               name="expectedAttendees"
@@ -166,11 +242,15 @@ export default function NewInquiry() {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Services needed
+              Services Needed
             </label>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {availableCategories.map((cat) => (
-                <label key={cat} className="flex items-center gap-2 text-sm text-gray-700">
+                <label
+                  key={cat}
+                  className="flex items-center gap-2 text-sm text-gray-700"
+                >
                   <input
                     type="checkbox"
                     checked={(form.requestedCategories || []).includes(cat)}
@@ -180,6 +260,7 @@ export default function NewInquiry() {
                 </label>
               ))}
             </div>
+
             <p className="text-xs text-gray-500 mt-1">
               Pre-selected based on the event type. Uncheck anything you do not need.
             </p>
@@ -189,6 +270,7 @@ export default function NewInquiry() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Requirements
             </label>
+
             <textarea
               name="requirements"
               rows="3"
