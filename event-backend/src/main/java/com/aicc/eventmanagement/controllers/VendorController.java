@@ -45,6 +45,37 @@ public class VendorController {
     private final ConflictResolutionService conflictService;
     private final UserRepository userRepository;
 
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Vendor> createVendor(
+            @Valid @RequestBody com.aicc.eventmanagement.payload.CreateVendorRequest request) {
+        return ResponseEntity.status(201).body(vendorService.createVendor(request));
+    }
+
+    @PostMapping("/apply")
+    @Operation(summary = "Submit a vendor application for administrator review")
+    public ResponseEntity<java.util.Map<String, Object>> apply(
+            @Valid @RequestBody com.aicc.eventmanagement.payload.VendorApplyRequest request) {
+        Vendor vendor = vendorService.applyForOnboarding(request);
+        User user = userRepository.findById(vendor.getUserId()).orElseThrow();
+        return ResponseEntity.status(201).body(java.util.Map.of(
+                "id", vendor.getId(), "username", user.getUsername(),
+                "message", "Application received. AICC will review your details before activating your account."));
+    }
+
+    @PatchMapping("/{id}/toggle-active")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Vendor> toggleActive(@PathVariable Long id) {
+        return ResponseEntity.ok(vendorService.toggleActive(id));
+    }
+
+    @GetMapping("/{id}/performance")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    public ResponseEntity<com.aicc.eventmanagement.payload.VendorPerformanceResponse> performance(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(vendorService.getVendorPerformance(id));
+    }
+
     @GetMapping("/service-categories")
     @Operation(summary = "Get canonical vendor service categories")
     public ResponseEntity<List<String>> getServiceCategories(
