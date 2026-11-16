@@ -95,23 +95,12 @@ export const AppProvider = ({ children }) => {
 
   // ===== USERS / VENDORS =====
 
-  const fetchUsers = useCallback(async () => {
-    const res = await api.get('/users');
-    dispatch({ type: 'SET_USERS', payload: res.data });
-    return res.data;
-  }, []);
-
   const fetchVendors = useCallback(async () => {
     const res = await api.get('/vendors');
     const vendors = res.data.map(normalizeVendor);
     dispatch({ type: 'SET_VENDORS', payload: vendors });
     return vendors;
   }, []);
-
-  const toggleUserStatus = useCallback(async (userId) => {
-    await api.patch(`/users/${userId}/toggle-active`);
-    await fetchUsers();
-  }, [fetchUsers]);
 
   const createVendor = useCallback(async (vendorData) => {
     const res = await api.post('/vendors', vendorData);
@@ -482,7 +471,7 @@ export const AppProvider = ({ children }) => {
     state,
     dispatch,
     login, registerClient, logout,
-    fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus, fetchMyVendorProfile,
+    fetchVendors, createVendor, toggleVendorStatus, fetchMyVendorProfile,
     fetchInquiries, fetchMyInquiries, fetchInquiryById, downloadInquiryQuote, createInquiry, updateInquiry,
     sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion,
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, manuallyAssignForEvent, fetchOpenAssignments,
