@@ -22,3 +22,11 @@ test('the earliest inquiry date rolls over to the next local day', () => {
   assert.equal(tomorrowDateKey(new Date(2027, 11, 31, 23, 45)), '2028-01-01');
   assert.equal(readEventPlan(new URLSearchParams('date=2027-12-31'), '2028-01-01').date, '');
 });
+
+
+test('an exhibition venue preference carries dates, seating and attendance into the inquiry URL', () => {
+  const params = new URLSearchParams({ eventType: 'exhibition', date: '2028-03-05', endDate: '2028-03-07', attendees: '350', tableSetup: 'CLASSROOM', preferredVenue: 'Multipurpose I' });
+  const restored = new URLSearchParams(params.toString());
+  assert.deepEqual(readEventPlan(restored, '2028-02-01'), { eventType: 'exhibition', date: '2028-03-05', endDate: '2028-03-07', attendees: '350', tableSetup: 'CLASSROOM' });
+  assert.equal(restored.get('preferredVenue'), 'Multipurpose I');
+});
