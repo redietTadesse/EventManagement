@@ -3,6 +3,7 @@ import { ArrowRightIcon, BuildingOffice2Icon, MapPinIcon, UserGroupIcon } from '
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import EventPlanForm from '../components/EventPlanForm';
+import { VenueAvailabilityReasons } from '../components/VenueAvailabilityReasons';
 import useApiResource from '../hooks/useApiResource';
 import { formatDate } from '../utils/helpers';
 import { readEventPlan } from '../utils/eventPlan';
@@ -10,6 +11,7 @@ function seats(venue,setup){if(!setup||setup==='UNDECIDED')return venue.capacity
 
 function VenueResults({ query, plan }) {
   const resource = useApiResource(plan.date ? `/venues/available?${query}` : '/venues');
+  const reasons = useApiResource(plan.date ? `/venues/availability/reasons?${query}` : null);
   const venues = resource.data.filter(venue => venue.active &&
     (plan.date || !plan.attendees || (seats(venue,plan.tableSetup)!=null&&seats(venue,plan.tableSetup)>=Number(plan.attendees))))
     .sort((first, second) => (first.capacity ?? Infinity) - (second.capacity ?? Infinity) || first.name.localeCompare(second.name));
@@ -20,6 +22,11 @@ function VenueResults({ query, plan }) {
   </div>;
 
   return <section aria-labelledby="venue-results-title" className="space-y-4">
+    {plan.date && <>
+      {reasons.loading ? <p role="status" className="text-sm text-slate-600">Checking availability explanations…</p>
+        : reasons.error ? <p role="alert" className="surface p-4 text-sm text-amber-900">Availability explanations could not be loaded. <button type="button" onClick={reasons.reload} className="font-semibold underline">Retry</button></p>
+          : <VenueAvailabilityReasons venues={reasons.data} />}
+    </>}
     <div>
       <h2 id="venue-results-title" className="text-xl font-semibold">
         {plan.date ? 'Available venues' : 'Active venues'} <span className="text-sm text-slate-500">({venues.length})</span>
@@ -49,8 +56,9 @@ function VenueResults({ query, plan }) {
         </div>
       </li>)}
     </ul> : <p className="surface p-6 text-sm text-slate-600">
-      {plan.date ? 'No active venue matches these dates and attendance. Try a different date or adjust your guest count.'
+      {plan.date ? 'No active venue matches this selection. Keep your requirements and ask AICC about alternatives.'
         : 'No active venues match this search. Try adjusting your guest count.'}
+      <Link to={'/client/new-inquiry?' + query} className="mt-3 block font-semibold text-indigo-700 underline">Keep these requirements and ask AICC for alternatives</Link>
     </p>}
   </section>;
 }
@@ -67,7 +75,7 @@ export default function ClientVenues() {
         subtitle="Compare active spaces by capacity and check which venues can accommodate your dates and event type."
         action={<Link className="btn-primary" to={`/client/new-inquiry?${query}`}>Continue to inquiry <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>} />
       <EventPlanForm key={query} plan={plan} dateRequired onSearch={setParams}
-        className="surface grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto] xl:items-end">
+        className="surface grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3 xl:items-end">
         <button className="btn-primary" type="submit">Check availability</button>
       </EventPlanForm>
       <p className="text-sm text-slate-600">Availability can change until a coordinator verifies payment and reserves the venue. Choosing a space adds it as a preference in your inquiry.</p>

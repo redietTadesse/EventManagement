@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
 import useApiResource from '../hooks/useApiResource';
 import { eventPage } from '../utils/eventPages';
 import EventPageControls from '../components/EventPageControls';
