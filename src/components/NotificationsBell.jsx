@@ -1,105 +1,91 @@
-import React from 'react';
-import { Popover, Transition } from '@headlessui/react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Popover } from '@headlessui/react';
+import { ArrowUpRightIcon, BellIcon } from '@heroicons/react/24/outline';
 import { useApp } from '../context/AppContext';
-import { BellIcon, CheckIcon } from '@heroicons/react/24/outline';
-import InlineNotification from './InlineNotification';
+import api from '../api/axios';
 
-const NotificationsBell = () => {
-  const { state, markAllNotificationsRead } = useApp();
-  const { currentUser, notifications } = state;
-  const myNotifications = notifications.filter(n => n.userId === currentUser?.id);
-  const unreadCount = myNotifications.filter(n => !n.isRead).length;
+export default function NotificationsBell() {
+  const { state: { currentUser } } = useApp();
+  const userId = currentUser?.id;
+  const [inbox, setInbox] = useState(null);
+  const [error, setError] = useState('');
+  const [marking, setMarking] = useState(false);
 
-  const markAllRead = () => {
-    if (currentUser) {
-      markAllNotificationsRead();
+  const load = useCallback(async (signal) => {
+    try {
+      const { data } = await api.get('/notifications', { signal });
+      if (!signal?.aborted) {
+        setInbox({ ...data, userId });
+        setError('');
+      }
+    } catch {
+      if (!signal?.aborted) setError('Could not load notifications. Try again.');
     }
-  };
+  }, [userId]);
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'ASSIGNMENT':
-        return '📋';
-      case 'PROPOSAL':
-        return '📄';
-      case 'EVENT':
-        return '📅';
-      case 'SYSTEM':
-        return '⚙️';
-      default:
-        return '🔔';
+  useEffect(() => {
+    if (!userId) return;
+    const controller = new AbortController();
+    const refresh = () => { if (document.visibilityState === 'visible') load(controller.signal); };
+    refresh();
+    const timer = window.setInterval(refresh, 20000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [userId, load]);
+
+  const data = inbox?.userId === userId ? inbox : null;
+  const unread = data?.unreadCount ?? 0;
+  async function markRead(id) {
+    setMarking(true);
+    try {
+      await api.patch(id == null ? '/notifications/read-all' : `/notifications/${id}/read`);
+      await load();
+    } catch {
+      setError('Could not mark the notification as read.');
+    } finally {
+      setMarking(false);
     }
-  };
+  }
 
-  return (
-    <Popover className="relative">
-      {({ open }) => (
-        <>
-          <Popover.Button aria-label="Notifications" className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors">
-            <BellIcon className="w-6 h-6" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white animate-pulse">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </Popover.Button>
-          <Transition
-            as={React.Fragment}
-            enter="transition ease-out duration-150"
-            enterFrom="opacity-0 scale-95"
-            enterTo="opacity-100 scale-100"
-            leave="transition ease-in duration-100"
-            leaveFrom="opacity-100 scale-100"
-            leaveTo="opacity-0 scale-95"
-          >
-            <Popover.Panel className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200/80 overflow-hidden z-50">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-50 to-white">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-800">Notifications</h3>
-                  {unreadCount > 0 && (
-                    <span className="bg-rose-100 text-rose-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {unreadCount} new
-                    </span>
-                  )}
-                </div>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllRead}
-                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium transition-colors"
-                  >
-                    <CheckIcon className="w-3 h-3" />
-                    Mark all read
-                  </button>
-                )}
+  return <Popover className="relative">
+    {({ close }) => <>
+      <Popover.Button aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
+        className="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100">
+        <BellIcon className="h-6 w-6" aria-hidden="true" />
+        {unread > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-rose-700 px-1 text-[10px] font-semibold text-white">{unread > 9 ? '9+' : unread}</span>}
+      </Popover.Button>
+      <Popover.Panel className="absolute right-0 z-50 mt-2 w-[min(23rem,calc(100vw-5rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <h2 className="font-semibold text-slate-900">Notifications</h2>
+          {unread > 0 && <button type="button" disabled={marking} onClick={() => markRead()} className="text-xs font-medium text-indigo-700 underline">Mark all as read</button>}
+        </div>
+        {error && <p role="alert" className="px-4 py-3 text-sm text-rose-700">{error}{' '}
+          <button type="button" className="underline" onClick={() => load()}>Retry</button></p>}
+        {!data && !error && <p role="status" className="px-4 py-6 text-sm text-slate-600">Loading notifications…</p>}
+        {data?.items.length === 0 && <p className="px-4 py-6 text-sm text-slate-600">No notifications yet.</p>}
+        {data?.items.length > 0 && <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+          {data.items.map(item => <li key={item.id} className={`px-4 py-3 ${item.read ? '' : 'bg-indigo-50/60'}`}>
+            <div className="flex items-start gap-2">
+              {!item.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-indigo-600" aria-label="Unread" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">{item.message}</p>
+                {item.path && <Link to={item.path} onClick={() => {
+                  if (!item.read) markRead(item.id);
+                  close();
+                }} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-700 hover:underline">
+                  View details <ArrowUpRightIcon className="h-3 w-3" aria-hidden="true" />
+                </Link>}
               </div>
-              <div className="max-h-96 overflow-y-auto">
-                {myNotifications.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <div className="text-4xl mb-3">🔔</div>
-                    <p className="text-sm text-slate-500">No notifications yet</p>
-                    <p className="text-xs text-slate-400 mt-1">We'll notify you when something happens</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {myNotifications.slice(0, 8).map(n => (
-                      <InlineNotification key={n.id} notification={n} />
-                    ))}
-                  </div>
-                )}
-              </div>
-              {myNotifications.length > 8 && (
-                <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-                  <button className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                    View all notifications →
-                  </button>
-                </div>
-              )}
-            </Popover.Panel>
-          </Transition>
-        </>
-      )}
-    </Popover>
-  );
-};
-
-export default NotificationsBell;
+            </div>
+          </li>)}
+        </ul>}
+      </Popover.Panel>
+    </>}
+  </Popover>;
+}

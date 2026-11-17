@@ -18,12 +18,18 @@ import java.util.Map;
 public class InquiryResponse {
     private Long id;
     private Long clientId;
+    private CoordinatorAssignmentPayload.Person coordinator;
     private String clientName;
     private String eventType;
     private LocalDate eventDate;
     private LocalDate endDate;
     private Integer expectedAttendees;
     private String requirements;
+    private String tableSetup;
+    private String eventName;
+    private String unmetNeeds;
+    private String experience;
+    private int proposalVersion;
     private List<String> requestedCategories;
     private List<String> categories;
     private EventStatus status;
@@ -39,12 +45,18 @@ public class InquiryResponse {
         InquiryResponse response = new InquiryResponse();
         response.setId(inquiry.getId());
         response.setClientId(inquiry.getClientId());
+        response.setCoordinator(CoordinatorAssignmentPayload.Person.from(inquiry.getCoordinator()));
         response.setClientName(inquiry.getClientName());
         response.setEventType(inquiry.getEventType());
         response.setEventDate(inquiry.getEventDate());
         response.setEndDate(inquiry.getEndDate());
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
+        response.setTableSetup(inquiry.getTableSetup());
+        response.setEventName(inquiry.getEventName());
+        response.setUnmetNeeds(inquiry.getUnmetNeeds());
+        response.setExperience(inquiry.getExperience());
+        response.setProposalVersion(inquiry.getProposalVersion());
         response.setRequestedCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getRequestedCategories()));
         response.setCategories(com.aicc.eventmanagement.util.CategoryUtils.split(inquiry.getCategories()));
         response.setStatus(inquiry.getStatus());
@@ -81,6 +93,9 @@ public class InquiryResponse {
 
     private static ProposalResponse parseProposal(String proposalJson) throws JsonProcessingException {
         Map<String, Object> proposalMap = objectMapper.readValue(proposalJson, new TypeReference<>() {});
+        if (proposalMap == null) {
+            return null;
+        }
 
         ProposalResponse proposal = new ProposalResponse();
         proposal.setVenue((String) proposalMap.get("venue"));

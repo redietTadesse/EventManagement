@@ -16,16 +16,23 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SendProposalRequest {
+    @jakarta.validation.constraints.Size(max=200) private String eventName;
+    @jakarta.validation.constraints.Future private java.time.LocalDate eventDate;
+    private java.time.LocalDate endDate;
+    @Min(1) private Integer expectedAttendees;
+    @jakarta.validation.constraints.Pattern(regexp="THEATRE|CLASSROOM|BANQUET|CABARET|BOARDROOM|U_SHAPE|UNDECIDED")
+    private String tableSetup;
 
     @NotBlank(message = "Venue is required")
     private String venue;
 
+    @NotNull(message = "Select a venue from the availability list")
     private Long venueId;
 
     private String venueDetails;
 
     @NotNull(message = "Price is required")
-    @Min(value = 0, message = "Price must be positive")
+    @Min(value = 1, message = "Price must be positive")
     private Integer price;
 
     @NotBlank(message = "Terms and conditions are required")

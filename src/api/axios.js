@@ -11,28 +11,18 @@ const AUTH_ROOT =
 
 const api = axios.create({
   baseURL: API_ROOT,
-  timeout: 60000,
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const authApi = axios.create({
   baseURL: AUTH_ROOT,
-  timeout: 60000,
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 // Bearer token on every request that has one.
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token && token !== 'undefined' && token !== 'null') {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-authApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token && token !== 'undefined' && token !== 'null') {

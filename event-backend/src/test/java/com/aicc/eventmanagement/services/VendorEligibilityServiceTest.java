@@ -70,6 +70,20 @@ class VendorEligibilityServiceTest {
     }
 
     @Test
+    void categoryOnlyBrowsingIncludesAvailableCaterers() {
+        Vendor vendor = vendor("catering", eventDate.plusDays(1));
+
+        assertThat(eligibilityService.evaluate(vendor, "catering", eventDate,
+                null, null, Set.of()).eligible()).isTrue();
+        assertThat(eligibilityService.evaluate(vendor, "catering", eventDate,
+                8L, null, Set.of()).code()).isEqualTo("INTERNAL_CATERING");
+
+        when(bookedDateRepository.existsByVendorIdAndBookedDate(1L, eventDate)).thenReturn(true);
+        assertThat(eligibilityService.evaluate(vendor, "catering", eventDate,
+                null, null, Set.of()).code()).isEqualTo("VENDOR_UNAVAILABLE");
+    }
+
+    @Test
     void rejectsInactiveVendorsAndCategoryMismatchesBeforeCheckingAvailability() {
         Vendor inactive = Vendor.builder().id(1L).companyName("Inactive").serviceCategory("av")
                 .isActive(false).insuranceExpiryDate(eventDate.plusDays(1)).build();

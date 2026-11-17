@@ -1,56 +1,68 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { StarIcon } from '@heroicons/react/24/solid';
 import { useApp } from '../context/AppContext';
-import RatingStars from './RatingStars';
+import { snakeToTitleCase } from '../utils/helpers';
 
-const VendorRatingForm = ({ vendor, assignmentId }) => {
+export default function VendorRatingForm({ assignment, onSaved }) {
   const { rateAssignment } = useApp();
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [rating, setRating] = useState(assignment.vendorRating || 0);
+  const [comment, setComment] = useState(assignment.vendorRatingComment || '');
+  const [editing, setEditing] = useState(!assignment.vendorRating);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
-  const handleSubmit = async () => {
-    if (rating === 0) {
-      alert('Please select a rating');
-      return;
+  async function submit(event) {
+    event.preventDefault();
+    if (saving || !rating) return;
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      onSaved(await rateAssignment(assignment.id, rating, comment.trim()));
+      setEditing(false);
+      setSaved(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not save your review. Try again.');
+    } finally {
+      setSaving(false);
     }
-    await rateAssignment(assignmentId, rating, comment);
-    setSubmitted(true);
-  };
-
-  if (submitted) {
-    return (
-      <div className="p-3 bg-green/10 border border-green/20 rounded-lg">
-        <p className="text-sm text-green-800">Thanks for rating {vendor.companyName}!</p>
-      </div>
-    );
   }
 
-  return (
-    <div className="border rounded-lg p-3 bg-white">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-full bg-ice flex items-center justify-center text-navy font-bold">
-          {vendor.companyName.charAt(0)}
-        </div>
-        <div>
-          <p className="font-medium text-slate-800">{vendor.companyName}</p>
-          <p className="text-xs text-slate-500">{vendor.serviceCategory.replace('_', ' ')}</p>
-        </div>
-      </div>
-      <div className="mt-2">
-        <RatingStars rating={rating} onRate={setRating} />
-      </div>
-      <textarea
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        placeholder="Optional comment..."
-        rows={2}
-        className="w-full mt-2 rounded-lg border-slate-300 text-sm"
-      />
-      <button onClick={handleSubmit} className="btn-primary w-full mt-2 text-sm">
-        Submit Rating
-      </button>
+  return <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div><h3 className="font-semibold text-slate-900">{assignment.vendorName}</h3>
+        <p className="mt-1 text-xs text-slate-600">{snakeToTitleCase(assignment.serviceCategory)} · Completed service</p></div>
+      {!editing && <button type="button" className="text-sm font-medium text-indigo-700 hover:underline"
+        onClick={() => { setSaved(false); setEditing(true); }}>Edit review</button>}
     </div>
-  );
-};
-
-export default VendorRatingForm;
+    {!editing ? <div className="mt-3 text-sm">
+      <p className="inline-flex items-center gap-1 font-semibold text-amber-800"><StarIcon className="h-4 w-4" aria-hidden="true" />{assignment.vendorRating} out of 5</p>
+      {assignment.vendorRatingComment && <p className="mt-2 whitespace-pre-wrap text-slate-700">{assignment.vendorRatingComment}</p>}
+    </div> : <form className="mt-4 space-y-3" onSubmit={submit}>
+      <fieldset disabled={saving}>
+        <legend className="text-sm font-medium text-slate-700">Rating out of 5</legend>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {[1, 2, 3, 4, 5].map(value => <label key={value} className="cursor-pointer">
+            <input className="peer sr-only" name={`rating-${assignment.id}`} type="radio" required
+              value={value} checked={rating === value} onChange={() => setRating(value)} />
+            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-600">
+              <StarIcon className="h-4 w-4 text-amber-500" aria-hidden="true" />{value}<span className="sr-only"> out of 5</span>
+            </span>
+          </label>)}
+        </div>
+      </fieldset>
+      <label className="block text-sm font-medium">Comment <span className="font-normal text-slate-500">(optional)</span>
+        <textarea value={comment} onChange={event => setComment(event.target.value)} disabled={saving}
+          rows={2} className="mt-1 block w-full rounded-lg border border-slate-300" />
+      </label>
+      {error && <p role="alert" className="text-sm text-rose-800">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button className="btn-primary" disabled={saving || !rating}>{saving ? 'Saving…' : 'Save review'}</button>
+        {assignment.vendorRating && <button type="button" className="btn-outline" disabled={saving}
+          onClick={() => { setRating(assignment.vendorRating); setComment(assignment.vendorRatingComment || ''); setError(''); setEditing(false); }}>Cancel</button>}
+      </div>
+    </form>}
+    {saved && <p role="status" className="mt-2 text-sm text-emerald-800">Review saved.</p>}
+  </article>;
+}

@@ -16,6 +16,7 @@ public class VenueResponse {
     private String description;
     private String resources;
     private Integer capacity;
+    private String layoutCapacities;
     private String location;
     private BigDecimal hourlyRate;
     private boolean active;
@@ -31,6 +32,7 @@ public class VenueResponse {
                 .description(venue.getDescription())
                 .resources(venue.getResources())
                 .capacity(venue.getCapacity())
+                .layoutCapacities(venue.getLayoutCapacities())
                 .location(venue.getLocation())
                 .hourlyRate(venue.getHourlyRate())
                 .active(venue.isActive())

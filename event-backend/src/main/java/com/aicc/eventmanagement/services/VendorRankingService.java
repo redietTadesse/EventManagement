@@ -1,7 +1,9 @@
+
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.SelectionReason;
+import com.aicc.eventmanagement.repositories.PostEventReportRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
 import com.aicc.eventmanagement.util.CategoryUtils;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -29,41 +32,65 @@ public class VendorRankingService {
     private final VendorRepository vendorRepository;
     private final VendorAssignmentRepository assignmentRepository;
     private final VendorRatingService ratingService;
+    private final PostEventReportRepository reportRepository;
     private final VendorEligibilityService eligibilityService;
 
     private static final double W_RATING = 0.50;
     private static final double W_LOAD = 0.40;
     private static final double W_ROTATION = 0.10;
 
-    /**
-     * Quality, current workload, and assignment rotation contribute 50%, 40%, and
-     * 10% respectively. Each component is normalized to [0, 1], so the total score
-     * also stays in [0, 1].
-     */
     private static final double W_TOTAL = W_RATING + W_LOAD + W_ROTATION;
 
     private static final int LOAD_CAP = 10;
     private static final double RATING_SCALE = 5.0;
 
-    /**
-     * Weighted score contributions and their normalized component scores. Keeping
-     * the component values here lets the API explain the same ranking it returns.
-     */
-    public record Ranked(Vendor vendor, double score, double ratingTerm, double loadTerm, double rotationTerm) {
-        public double qualityScore() { return ratingTerm / W_RATING; }
-        public double workloadScore() { return loadTerm / W_LOAD; }
-        public double rotationScore() { return rotationTerm / W_ROTATION; }
-        public double rating() { return qualityScore() * RATING_SCALE; }
+    public record Ranked(
+            Vendor vendor,
+            double score,
+            double ratingTerm,
+            double loadTerm,
+            double rotationTerm) {
+
+        public double qualityScore() {
+            return ratingTerm / W_RATING;
+        }
+
+        public double workloadScore() {
+            return loadTerm / W_LOAD;
+        }
+
+        public double rotationScore() {
+            return rotationTerm / W_ROTATION;
+        }
+
+        public double rating() {
+            return qualityScore() * RATING_SCALE;
+        }
     }
 
-    public record ExcludedCandidate(Long vendorId, String vendorName, String reason) { }
+    public record ExcludedCandidate(
+            Long vendorId,
+            String vendorName,
+            String reason) {
+    }
 
-    public record DecisionPreview(List<Ranked> eligible, List<ExcludedCandidate> excluded) { }
+    public record DecisionPreview(
+            List<Ranked> eligible,
+            List<ExcludedCandidate> excluded) {
+    }
 
     /** The winning candidate plus the decision snapshot captured at selection time. */
-    public record Selection(Vendor vendor, double score, SelectionReason reason, String reasoning) {}
+    public record Selection(
+            Vendor vendor,
+            double score,
+            SelectionReason reason,
+            String reasoning) {
+    }
 
-    private record RankResult(List<Ranked> ranked, List<Map<String, Object>> excluded) {}
+    private record RankResult(
+            List<Ranked> ranked,
+            List<Map<String, Object>> excluded) {
+    }
 
     private static final ObjectMapper SNAPSHOT_MAPPER = new ObjectMapper();
 
@@ -75,34 +102,61 @@ public class VendorRankingService {
         return rank(category, date, alreadyTried, null);
     }
 
-    public List<Ranked> rank(String category, LocalDate date,
-                             Set<Long> alreadyTried, String eventType) {
+    public List<Ranked> rank(
+            String category,
+            LocalDate date,
+            Set<Long> alreadyTried,
+            String eventType) {
 
         return evaluate(category, date, alreadyTried, null, eventType).ranked();
     }
 
-    private RankResult evaluate(String category, LocalDate date, Set<Long> alreadyTried,
-                                Long eventId, String eventType) {
+    private RankResult evaluate(
+            String category,
+            LocalDate date,
+            Set<Long> alreadyTried,
+            Long eventId,
+            String eventType) {
 
         if (alreadyTried == null) {
             alreadyTried = Set.of();
         }
 
         final Set<Long> excluded = alreadyTried;
+
         List<String> categoryVariants = CategoryUtils.categoryVariants(category);
-        if (categoryVariants.isEmpty()) return new RankResult(List.of(), List.of());
+
+        if (categoryVariants.isEmpty()) {
+            return new RankResult(List.of(), List.of());
+        }
 
         List<Vendor> candidates = new ArrayList<>();
         List<Map<String, Object>> excludedVendors = new ArrayList<>();
+
         Set<Long> seen = new java.util.HashSet<>();
+
         for (Vendor vendor : vendorRepository.findByServiceCategoryIn(categoryVariants)) {
-            if (!seen.add(vendor.getId())) continue;
-            VendorEligibilityService.EligibilityResult result = eligibilityService.evaluate(
-                    vendor, category, date, eventId, eventType, excluded);
+
+            if (!seen.add(vendor.getId())) {
+                continue;
+            }
+
+            VendorEligibilityService.EligibilityResult result =
+                    eligibilityService.evaluate(
+                            vendor,
+                            category,
+                            date,
+                            eventId,
+                            eventType,
+                            excluded
+                    );
+
             if (result.eligible()) {
                 candidates.add(vendor);
             } else {
-                excludedVendors.add(excludedCandidate(vendor, result.reason()));
+                excludedVendors.add(
+                        excludedCandidate(vendor, result.reason())
+                );
             }
         }
 
@@ -110,40 +164,75 @@ public class VendorRankingService {
             return new RankResult(List.of(), excludedVendors);
         }
 
-        // Get workload counts for all candidates in one query.
         List<Long> ids = candidates.stream()
                 .map(Vendor::getId)
                 .toList();
 
         Map<Long, Long> loads =
-                assignmentRepository.countActiveAssignmentsByVendors(ids)
-                        .stream()
+                assignmentRepository.countActiveAssignmentsByVendors(ids).stream()
                         .collect(Collectors.toMap(
                                 row -> (Long) row[0],
                                 row -> (Long) row[1]
                         ));
 
-        Map<Long, Long> assignmentHistory = assignmentRepository.countAllAssignmentsByVendors(ids)
-                .stream()
-                .collect(Collectors.toMap(
-                        row -> (Long) row[0],
-                        row -> (Long) row[1]
-                ));
+        Map<Long, Long> assignmentHistory =
+                assignmentRepository.countAllAssignmentsByVendors(ids).stream()
+                        .collect(Collectors.toMap(
+                                row -> (Long) row[0],
+                                row -> (Long) row[1]
+                        ));
 
-        Map<Long, Double> ratings = ratingService.calculateVendorRatings(candidates);
+        Map<Long, Double> ratings =
+                ratingService.calculateVendorRatings(candidates);
 
         List<Ranked> ranked = new ArrayList<>();
 
         for (Vendor vendor : candidates) {
+
             long load = loads.getOrDefault(vendor.getId(), 0L);
-            double ratingTerm = ratingTerm(ratings.getOrDefault(vendor.getId(), 0.0));
+
+            double ratingTerm = ratingTerm(
+                    ratings.getOrDefault(vendor.getId(), 0.0)
+            );
+
+            // Deduct points for recent incidents (past 6 months).
+            long recentIncidents =
+                    reportRepository.findByVendorIdAndCreatedAtAfter(
+                            vendor.getId(),
+                            LocalDateTime.now().minusMonths(6)
+                    ).size();
+
+            double incidentPenalty = Math.min(
+                    recentIncidents * 0.05,
+                    0.20
+            );
+
+            ratingTerm = Math.max(
+                    0,
+                    ratingTerm - incidentPenalty
+            );
+
             double loadTerm = loadTerm(load);
-            double rotationTerm = rotationTerm(assignmentHistory.getOrDefault(vendor.getId(), 0L));
-            double score = (ratingTerm + loadTerm + rotationTerm) / W_TOTAL;
-            ranked.add(new Ranked(vendor, score, ratingTerm, loadTerm, rotationTerm));
+
+            double rotationTerm = rotationTerm(
+                    assignmentHistory.getOrDefault(vendor.getId(), 0L)
+            );
+
+            double score = (
+                    ratingTerm + loadTerm + rotationTerm
+            ) / W_TOTAL;
+
+            ranked.add(
+                    new Ranked(
+                            vendor,
+                            score,
+                            ratingTerm,
+                            loadTerm,
+                            rotationTerm
+                    )
+            );
         }
 
-        // Highest score first; vendor ID provides a stable tie-breaker.
         ranked.sort(
                 Comparator.comparingDouble(Ranked::score)
                         .reversed()
@@ -153,13 +242,18 @@ public class VendorRankingService {
         return new RankResult(ranked, excludedVendors);
     }
 
-    private Map<String, Object> excludedCandidate(Vendor vendor, String reason) {
+    private Map<String, Object> excludedCandidate(
+            Vendor vendor,
+            String reason) {
+
         Map<String, Object> candidate = new LinkedHashMap<>();
+
         candidate.put("vendorId", vendor.getId());
         candidate.put("vendorName", vendor.getCompanyName());
         candidate.put("score", null);
         candidate.put("status", "Unavailable");
         candidate.put("reason", reason);
+
         return candidate;
     }
 
@@ -171,94 +265,205 @@ public class VendorRankingService {
         return rankForEvent(eventId, null, category, date);
     }
 
-    public List<Ranked> rankForEvent(Long eventId, String eventType, String category, LocalDate date) {
+    public List<Ranked> rankForEvent(
+            Long eventId,
+            String eventType,
+            String category,
+            LocalDate date) {
 
         Set<Long> tried = Set.copyOf(
                 assignmentRepository.findTriedVendorIds(eventId, category)
         );
 
-        return evaluate(category, date, tried, eventId, eventType).ranked();
+        return evaluate(
+                category,
+                date,
+                tried,
+                eventId,
+                eventType
+        ).ranked();
     }
 
     /** Read-only preview using the same eligibility rules and score calculation as assignment. */
     public DecisionPreview previewForEvent(
-            Long eventId, String eventType, String category, LocalDate date) {
-        Set<Long> tried = Set.copyOf(assignmentRepository.findTriedVendorIds(eventId, category));
-        return toDecisionPreview(evaluate(category, date, tried, eventId, eventType));
+            Long eventId,
+            String eventType,
+            String category,
+            LocalDate date) {
+
+        Set<Long> tried = Set.copyOf(
+                assignmentRepository.findTriedVendorIds(eventId, category)
+        );
+
+        return toDecisionPreview(
+                evaluate(category, date, tried, eventId, eventType)
+        );
     }
 
     /** Read-only eligibility and ranking preview before an event record exists. */
-    public DecisionPreview preview(String category, LocalDate date, String eventType) {
-        return toDecisionPreview(evaluate(category, date, Set.of(), null, eventType));
+    public DecisionPreview preview(
+            String category,
+            LocalDate date,
+            String eventType) {
+
+        return toDecisionPreview(
+                evaluate(category, date, Set.of(), null, eventType)
+        );
     }
 
     private DecisionPreview toDecisionPreview(RankResult result) {
+
         List<ExcludedCandidate> excluded = result.excluded().stream()
                 .map(candidate -> new ExcludedCandidate(
                         (Long) candidate.get("vendorId"),
                         (String) candidate.get("vendorName"),
-                        (String) candidate.get("reason")))
+                        (String) candidate.get("reason")
+                ))
                 .toList();
-        return new DecisionPreview(result.ranked(), excluded);
+
+        return new DecisionPreview(
+                result.ranked(),
+                excluded
+        );
     }
 
     /**
      * Rank and return the winner together with its score and the reason it won.
-     *
-     * Callers use this instead of rank().get(0) so the score and reason are captured
-     * in the same breath as the decision, which is the only moment they are knowable.
      */
     public Optional<Selection> select(
             String category,
             LocalDate date,
             Set<Long> alreadyTried) {
 
-        return select(category, date, alreadyTried, null, null);
+        return select(
+                category,
+                date,
+                alreadyTried,
+                null,
+                null
+        );
     }
 
-    private Optional<Selection> select(String category, LocalDate date, Set<Long> alreadyTried,
-                                       Long eventId, String eventType) {
-        RankResult result = evaluate(category, date, alreadyTried, eventId, eventType);
+    private Optional<Selection> select(
+            String category,
+            LocalDate date,
+            Set<Long> alreadyTried,
+            Long eventId,
+            String eventType) {
+
+        RankResult result = evaluate(
+                category,
+                date,
+                alreadyTried,
+                eventId,
+                eventType
+        );
+
         List<Ranked> ranked = result.ranked();
 
         if (ranked.isEmpty()) {
             return Optional.empty();
         }
 
-        boolean isReassignment = alreadyTried != null && !alreadyTried.isEmpty();
+        boolean isReassignment =
+                alreadyTried != null && !alreadyTried.isEmpty();
+
         Ranked winner = ranked.get(0);
 
-        SelectionReason reason = explain(ranked, isReassignment);
-        String reasoning = buildDecisionSnapshot(category, date, ranked, result.excluded(), reason);
+        SelectionReason reason = explain(
+                ranked,
+                isReassignment
+        );
 
-        return Optional.of(new Selection(winner.vendor(), winner.score(), reason, reasoning));
+        String reasoning = buildDecisionSnapshot(
+                category,
+                date,
+                ranked,
+                result.excluded(),
+                reason
+        );
+
+        return Optional.of(
+                new Selection(
+                        winner.vendor(),
+                        winner.score(),
+                        reason,
+                        reasoning
+                )
+        );
     }
 
-    private String buildDecisionSnapshot(String category, LocalDate date, List<Ranked> ranked,
-                                         List<Map<String, Object>> excluded, SelectionReason reason) {
+    private String buildDecisionSnapshot(
+            String category,
+            LocalDate date,
+            List<Ranked> ranked,
+            List<Map<String, Object>> excluded,
+            SelectionReason reason) {
+
         Ranked winner = ranked.get(0);
+
         List<Map<String, Object>> considered = new ArrayList<>();
+
         for (int index = 0; index < ranked.size(); index++) {
+
             Ranked candidate = ranked.get(index);
+
             Map<String, Object> entry = new LinkedHashMap<>();
+
             entry.put("vendorId", candidate.vendor().getId());
             entry.put("vendorName", candidate.vendor().getCompanyName());
-            entry.put("score", Math.round(candidate.score() * 1000.0) / 10.0);
+
+            entry.put(
+                    "score",
+                    Math.round(candidate.score() * 1000.0) / 10.0
+            );
+
             entry.put("normalizedScore", candidate.score());
-            entry.put("qualityContribution", Math.round(candidate.ratingTerm() / W_TOTAL * 1000.0) / 10.0);
-            entry.put("workloadContribution", Math.round(candidate.loadTerm() / W_TOTAL * 1000.0) / 10.0);
-            entry.put("rotationContribution", Math.round(candidate.rotationTerm() / W_TOTAL * 1000.0) / 10.0);
-            entry.put("qualityScore", Math.round(candidate.qualityScore() * 1000.0) / 10.0);
-            entry.put("workloadScore", Math.round(candidate.workloadScore() * 1000.0) / 10.0);
-            entry.put("rotationScore", Math.round(candidate.rotationScore() * 1000.0) / 10.0);
+
+            entry.put(
+                    "qualityContribution",
+                    Math.round(candidate.ratingTerm() / W_TOTAL * 1000.0) / 10.0
+            );
+
+            entry.put(
+                    "workloadContribution",
+                    Math.round(candidate.loadTerm() / W_TOTAL * 1000.0) / 10.0
+            );
+
+            entry.put(
+                    "rotationContribution",
+                    Math.round(candidate.rotationTerm() / W_TOTAL * 1000.0) / 10.0
+            );
+
+            entry.put(
+                    "qualityScore",
+                    Math.round(candidate.qualityScore() * 1000.0) / 10.0
+            );
+
+            entry.put(
+                    "workloadScore",
+                    Math.round(candidate.workloadScore() * 1000.0) / 10.0
+            );
+
+            entry.put(
+                    "rotationScore",
+                    Math.round(candidate.rotationScore() * 1000.0) / 10.0
+            );
+
             entry.put("rank", index + 1);
             entry.put("status", index == 0 ? "Selected" : "Ranked");
+
             considered.add(entry);
         }
 
         Map<String, Object> snapshot = new LinkedHashMap<>();
+
         snapshot.put("category", category);
-        snapshot.put("eventDate", date == null ? null : date.toString());
+        snapshot.put(
+                "eventDate",
+                date == null ? null : date.toString()
+        );
+
         snapshot.put("selectedVendorId", winner.vendor().getId());
         snapshot.put("selectedVendorName", winner.vendor().getCompanyName());
         snapshot.put("selectionReason", reason.name());
@@ -269,7 +474,10 @@ public class VendorRankingService {
         try {
             return SNAPSHOT_MAPPER.writeValueAsString(snapshot);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Could not serialize vendor decision snapshot", e);
+            throw new IllegalStateException(
+                    "Could not serialize vendor decision snapshot",
+                    e
+            );
         }
     }
 
@@ -278,26 +486,36 @@ public class VendorRankingService {
             String category,
             LocalDate date) {
 
-        return selectForEvent(eventId, null, category, date);
+        return selectForEvent(
+                eventId,
+                null,
+                category,
+                date
+        );
     }
 
-    public Optional<Selection> selectForEvent(Long eventId, String eventType, String category, LocalDate date) {
+    public Optional<Selection> selectForEvent(
+            Long eventId,
+            String eventType,
+            String category,
+            LocalDate date) {
 
         Set<Long> tried = Set.copyOf(
                 assignmentRepository.findTriedVendorIds(eventId, category)
         );
 
-        return select(category, date, tried, eventId, eventType);
+        return select(
+                category,
+                date,
+                tried,
+                eventId,
+                eventType
+        );
     }
 
-    /**
-     * Explain the winner by comparing it to the runner-up on all three score components.
-     *
-     * Whichever component gave the winner its margin is the reason it won. This is
-     * derived from the same numbers that produced the ranking, so the stored reason
-     * and the stored score can never contradict each other.
-     */
-    SelectionReason explain(List<Ranked> ranked, boolean isReassignment) {
+    SelectionReason explain(
+            List<Ranked> ranked,
+            boolean isReassignment) {
 
         if (ranked.size() == 1) {
             return isReassignment
@@ -308,19 +526,31 @@ public class VendorRankingService {
         Ranked winner = ranked.get(0);
         Ranked runnerUp = ranked.get(1);
 
-        double ratingEdge = winner.ratingTerm() - runnerUp.ratingTerm();
-        double loadEdge = winner.loadTerm() - runnerUp.loadTerm();
-        double rotationEdge = winner.rotationTerm() - runnerUp.rotationTerm();
+        double ratingEdge =
+                winner.ratingTerm() - runnerUp.ratingTerm();
 
-        // Equal on every component: the sort fell through to the vendor-id tie-break.
-        if (ratingEdge == 0.0 && loadEdge == 0.0 && rotationEdge == 0.0) {
+        double loadEdge =
+                winner.loadTerm() - runnerUp.loadTerm();
+
+        double rotationEdge =
+                winner.rotationTerm() - runnerUp.rotationTerm();
+
+        if (ratingEdge == 0.0
+                && loadEdge == 0.0
+                && rotationEdge == 0.0) {
+
             return SelectionReason.TIE_BREAK;
         }
 
-        if (rotationEdge > ratingEdge && rotationEdge > loadEdge) {
+        if (rotationEdge > ratingEdge
+                && rotationEdge > loadEdge) {
+
             return SelectionReason.ROTATION_REFRESHED;
         }
-        return loadEdge > ratingEdge ? SelectionReason.LEAST_LOADED : SelectionReason.TOP_RATED;
+
+        return loadEdge > ratingEdge
+                ? SelectionReason.LEAST_LOADED
+                : SelectionReason.TOP_RATED;
     }
 
     private double ratingTerm(double rating) {
@@ -329,10 +559,14 @@ public class VendorRankingService {
     }
 
     private double loadTerm(long load) {
-        return W_LOAD * (1.0 - (double) Math.min(load, LOAD_CAP) / LOAD_CAP);
+        return W_LOAD * (
+                1.0 - (double) Math.min(load, LOAD_CAP) / LOAD_CAP
+        );
     }
 
     private double rotationTerm(long historicalAssignments) {
-        return W_ROTATION * (1.0 - (double) Math.min(historicalAssignments, LOAD_CAP) / LOAD_CAP);
+        return W_ROTATION * (
+                1.0 - (double) Math.min(historicalAssignments, LOAD_CAP) / LOAD_CAP
+        );
     }
 }

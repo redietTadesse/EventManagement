@@ -19,6 +19,9 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     List<Event> findByStatus(EventStatus status);
 
+    @Query("select e.status, count(e) from Event e group by e.status")
+    List<Object[]> countGroupedByStatus();
+
     @Query("""
            SELECT new com.aicc.eventmanagement.payload.DashboardUpcomingEvent(
                e.id, e.name, e.status, i.eventDate, i.clientName, e.venue, i.expectedAttendees)
@@ -95,7 +98,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
            """)
     List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date,
                                     @Param("excludedStatuses") List<EventStatus> excludedStatuses);
-
     @Query("""
            SELECT e FROM Event e
            WHERE e.venueId IS NOT NULL

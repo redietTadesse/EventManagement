@@ -27,13 +27,6 @@ public class VendorAssignment {
     @JoinColumn(name = "event_id", nullable = false)
     private Event event;
 
-    /**
-     * Nullable: an OPEN row is an offer to the whole pool and has no vendor yet.
-     *
-     * Previously this was non-null, which forced the exhaustion path to recycle the
-     * declining vendor's own row into the pool. The claim then overwrote vendor_id
-     * and that vendor's decline was lost from the history entirely.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vendor_id")
     private Vendor vendor;
@@ -51,11 +44,6 @@ public class VendorAssignment {
     @Column(nullable = false)
     private VendorAssignmentStatus status;
 
-    /**
-     * The ranking score this vendor had when it was chosen, in [0, 1].
-     * Null for attempts that bypassed ranking (client-preferred, coordinator-assigned,
-     * pool rows that nobody has claimed).
-     */
     @Column(name = "ranking_score")
     private Double rankingScore;
 
@@ -63,32 +51,23 @@ public class VendorAssignment {
     @Column(name = "selection_reason", length = 40)
     private SelectionReason selectionReason;
 
-    /** JSON snapshot of the candidates and exclusions at the time of auto-selection. */
     @Column(name = "decision_snapshot", columnDefinition = "TEXT")
     private String decisionSnapshot;
 
-    /** When this offer stops being valid. Null means it never expires. */
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
-    /**
-     * When a vendor was attached to this row. Deliberately NOT @CreationTimestamp:
-     * an OPEN row is created with no vendor and gets one later, so the two timestamps
-     * genuinely differ. createdAt below is when the row appeared.
-     */
     @Column(name = "assigned_at")
     private LocalDateTime assignedAt;
 
-    /**
-     * When the vendor actually answered. Deliberately NOT @UpdateTimestamp, which
-     * fires on every save and made this column mean "last modified" instead. Rating
-     * an assignment weeks later used to move its response time.
-     */
     @Column(name = "responded_at")
     private LocalDateTime respondedAt;
 
     @Column(columnDefinition = "TEXT")
     private String declineReason;
+
+    @Column(name = "service_order", columnDefinition = "TEXT")
+    private String serviceOrder;
 
     @Column(name = "vendor_rating")
     private Double vendorRating;

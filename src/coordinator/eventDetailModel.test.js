@@ -1,6 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildServiceRows, eventActions, nextEventAction, parseSelection, venueReservation } from './eventDetailModel.js';
+import { buildServiceRows, eventActions, latestOfferHandoff, nextEventAction, parseSelection, venueReservation } from './eventDetailModel.js';
+
+test('the offer comparison highlights a pending replacement and ignores a repeat offer to the same vendor', () => {
+  const rows = buildServiceRows(['av', 'security', 'media'], [
+    { id: 1, serviceCategory: 'av', vendorId: 1, status: 'DECLINED' },
+    { id: 2, serviceCategory: 'av', vendorId: 2, status: 'PENDING' },
+    { id: 3, serviceCategory: 'security', vendorId: 3, status: 'EXPIRED' },
+    { id: 4, serviceCategory: 'security', vendorId: 3, status: 'PENDING' },
+    { id: 5, serviceCategory: 'media', vendorId: 4, status: 'DECLINED' },
+    { id: 6, serviceCategory: 'media', vendorId: 5, status: 'ACCEPTED' },
+  ]);
+  const handoff = latestOfferHandoff(rows);
+  assert.equal(handoff.category, 'av');
+  assert.equal(handoff.previous.id, 1);
+  assert.equal(handoff.current.id, 2);
+  assert.equal(latestOfferHandoff([rows[1]]), null);
+});
 
 const context = { status: 'AWAITING_VENDORS', vendorsKnown: true, venueKnown: true, venueNeedsAttention: false, tasksKnown: true, tasksRemaining: 0 };
 
@@ -24,7 +40,7 @@ test('a previous decline followed by a pending replacement is handled automatica
   ]);
   const action = nextEventAction({ ...context, rows });
   assert.equal(action.kind, 'waiting');
-  assert.match(action.description, /replacement after a decline or expiry/);
+  assert.match(action.description, /up to three ranked backups/);
   assert.equal(action.action, 'View pending offers');
 });
 
@@ -91,6 +107,7 @@ test('selection evidence uses the chosen vendor from the recorded snapshot, not 
 
 test('a reservation requires every calendar day; holds, cancellations and another event do not count', () => {
   const bookings = [
+    { eventId: 8, bookingDate: '2028-02-27', status: 'CONFIRMED' },
     { eventId: 8, bookingDate: '2028-02-28', status: 'CONFIRMED' },
     { eventId: 8, bookingDate: '2028-02-28', status: 'CONFIRMED' },
     { eventId: 8, bookingDate: '2028-02-29', status: 'HELD' },
@@ -98,11 +115,19 @@ test('a reservation requires every calendar day; holds, cancellations and anothe
     { eventId: 9, bookingDate: '2028-02-29', status: 'CONFIRMED' },
   ];
   assert.deepEqual(venueReservation(bookings, 8, '2028-02-28', '2028-03-01'), {
-    requiredDays: 3, confirmedDates: ['2028-02-28'], complete: false,
+    requiredDays: 3, confirmedDates: ['2028-02-28'], bookedDates: ['2028-02-27', '2028-02-28'], complete: false,
   });
   assert.equal(venueReservation([...bookings,
     { eventId: 8, bookingDate: '2028-02-29', status: 'CONFIRMED' },
     { eventId: 8, bookingDate: '2028-03-01', status: 'CONFIRMED' },
   ], 8, '2028-02-28', '2028-03-01').complete, true);
   assert.equal(venueReservation([], 8, undefined, undefined).complete, false);
+});
+
+test('ranked backups are numbered and the final failed backup requests intervention', () => {
+  const offers = [1, 2, 3, 4].map(id => ({ id, vendorId: id, serviceCategory: 'av', status: 'DECLINED' }));
+  const pending = [...offers.slice(0, -1), { ...offers.at(-1), status: 'PENDING' }];
+  assert.equal(buildServiceRows(['av'], pending)[0].backupLabel, 'Backup 3 of 3');
+  assert.match(buildServiceRows(['av'], offers)[0].reason, /all three automatic backups/);
+  assert.match(buildServiceRows(['av'], offers.slice(0, 1))[0].reason, /no eligible untried vendor/);
 });

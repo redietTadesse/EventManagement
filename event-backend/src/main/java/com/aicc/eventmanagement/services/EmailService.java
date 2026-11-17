@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -41,6 +42,15 @@ public class EmailService {
     @Value("${app.email.recipient-override:}")
     private String recipientOverride;
 
+    @Value("${app.frontend-url:http://localhost:5173}")
+    private String frontendUrl;
+
+    public void sendWorkflowNotification(NotificationService.EmailRequested notice) {
+        String link = frontendUrl.replaceAll("/+$", "") + notice.path();
+        sendEmail(notice.recipient(), notice.title() + " – AICC",
+                notice.message() + "\n\nOpen in AICC: " + link);
+    }
+
     /**
      * Store of sent emails for testing/demo purposes.
      * In production, this would not exist — emails would be sent directly.
@@ -53,7 +63,7 @@ public class EmailService {
      * 1. New Inquiry → Coordinator gets notified
      */
     public void sendNewInquiryNotification(Inquiry inquiry, String coordinatorEmail) {
-        String subject = "📋 New Event Inquiry: " + inquiry.getEventType();
+        String subject = "📋 New Event Inquiry: " + (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType());
 
         String body = String.format("""
                 Hello Coordinator,
@@ -72,7 +82,7 @@ public class EmailService {
 
                 AICC Event Management System
                 """,
-                inquiry.getEventType(),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getClientName(),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 inquiry.getExpectedAttendees(),
@@ -158,8 +168,8 @@ public class EmailService {
                 </html>
                 """,
                 inquiry.getClientName(),
-                inquiry.getEventType(),
-                inquiry.getEventType(),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 venue,
                 price,
@@ -176,7 +186,7 @@ public class EmailService {
      * 3. Proposal Accepted → Coordinator gets notified
      */
     public void sendProposalAcceptedNotification(Inquiry inquiry, String coordinatorEmail) {
-        String subject = "✅ Proposal Accepted: " + inquiry.getEventType();
+        String subject = "✅ Proposal Accepted: " + (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType());
 
         String body = String.format("""
                 Hello Coordinator,
@@ -194,7 +204,7 @@ public class EmailService {
 
                 AICC Event Management System
                 """,
-                inquiry.getEventType(),
+                (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getClientName(),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 inquiry.getExpectedAttendees(),
@@ -206,7 +216,7 @@ public class EmailService {
     }
 
     public void sendProposalChangeRequestedNotification(Inquiry inquiry, String coordinatorEmail) {
-        String subject = "✏️ Proposal change requested: " + inquiry.getEventType();
+        String subject = "✏️ Proposal change requested: " + (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType());
         String body = String.format("""
                 Hello Coordinator,
 
@@ -221,7 +231,7 @@ public class EmailService {
 
                 AICC Event Management System
                 """,
-                inquiry.getId(), inquiry.getClientName(), inquiry.getEventType(),
+                inquiry.getId(), inquiry.getClientName(), (inquiry.getEventName() != null ? inquiry.getEventName() : inquiry.getEventType()),
                 inquiry.getEventDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 inquiry.getRequirements() == null ? "None specified" : inquiry.getRequirements(),
                 baseUrl, inquiry.getId());
@@ -450,10 +460,11 @@ public class EmailService {
 
         // Log the email regardless
         String logEntry = String.format("TO: %s | SUBJECT: %s", actualRecipient, subject);
-        emailLog.add(logEntry);
+        recordDelivery("ATTEMPTING", actualRecipient, subject);
         log.info("📧 {}", logEntry);
 
         if (!emailEnabled) {
+            recordDelivery("DISABLED", actualRecipient, subject);
             log.info("Email disabled. Would have sent: {}", subject);
             return;
         }
@@ -466,9 +477,12 @@ public class EmailService {
             message.setText(body);
 
             mailSender.send(message);
+            recordDelivery("ACCEPTED_BY_MAIL_SERVER", actualRecipient, subject);
             log.info("Email sent successfully to: {}", actualRecipient);
 
         } catch (MailException e) {
+            recordDelivery(e instanceof MailAuthenticationException ? "FAILED_AUTHENTICATION" : "FAILED_DELIVERY",
+                    actualRecipient, subject);
             log.error("Failed to send email to {}: {}", actualRecipient, e.getMessage());
         }
     }
@@ -493,6 +507,7 @@ public class EmailService {
         log.info("📧 {}", logEntry);
 
         if (!emailEnabled) {
+            recordDelivery("DISABLED", actualRecipient, subject);
             log.info("Email disabled. Would have sent HTML: {}", subject);
             return;
         }
@@ -506,13 +521,17 @@ public class EmailService {
             helper.setText(htmlBody, true); // true = isHtml
 
             mailSender.send(message);
+            recordDelivery("ACCEPTED_BY_MAIL_SERVER", actualRecipient, subject);
             log.info("HTML email sent successfully to: {}", actualRecipient);
 
         } catch (MessagingException e) {
+            recordDelivery("FAILED_MESSAGE_CREATION", actualRecipient, subject);
             log.error("Failed to create HTML email to {}: {}", actualRecipient, e.getMessage());
             // Fallback to plain text
             sendEmail(to, subject, "Please view this email in an HTML-capable client.");
         } catch (MailException e) {
+            recordDelivery(e instanceof MailAuthenticationException ? "FAILED_AUTHENTICATION" : "FAILED_DELIVERY",
+                    actualRecipient, subject);
             log.error("Failed to send HTML email to {}: {}", actualRecipient, e.getMessage());
         }
     }
@@ -522,8 +541,19 @@ public class EmailService {
     /**
      * Get the email log for testing/demo purposes.
      */
+
+    private void recordDelivery(String status, String recipient, String subject) {
+        String entry = java.time.Instant.now() + " | " + status + " | TO: " + recipient + " | SUBJECT: " + subject;
+        synchronized (emailLog) {
+            emailLog.add(entry);
+            while (emailLog.size() > 200) emailLog.remove(0);
+        }
+    }
+
     public List<String> getEmailLog() {
-        return List.copyOf(emailLog);
+        synchronized (emailLog) {
+            return List.copyOf(emailLog);
+        }
     }
 
     /**

@@ -39,5 +39,10 @@ public class CreateInquiryRequest {
     @Size(max = 1000, message = "Requirements must not exceed 1000 characters")
     private String requirements;
 
+    @Pattern(regexp = "THEATRE|CLASSROOM|BANQUET|CABARET|BOARDROOM|U_SHAPE|UNDECIDED", message = "Choose a supported table setup")
+    private String tableSetup;
+    @Size(max = 200)
+    private String eventName;
+
     private List<String> requestedCategories;
 }

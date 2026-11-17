@@ -2,12 +2,12 @@ package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.Venue;
-import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VenueRepository;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openpdf.text.Document;
@@ -183,6 +183,8 @@ public class QuotePdfService {
         details.setSpacingAfter(20);
         addDetail(details, "Client", valueOr(inquiry.getClientName(), "Not provided"));
         addDetail(details, "Event type", valueOr(inquiry.getEventType(), "Not provided"));
+        addDetail(details, "Event name", valueOr(inquiry.getEventName(), "Not provided"));
+        addDetail(details, "Seating setup", valueOr(inquiry.getTableSetup(), "Needs confirmation"));
         addDetail(details, "Event date", formatDate(inquiry.getEventDate()));
         addDetail(details, "Attendees", inquiry.getExpectedAttendees() == null
                 ? "Not provided" : inquiry.getExpectedAttendees().toString());

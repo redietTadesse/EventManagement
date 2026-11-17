@@ -7,7 +7,6 @@ import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.payload.ConfirmCategoriesRequest;
 import com.aicc.eventmanagement.payload.ConversionPreviewResponse;
 import com.aicc.eventmanagement.payload.CreateInquiryRequest;
-import com.aicc.eventmanagement.payload.ConvertToEventRequest;
 import com.aicc.eventmanagement.payload.EventResponse;
 import com.aicc.eventmanagement.payload.InquiryResponse;
 import com.aicc.eventmanagement.payload.SendProposalRequest;
@@ -37,6 +36,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -135,6 +135,7 @@ public class InquiryController {
         return ResponseEntity.ok(responses);
     }
 
+    @Transactional
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('CLIENT', 'COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update inquiry status")
@@ -147,16 +148,20 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
         recordAccessService.requireInquiryAccess(id, principal.getUsername());
+        recordAccessService.requireInquiryWriteOwnership(id, principal.getUsername());
         Inquiry updated = inquiryService.updateInquiryStatus(id, status, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
+    @Transactional
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Update inquiry details")
     public ResponseEntity<InquiryResponse> updateInquiry(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateInquiryRequest request) {
+            @Valid @RequestBody UpdateInquiryRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryWriteOwnership(id, principal.getUsername());
         log.info("Updating inquiry {}", id);
         Inquiry updated = inquiryService.updateInquiry(id, request);
         return ResponseEntity.ok(InquiryResponse.from(updated));
@@ -178,17 +183,10 @@ public class InquiryController {
 
     @PostMapping("/{id}/convert")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
-    @Operation(summary = "Convert inquiry to event", description = "Converts an accepted inquiry into a full event")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Event created successfully",
-                    content = @Content(schema = @Schema(implementation = EventResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Inquiry not in accepted state"),
-            @ApiResponse(responseCode = "404", description = "Inquiry not found")
-    })
-    public ResponseEntity<EventResponse> convertToEvent(@PathVariable Long id, @Valid @RequestBody ConvertToEventRequest request) {
-        log.info("Converting inquiry {} to event", id);
-        Event event = inquiryService.convertToEvent(id, request);
-        return ResponseEntity.ok(EventResponse.from(event));
+    @Operation(summary = "Legacy direct conversion", description = "Use the booking agreement receipt verification endpoint to book an inquiry.")
+    public void convertToEvent() {
+        throw new com.aicc.eventmanagement.exceptions.BusinessException(
+                "Sign the contract and verify the payment receipt to book this event.", "BOOKING_AGREEMENT_REQUIRED");
     }
 
     @GetMapping("/{id}/conversion-preview")
@@ -302,10 +300,11 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
 
-        Inquiry updated = inquiryService.sendProposal(id, request, userRole);
+        Inquiry updated = inquiryService.sendProposal(id, request, userRole, principal.getUsername());
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 
+    @Transactional
     @PutMapping("/{id}/proposal")
     @PreAuthorize("hasRole('COORDINATOR')")
     @Operation(summary = "Update proposal for an inquiry", description = "Coordinator updates an existing proposal (only in PROPOSAL_SENT state)")
@@ -325,6 +324,7 @@ public class InquiryController {
 
         Role userRole = extractRoleFromPrincipal(principal);
 
+        recordAccessService.requireInquiryWriteOwnership(id, principal.getUsername());
         Inquiry updated = inquiryService.updateProposal(id, request, userRole);
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
@@ -349,8 +349,10 @@ public class InquiryController {
         Role userRole = extractRoleFromPrincipal(principal);
         recordAccessService.requireInquiryAccess(id, principal.getUsername());
         List<String> finalCategories = body != null ? body.getCategories() : null;
+        if (body != null && body.getProposalVersion() != null && body.getProposalVersion() != inquiryService.getInquiryById(id).getProposalVersion())
+            throw new com.aicc.eventmanagement.exceptions.BusinessException("This proposal changed. Refresh and review the latest version.", "STALE_PROPOSAL");
 
-        Inquiry updated = inquiryService.acceptProposal(id, finalCategories, userRole);
+        Inquiry updated = inquiryService.acceptProposal(id, finalCategories, userRole, body==null?null:body.getProposalVersion());
         return ResponseEntity.ok(InquiryResponse.from(updated));
     }
 

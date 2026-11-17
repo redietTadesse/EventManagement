@@ -7,4 +7,5 @@ import java.util.List;
 @Data
 public class ConfirmCategoriesRequest {
     private List<String> categories;
+    private Integer proposalVersion;
 }

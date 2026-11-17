@@ -1,31 +1,32 @@
-
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
+import InquiryDateCalendar from './InquiryDateCalendar';
+import TentativeVenueRequests from '../components/TentativeVenueRequests';
+import { EVENT_TYPES, MAX_ATTENDEES, readEventPlan } from '../utils/eventPlan';
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
   const { currentUser, loading } = state;
-
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const selectedVenue = location.state?.selectedVenue;
-  const today = new Date().toISOString().split('T')[0];
-
-  const [form, setForm] = useState({
-    eventType: 'conference',
-    eventDate: location.state?.eventDate || '',
-    endDate: location.state?.endDate || '',
-    expectedAttendees: location.state?.expectedAttendees || '',
-    requirements: selectedVenue
-      ? `Requested venue: ${selectedVenue.name || selectedVenue.venueName}`
-      : '',
-    requestedCategories: [],
+  const [params] = useSearchParams();
+  const [form, setForm] = useState(() => {
+    const plan = readEventPlan(params);
+    const preferredVenue = params.get('preferredVenue')?.trim().slice(0, 200);
+    return {
+      eventType: plan.eventType,
+      eventDate: plan.date,
+      endDate: plan.endDate,
+      expectedAttendees: plan.attendees,
+      requirements: preferredVenue ? `Preferred venue: ${preferredVenue}` : '',
+      requestedCategories: [],
+      tableSetup: plan.tableSetup || 'UNDECIDED',
+      eventName: '',
+    };
   });
-
   const [availableCategories, setAvailableCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -34,95 +35,65 @@ export default function NewInquiry() {
   useEffect(() => {
     let active = true;
     const eventType = form.eventType;
-
-    api.get('/vendors/service-categories', {
-      params: { eventType },
-    })
-      .then((response) => {
+    Promise.all([api.get('/vendors/service-categories'), api.get('/vendors/service-categories', { params: { eventType } })])
+      .then(([response, defaults]) => {
         if (!active) return;
-
         const categories = response.data || [];
         setAvailableCategories(categories);
-
         if (!touchedCategories) {
-          setForm((previous) =>
-            previous.eventType === eventType
-              ? { ...previous, requestedCategories: categories }
-              : previous
-          );
+          setForm((previous) => previous.eventType === eventType
+            ? { ...previous, requestedCategories: defaults.data || [] }
+            : previous);
         }
       })
-      .catch(() => {
-        if (active) {
-          setError('Could not load available event services.');
-        }
-      });
-
-    return () => {
-      active = false;
-    };
+      .catch(() => { if (active) setError('Could not load available event services.'); });
+    return () => { active = false; };
   }, [form.eventType, touchedCategories]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     if (name === 'eventType') {
       setTouchedCategories(false);
-      setForm((previous) => ({
-        ...previous,
+      setForm((prev) => ({
+        ...prev,
         eventType: value,
       }));
       return;
     }
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    setForm({ ...form, [name]: value });
   };
 
   const toggleCategory = (category) => {
     setTouchedCategories(true);
-
-    setForm((previous) => {
-      const existing = previous.requestedCategories || [];
-
+    setForm((prev) => {
+      const existing = prev.requestedCategories || [];
       const next = existing.includes(category)
         ? existing.filter((item) => item !== category)
         : [...existing, category];
-
-      return {
-        ...previous,
-        requestedCategories: next,
-      };
+      return { ...prev, requestedCategories: next };
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-
-    if (form.endDate && form.endDate < form.eventDate) {
-      setError('The end date cannot be earlier than the start date.');
+    if (!form.eventDate || (form.endDate && form.endDate < form.eventDate)) {
+      setError('Select a start date and an end date on or after it.');
       return;
     }
-
     setSubmitting(true);
-
+    setError('');
     try {
-      await createInquiry({
+      const inquiry = await createInquiry({
         clientId: currentUser?.id,
         clientName: currentUser?.name || currentUser?.fullName,
         ...form,
         requestedCategories: form.requestedCategories,
         expectedAttendees: Number(form.expectedAttendees),
       });
-
-      navigate('/client/dashboard');
+      navigate(`/client/inquiries/${inquiry.id}`, { replace: true });
     } catch (err) {
-      setError(
-        err.response?.data?.message || 'Failed to submit inquiry.'
-      );
+      setError(err.response?.data?.message || 'Failed to submit');
     } finally {
       setSubmitting(false);
     }
@@ -138,98 +109,52 @@ export default function NewInquiry() {
 
   return (
     <Layout title="New Inquiry">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">
-          New Inquiry
-        </h1>
-
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-xl shadow p-6"
-        >
+      <div className="mx-auto max-w-3xl">
+        <PageHeader eyebrow="Client workspace" title="Plan an event"
+          subtitle="Tell your coordinator what you need so they can prepare a proposal."
+          action={<Link className="btn-outline" to="/client/inquiries">My inquiries</Link>} />
+        <form onSubmit={handleSubmit} className="surface p-5 sm:p-7">
+          <h2 className="form-section-title">Event details</h2>
+          <TentativeVenueRequests start={form.eventDate} end={form.endDate||form.eventDate}/>
+          <label className="mb-4 block text-sm font-medium">Event name
+            <input name="eventName" value={form.eventName} onChange={handleChange} required maxLength={200}
+              placeholder="e.g. Medical Equipment Exhibition 2027" className="mt-2 w-full rounded-lg border p-3" />
+          </label>
+          <p className="mb-4 text-sm text-slate-600">You can send your request even if no suitable venue or service is available. A coordinator can discuss alternatives with you.</p>
+          <label className="mb-4 block text-sm font-medium">Table and seating setup
+            <select name="tableSetup" value={form.tableSetup} onChange={handleChange} className="mt-2 w-full rounded-lg border p-3">
+              {[['UNDECIDED','Help me choose'],['THEATRE','Theatre — rows of chairs'],['CLASSROOM','Classroom — tables facing the front'],['BANQUET','Banquet — round dining tables'],['CABARET','Cabaret — round tables facing the stage'],['BOARDROOM','Boardroom — one shared meeting table'],['U_SHAPE','U-shape — tables arranged in a U']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <span className="mt-1 block text-xs font-normal text-slate-500">Your coordinator will check the room capacity for your chosen setup.</span>
+          </label>
+          <p className="form-section-note">Choose the event type and estimated attendance to check venue availability.</p>
           {error && (
-            <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">
+            <div role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
               {error}
             </div>
           )}
 
-          {selectedVenue && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4">
-              <h3 className="font-semibold text-indigo-800">
-                Selected Venue
-              </h3>
-
-              <p className="text-indigo-700 mt-1">
-                {selectedVenue.name || selectedVenue.venueName}
-              </p>
-
-              <p className="text-sm text-indigo-600">
-                Capacity: {selectedVenue.capacity} people
-              </p>
-
-              <p className="text-sm text-indigo-600">
-                Location: {selectedVenue.location || 'Not specified'}
-              </p>
-            </div>
-          )}
-
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-event-type" className="block text-sm font-medium text-gray-700 mb-1">
               Event Type
             </label>
-
             <select
+              id="inquiry-event-type"
               name="eventType"
               value={form.eventType}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             >
-              <option value="conference">Conference</option>
-              <option value="wedding">Wedding</option>
-              <option value="trade_show">Trade Show</option>
-              <option value="concert">Concert</option>
-              <option value="gala">Gala</option>
-              <option value="seminar">Seminar</option>
+              {EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event Start Date
-            </label>
-
-            <input
-              type="date"
-              name="eventDate"
-              value={form.eventDate}
-              onChange={handleChange}
-              min={today}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-              required
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event End Date (Optional)
-            </label>
-
-            <input
-              type="date"
-              name="endDate"
-              value={form.endDate}
-              onChange={handleChange}
-              min={form.eventDate || today}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-attendees" className="block text-sm font-medium text-gray-700 mb-1">
               Expected Attendees
             </label>
-
             <input
+              id="inquiry-attendees"
               type="number"
               name="expectedAttendees"
               value={form.expectedAttendees}
@@ -237,20 +162,23 @@ export default function NewInquiry() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               required
               min="1"
+              max={MAX_ATTENDEES}
             />
           </div>
 
+          <p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-relaxed text-indigo-900">
+            Available dates can be requested by multiple clients. An inquiry does not reserve a venue. The coordinator checks availability again when verifying payment and booking.
+          </p>
+          <InquiryDateCalendar tableSetup={form.tableSetup} eventType={form.eventType} start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
+            onChange={(eventDate, endDate) => setForm((previous) => ({ ...previous, eventDate, endDate }))} />
+
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Services Needed
+              Services needed
             </label>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {availableCategories.map((cat) => (
-                <label
-                  key={cat}
-                  className="flex items-center gap-2 text-sm text-gray-700"
-                >
+                <label key={cat} className="flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
                     checked={(form.requestedCategories || []).includes(cat)}
@@ -260,18 +188,17 @@ export default function NewInquiry() {
                 </label>
               ))}
             </div>
-
             <p className="text-xs text-gray-500 mt-1">
-              Pre-selected based on the event type. Uncheck anything you do not need.
+              These are suggestions based on the event type. Clear all boxes if AICC should source no external services.
             </p>
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-requirements" className="block text-sm font-medium text-gray-700 mb-1">
               Requirements
             </label>
-
             <textarea
+              id="inquiry-requirements"
               name="requirements"
               rows="3"
               value={form.requirements}
@@ -284,7 +211,7 @@ export default function NewInquiry() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50"
+            className="btn-primary w-full sm:w-auto"
           >
             {submitting ? 'Submitting...' : 'Submit Inquiry'}
           </button>

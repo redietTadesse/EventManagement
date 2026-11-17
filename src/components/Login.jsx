@@ -1,7 +1,17 @@
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+
+import { useEffect, useState } from 'react';
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
 import { useApp } from '../context/AppContext';
+import GoogleClientSignIn from './GoogleClientSignIn';
+import api from '../api/axios';
 import { ROLE_DASHBOARDS } from '../utils/roles';
+
 import {
   BuildingOfficeIcon,
   UserGroupIcon,
@@ -11,44 +21,111 @@ import {
 } from '@heroicons/react/24/outline';
 
 const PORTAL_LABELS = {
-  client: { label: 'Client', icon: BuildingOfficeIcon, color: 'from-indigo-500 to-indigo-600' },
-  vendor: { label: 'Vendor', icon: UserGroupIcon, color: 'from-emerald-500 to-emerald-600' },
-  coordinator: { label: 'Coordinator', icon: ClipboardDocumentListIcon, color: 'from-slate-600 to-slate-700' },
-  admin: { label: 'Administrator', icon: ShieldCheckIcon, color: 'from-amber-500 to-amber-600' },
+  client: {
+    label: 'Client',
+    icon: BuildingOfficeIcon,
+    color: 'from-indigo-500 to-indigo-600',
+  },
+  vendor: {
+    label: 'Vendor',
+    icon: UserGroupIcon,
+    color: 'from-emerald-500 to-emerald-600',
+  },
+  coordinator: {
+    label: 'Coordinator',
+    icon: ClipboardDocumentListIcon,
+    color: 'from-slate-600 to-slate-700',
+  },
+  admin: {
+    label: 'Administrator',
+    icon: ShieldCheckIcon,
+    color: 'from-amber-500 to-amber-600',
+  },
 };
 
 const SIGNUP_ALLOWED = ['client', undefined];
 
 export default function Login() {
   const { portal } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const { login, registerClient, dispatch } = useApp();
+
   const [mode, setMode] = useState('signin');
-  const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '' });
+
+  const [form, setForm] = useState({
+    fullName: '',
+    username: '',
+    email: '',
+    password: '',
+  });
+
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const { login, registerClient } = useApp();
-  const navigate = useNavigate();
-
   const portalKey = portal?.toLowerCase();
   const portalInfo = PORTAL_LABELS[portalKey];
   const portalLabel = portalInfo?.label;
-  const signupAllowed = portalKey ? SIGNUP_ALLOWED.includes(portalKey) : true;
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const signupAllowed = portalKey
+    ? SIGNUP_ALLOWED.includes(portalKey)
+    : true;
+
+  useEffect(() => { window.scrollTo(0, 0); }, [portalKey]);
+  const handleChange = (e) => {
+    setForm((previous) => ({
+      ...previous,
+      [e.target.name]: e.target.value,
+    }));
+  };
 
   const handleSignIn = async (e) => {
     e.preventDefault();
+
     setSubmitting(true);
     setError('');
     setNotice('');
+
     try {
-      const data = await login(form.username, form.password);
-      navigate(ROLE_DASHBOARDS[data?.role] || '/', { replace: true });
+      const data = await login(
+        form.username,
+        form.password
+      );
+
+      const dashboard = ROLE_DASHBOARDS[data?.role] || '/';
+
+      // Preserve main branch's return-to-page behavior.
+      const rolePrefix = dashboard.slice(
+        0,
+        dashboard.lastIndexOf('/') + 1
+      );
+
+      const returnTo = location.state?.returnTo;
+
+      const canReturn =
+        rolePrefix !== '/' &&
+        typeof returnTo === 'string' &&
+        returnTo.startsWith(rolePrefix) &&
+        !returnTo.startsWith('//');
+
+      navigate(
+        canReturn ? returnTo : dashboard,
+        { replace: true }
+      );
     } catch (err) {
-      let errorMsg = 'Login failed. Check your credentials.';
-      if (err.response?.data?.message) errorMsg = err.response.data.message;
-      else if (typeof err.response?.data === 'string') errorMsg = err.response.data;
+      let errorMsg =
+        'Login failed. Check your credentials.';
+
+      if (err.response?.data?.message) {
+        errorMsg = err.response.data.message;
+      } else if (
+        typeof err.response?.data === 'string'
+      ) {
+        errorMsg = err.response.data;
+      }
+
       setError(errorMsg);
     } finally {
       setSubmitting(false);
@@ -57,38 +134,33 @@ export default function Login() {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
+
     setSubmitting(true);
     setError('');
     setNotice('');
+
     try {
       if (!portalKey || portalKey === 'client') {
         await registerClient(form);
+
         setMode('signin');
-        setNotice('Account created. Sign in with your new username and password.');
+        setNotice(
+          'Account created. Sign in with your new username and password.'
+        );
       } else {
         navigate('/vendor-application');
       }
     } catch (err) {
       const response = err.response?.data;
+
       setError(
-        (response && typeof response === 'object' ? response.message : response) ||
-          'Registration failed'
+        (response && typeof response === 'object'
+          ? response.message
+          : response) || 'Registration failed'
       );
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const switchToSignup = () => {
-    setMode('signup');
-    setError('');
-    setNotice('');
-  };
-
-  const switchToSignin = () => {
-    setMode('signin');
-    setError('');
-    setNotice('');
   };
 
   const inputClass =
@@ -96,66 +168,124 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-slate-50 flex items-center justify-center px-4 py-8 sm:py-12">
-      {/* Background patterns */}
+
+      {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
       </div>
 
       <div className="relative w-full max-w-md">
-        {/* Back button */}
+
+        {/* Back navigation */}
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors mb-6"
         >
           <ArrowLeftIcon className="w-4 h-4" />
-          All portals
+          Back to AICC
         </Link>
 
-        {/* Login card */}
+        {/* Authentication card */}
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8">
-          {/* Portal icon and title */}
+
+          {/* Portal identity */}
           {portalInfo && (
             <div className="flex items-center justify-center mb-6">
-              <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${portalInfo.color} flex items-center justify-center shadow-lg`}>
+              <div
+                className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${portalInfo.color} flex items-center justify-center shadow-lg`}
+              >
                 <portalInfo.icon className="w-8 h-8 text-white" />
               </div>
             </div>
           )}
 
           <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-2">
-            {mode === 'signin' ? 'Welcome back' : 'Create account'}
+            {mode === 'signin'
+              ? 'Welcome back'
+              : 'Create account'}
           </h2>
+
           <p className="text-center text-sm text-slate-600 mb-6">
             {mode === 'signin'
-              ? portalLabel ? `Sign in to the ${portalLabel} Portal` : 'Sign in to your portal'
-              : portalLabel ? `Create your ${portalLabel} Portal account` : 'Create a client account'}
+              ? portalLabel
+                ? `Sign in to the ${portalLabel} Portal`
+                : 'Sign in to your portal'
+              : portalLabel
+                ? `Create your ${portalLabel} Portal account`
+                : 'Create a client account'}
           </p>
 
+          {/* Success notice */}
+          {signupAllowed && <GoogleClientSignIn onSignedIn={async token=>{
+            localStorage.setItem('token',token);
+            try { const {data}=await api.get('/users/me');dispatch({type:'LOGIN',payload:data});
+              const destination=location.state?.returnTo;
+              navigate(typeof destination==='string'&&destination.startsWith('/client/')?destination:'/client/dashboard',{replace:true});
+            } catch(error){localStorage.removeItem('token');throw error;}
+          }}/>}
           {notice && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl mb-4 text-sm flex items-center gap-2">
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-5 h-5 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               {notice}
             </div>
           )}
 
           {mode === 'signin' ? (
-            <form onSubmit={handleSignIn} className="space-y-4">
+
+            /* Sign in */
+            <form
+              onSubmit={handleSignIn}
+              className="space-y-4"
+            >
+
               {error && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm flex items-center gap-2">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div
+                  role="alert"
+                  className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm flex items-center gap-2"
+                >
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                   {error}
                 </div>
               )}
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Username</label>
+                <label
+                  htmlFor="login-username"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Username
+                </label>
+
                 <input
+                  id="login-username"
                   type="text"
                   name="username"
+                  autoComplete="username"
                   className={inputClass}
                   value={form.username}
                   onChange={handleChange}
@@ -163,11 +293,20 @@ export default function Login() {
                   placeholder="Enter your username"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+                <label
+                  htmlFor="login-password"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Password
+                </label>
+
                 <input
+                  id="login-password"
                   type="password"
                   name="password"
+                  autoComplete="current-password"
                   className={inputClass}
                   value={form.password}
                   onChange={handleChange}
@@ -175,6 +314,7 @@ export default function Login() {
                   placeholder="Enter your password"
                 />
               </div>
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -182,9 +322,24 @@ export default function Login() {
               >
                 {submitting ? (
                   <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <svg
+                      className="animate-spin h-5 w-5"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l-2.647z"
+                      />
                     </svg>
                     Signing in...
                   </span>
@@ -195,43 +350,106 @@ export default function Login() {
 
               {/* Demo credentials */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <p className="text-xs font-medium text-slate-700 mb-2">Demo credentials:</p>
+                <p className="text-xs font-medium text-slate-700 mb-2">
+                  Demo credentials:
+                </p>
+
                 <div className="space-y-1 text-xs text-slate-600">
-                  <p><span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">admin</span> / <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">Admin@123</span></p>
-                  <p><span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">client</span> / <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">Admin@123</span></p>
-                  <p><span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">coordinator</span> / <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">Admin@123</span></p>
-                  <p><span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">vendor</span> / <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">Admin@123</span></p>
+
+                  {[
+                    'admin',
+                    'client',
+                    'coordinator',
+                    'vendor',
+                  ].map((role) => (
+                    <p key={role}>
+                      <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">
+                        {role}
+                      </span>
+                      {' / '}
+                      <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded">
+                        Admin@123
+                      </span>
+                    </p>
+                  ))}
+
                 </div>
               </div>
+
+              {(!portalKey || portalKey === 'vendor') && (
+                <p className="text-center text-sm text-slate-600">
+                  New vendor?{' '}
+                  <Link
+                    to="/vendor-application"
+                    className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
+                  >
+                    Register your company
+                  </Link>
+                </p>
+              )}
 
               {signupAllowed && (
                 <p className="text-center text-sm text-slate-600">
                   New client?{' '}
                   <button
                     type="button"
-                    onClick={switchToSignup}
+                    onClick={() => {
+                      setMode('signup');
+                      setError('');
+                      setNotice('');
+                    }}
                     className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
                   >
                     Create an account
                   </button>
                 </p>
               )}
+
             </form>
+
           ) : (
-            <form onSubmit={handleSignUp} className="space-y-4">
+
+            /* Client registration */
+            <form
+              onSubmit={handleSignUp}
+              className="space-y-4"
+            >
+
               {error && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm flex items-center gap-2">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div
+                  role="alert"
+                  className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm flex items-center gap-2"
+                >
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                   {error}
                 </div>
               )}
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Full name</label>
+                <label
+                  htmlFor="signup-name"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Full name
+                </label>
+
                 <input
+                  id="signup-name"
                   type="text"
                   name="fullName"
+                  autoComplete="name"
                   className={inputClass}
                   value={form.fullName}
                   onChange={handleChange}
@@ -239,11 +457,20 @@ export default function Login() {
                   placeholder="Enter your full name"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Username</label>
+                <label
+                  htmlFor="signup-username"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Username
+                </label>
+
                 <input
+                  id="signup-username"
                   type="text"
                   name="username"
+                  autoComplete="username"
                   className={inputClass}
                   value={form.username}
                   onChange={handleChange}
@@ -251,11 +478,20 @@ export default function Login() {
                   placeholder="Choose a username"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                <label
+                  htmlFor="signup-email"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Email
+                </label>
+
                 <input
+                  id="signup-email"
                   type="email"
                   name="email"
+                  autoComplete="email"
                   className={inputClass}
                   value={form.email}
                   onChange={handleChange}
@@ -263,19 +499,29 @@ export default function Login() {
                   placeholder="Enter your email"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+                <label
+                  htmlFor="signup-password"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  Password
+                </label>
+
                 <input
+                  id="signup-password"
                   type="password"
                   name="password"
+                  autoComplete="new-password"
                   className={inputClass}
                   value={form.password}
                   onChange={handleChange}
                   required
-                  minLength="6"
+                  minLength={6}
                   placeholder="Create a password (min 6 characters)"
                 />
               </div>
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -283,9 +529,24 @@ export default function Login() {
               >
                 {submitting ? (
                   <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <svg
+                      className="animate-spin h-5 w-5"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l-2.647z"
+                      />
                     </svg>
                     Creating account...
                   </span>
@@ -293,16 +554,22 @@ export default function Login() {
                   'Create Account'
                 )}
               </button>
+
               <p className="text-center text-sm text-slate-600">
                 Already have an account?{' '}
                 <button
                   type="button"
-                  onClick={switchToSignin}
+                  onClick={() => {
+                    setMode('signin');
+                    setError('');
+                    setNotice('');
+                  }}
                   className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
                 >
                   Sign in
                 </button>
               </p>
+
             </form>
           )}
         </div>
@@ -323,13 +590,16 @@ export default function Login() {
             transform: translate(0px, 0px) scale(1);
           }
         }
+
         .animate-blob {
           animation: blob 7s infinite;
         }
+
         .animation-delay-2000 {
           animation-delay: 2s;
         }
       `}</style>
+
     </div>
   );
 }

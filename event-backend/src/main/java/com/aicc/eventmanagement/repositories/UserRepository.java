@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.List;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -13,6 +14,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
 
     Optional<User> findByEmail(String email);
+    Optional<User> findByGoogleSubject(String googleSubject);
 
     boolean existsByUsername(String username);
 
@@ -21,4 +23,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByIsActive(boolean isActive);
 
     long countByRole(Role role);
+
+    List<User> findByRoleOrderByUsernameAsc(Role role);
+
+    List<User> findByRoleAndIsActiveTrue(Role role);
 }

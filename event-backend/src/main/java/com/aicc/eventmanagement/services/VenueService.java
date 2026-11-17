@@ -1,5 +1,4 @@
 package com.aicc.eventmanagement.services;
-
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Venue;
 import com.aicc.eventmanagement.entities.VenueBooking;
@@ -9,22 +8,31 @@ import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.exceptions.EntityNotFoundException;
 import com.aicc.eventmanagement.payload.CreateVenueRequest;
 import com.aicc.eventmanagement.payload.UpdateVenueRequest;
+import com.aicc.eventmanagement.payload.VenueAvailabilityGridResponse;
+
 import com.aicc.eventmanagement.payload.VenueBookingResponse;
 import com.aicc.eventmanagement.payload.VenueFitResponse;
 import com.aicc.eventmanagement.payload.VenueUnavailableDateRequest;
+
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.VenueBookingRepository;
 import com.aicc.eventmanagement.repositories.VenueRepository;
 import com.aicc.eventmanagement.repositories.VenueUnavailableDateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 import java.util.ArrayList;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +43,15 @@ public class VenueService {
     private final EventRepository eventRepository;
     private final VenueBookingRepository venueBookingRepository;
     private final VenueUnavailableDateRepository unavailableDateRepository;
+
+    /**
+     * How long a coordinator hold survives before it stops blocking the date.
+     * A default is supplied so a missing property cannot break startup.
+     */
+    @Value("${app.venue.hold-expiry-hours:72}")
+    private long holdExpiryHours;
+
+    private static final int MAX_HOLD_DAYS = 30;
 
     // Statuses where an event no longer holds its venue.
     private static final List<EventStatus> DEAD_STATUSES = List.of(
@@ -52,6 +69,7 @@ public class VenueService {
                 .description(request.getDescription())
                 .resources(request.getResources())
                 .capacity(request.getCapacity())
+                .layoutCapacities(LayoutCapacity.validate(request.getLayoutCapacities(),request.getCapacity()))
                 .location(request.getLocation())
                 .hourlyRate(request.getHourlyRate())
                 .setupBufferDays(request.getSetupBufferDays() != null ? request.getSetupBufferDays() : 1)
@@ -107,6 +125,12 @@ public class VenueService {
         if (request.getDescription() != null) venue.setDescription(request.getDescription());
         if (request.getResources() != null) venue.setResources(request.getResources());
         if (request.getCapacity() != null) venue.setCapacity(request.getCapacity());
+        if(request.getLayoutCapacities()!=null && !java.util.Objects.equals(request.getLayoutCapacities(),venue.getLayoutCapacities())) {
+            if(venueBookingRepository.findByVenueId(id).stream().anyMatch(row->row.isActiveHold(LocalDateTime.now())
+                ||(row.getStatus()==VenueBooking.BookingStatus.CONFIRMED&&!row.getBookingDate().isBefore(LocalDate.now()))))
+                throw new BusinessException("Seating capacities cannot change while future bookings or active holds exist.","VENUE_CAPACITY_CONFLICT");
+            venue.setLayoutCapacities(LayoutCapacity.validate(request.getLayoutCapacities(),venue.getCapacity()));
+        }
         if (request.getLocation() != null) venue.setLocation(request.getLocation());
         if (request.getHourlyRate() != null) venue.setHourlyRate(request.getHourlyRate());
         if (request.getSetupBufferDays() != null) venue.setSetupBufferDays(request.getSetupBufferDays());
@@ -131,8 +155,43 @@ public class VenueService {
     }
 
     // --- Availability ---
+    public List<Venue> getAvailableForProposal(LocalDate start, LocalDate end, Integer attendees, String type, String setup, Long inquiryId) {
+        if(inquiryId==null)return getAvailableVenues(start,end,attendees,type,setup);
+        return venueRepository.findAll().stream().filter(Venue::isActive).filter(v->{
+            Integer seats=LayoutCapacity.capacity(v,setup);if(seats==null||(attendees!=null&&attendees>seats))return false;
+            var window=bookingWindow(v,type,start,end==null?start:end);
+            if(unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(v.getId(),window.from(),window.through()))return false;
+            if(eventRepository.countVenueEventsInRangeExcludingEvent(v.getId(),window.from(),window.through(),DEAD_STATUSES,-1L)>0)return false;
+            return venueBookingRepository.findBlockingRowsInRange(window.from(),window.through(),LocalDateTime.now()).stream()
+                .filter(row->row.getVenue().getId().equals(v.getId())).noneMatch(row->row.getStatus()==VenueBooking.BookingStatus.CONFIRMED
+                    ||!java.util.Objects.equals(row.getHeldBy(),"contract:"+inquiryId));
+        }).toList();
+    }
+    public List<Venue> getAvailableVenues(LocalDate start, LocalDate end, Integer attendees, String type, String setup) {
+        return getAvailableVenues(start, end, attendees, type).stream()
+                .filter(v -> LayoutCapacity.capacity(v, setup) != null && (attendees == null || LayoutCapacity.capacity(v, setup) >= attendees)).toList();
+    }
+
+    public List<VenueFitResponse> explainVenueFit(LocalDate start, LocalDate end, Integer attendees,
+            Long exclude, String type, String setup) {
+        return explainVenueFit(start, end, attendees, exclude, type).stream().map(fit -> {
+            var capacity = LayoutCapacity.capacity(getById(fit.venueId()), setup);
+            var blockers = new ArrayList<>(fit.blockers());
+            if (capacity == null) blockers.add("Capacity for " + setup + " setup needs confirmation.");
+            else if (attendees != null && capacity < attendees) blockers.add("Seats " + capacity + " in " + setup + " setup; " + attendees + " requested.");
+            return new VenueFitResponse(fit.venueId(), fit.name(), fit.location(), capacity, fit.active(), blockers.isEmpty(),
+                    fit.blockedFrom(), fit.blockedThrough(), fit.explanation(), blockers);
+        }).toList();
+    }
+
+    public List<DayAvailability> getAvailabilityCalendar(LocalDate start, LocalDate end, Integer attendees, String type, String setup) {
+        var dates = getAvailabilityCalendar(start, end, attendees, type);
+        return dates.stream().map(day -> new DayAvailability(day.date(), day.available() &&
+                !getAvailableVenues(day.date(), day.date(), attendees, type, setup).isEmpty())).toList();
+    }
 
     public boolean isVenueAvailable(Long venueId, LocalDate date) {
+
         return isVenueAvailable(venueId, date, null);
     }
 
@@ -142,7 +201,7 @@ public class VenueService {
 
     public boolean isVenueAvailable(Long venueId, LocalDate startDate, LocalDate endDate, Integer expectedAttendees) {
         Venue venue = getById(venueId);
-        return isVenueAvailableForRange(venue, startDate, endDate, -1L, expectedAttendees);
+        return isVenueAvailableForRange(venue, startDate, endDate, -1L, expectedAttendees, null);
     }
 
     public boolean isVenueAvailableForEvent(Long venueId, LocalDate startDate, LocalDate endDate, Long eventId) {
@@ -155,17 +214,19 @@ public class VenueService {
     public boolean isVenueAvailableForEvent(
             Long venueId, LocalDate startDate, LocalDate endDate, Long eventId, Integer expectedAttendees) {
         Venue venue = getById(venueId);
-        return isVenueAvailableForRange(venue, startDate, endDate, eventId, expectedAttendees);
+        String type = eventId == null ? null : eventRepository.findById(eventId)
+                .map(Event::getInquiry).map(com.aicc.eventmanagement.entities.Inquiry::getEventType).orElse(null);
+        return isVenueAvailableForRange(venue, startDate, endDate, eventId, expectedAttendees, type);
     }
 
     private boolean isVenueAvailableForRange(
-            Venue venue, LocalDate startDate, LocalDate endDate, Long eventId, Integer expectedAttendees) {
+            Venue venue, LocalDate startDate, LocalDate endDate, Long eventId, Integer expectedAttendees, String eventType) {
         if (startDate == null || (endDate != null && endDate.isBefore(startDate))) return false;
         if (!venue.isActive() || exceedsCapacity(venue, expectedAttendees)) return false;
         Long excludedEventId = eventId != null ? eventId : -1L;
-        LocalDate actualEndDate = endDate != null ? endDate : startDate;
-        LocalDate blockStart = startDate.minusDays(venue.getSetupBufferDays());
-        LocalDate blockEnd = actualEndDate.plusDays(venue.getTeardownBufferDays());
+        var window = bookingWindow(venue, eventType, startDate, endDate);
+        LocalDate blockStart = window.from();
+        LocalDate blockEnd = window.through();
 
         if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(
                 venue.getId(), blockStart, blockEnd)) {
@@ -196,6 +257,10 @@ public class VenueService {
     }
 
     public List<Venue> getAvailableVenues(LocalDate startDate, LocalDate endDate, Integer expectedAttendees) {
+        return getAvailableVenues(startDate, endDate, expectedAttendees, null);
+    }
+
+    public List<Venue> getAvailableVenues(LocalDate startDate, LocalDate endDate, Integer expectedAttendees, String eventType) {
         if (startDate == null || (endDate != null && endDate.isBefore(startDate))) {
             throw new BusinessException("End date cannot be before start date", "INVALID_DATE_RANGE");
         }
@@ -205,11 +270,41 @@ public class VenueService {
         return venueRepository.findAll().stream()
                 .filter(Venue::isActive)
                 .filter(v -> !exceedsCapacity(v, expectedAttendees))
-                .filter(v -> isVenueAvailableForRange(v, startDate, endDate, -1L, expectedAttendees))
+                .filter(v -> isVenueAvailableForRange(v, startDate, endDate, -1L, expectedAttendees, eventType))
+                .toList();
+    }
+
+    public record DayAvailability(LocalDate date, boolean available) {}
+
+    private static com.aicc.eventmanagement.util.VenueBookingWindow bookingWindow(
+            Venue venue, String eventType, LocalDate start, LocalDate end) {
+        return com.aicc.eventmanagement.util.VenueBookingWindow.forEvent(eventType, start, end,
+                venue.getSetupBufferDays(), venue.getTeardownBufferDays());
+    }
+
+    @Transactional(readOnly = true)
+    public List<DayAvailability> getAvailabilityCalendar(LocalDate start, LocalDate end, Integer attendees, String eventType) {
+        if (end.isBefore(start) || end.isAfter(start.plusDays(30))) {
+            throw new BusinessException("Choose a calendar range of up to 31 days", "INVALID_DATE_RANGE");
+        }
+        if (attendees != null && attendees < 1) {
+            throw new BusinessException("Attendee count must be at least one", "INVALID_ATTENDEE_COUNT");
+        }
+        List<Venue> candidates = venueRepository.findAll().stream()
+                .filter(Venue::isActive)
+                .filter(venue -> !exceedsCapacity(venue, attendees))
+                .toList();
+        LocalDate today = LocalDate.now();
+        return start.datesUntil(end.plusDays(1))
+                .filter(date -> date.isAfter(today))
+                .map(date -> new DayAvailability(date, candidates.stream()
+                        .anyMatch(venue -> isVenueAvailableForRange(venue, date, date, -1L, attendees, eventType))))
+
                 .toList();
     }
 
     /**
+
      * Evaluates every configured venue and explains the capacity and calendar
      * checks used for this event. The current event is excluded from conflict
      * counts so its own confirmed booking does not make its venue look blocked.
@@ -217,6 +312,16 @@ public class VenueService {
     @Transactional(readOnly = true)
     public List<VenueFitResponse> explainVenueFit(
             LocalDate startDate, LocalDate endDate, Integer expectedAttendees, Long excludedEventId) {
+        String eventType = excludedEventId == null ? null : eventRepository.findById(excludedEventId)
+                .map(Event::getInquiry)
+                .map(com.aicc.eventmanagement.entities.Inquiry::getEventType)
+                .orElse(null);
+        return explainVenueFit(startDate, endDate, expectedAttendees, excludedEventId, eventType);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VenueFitResponse> explainVenueFit(
+            LocalDate startDate, LocalDate endDate, Integer expectedAttendees, Long excludedEventId, String eventType) {
         if (startDate == null || (endDate != null && endDate.isBefore(startDate))) {
             throw new BusinessException("End date cannot be before start date", "INVALID_DATE_RANGE");
         }
@@ -228,27 +333,29 @@ public class VenueService {
         long eventIdToExclude = excludedEventId != null ? excludedEventId : -1L;
         return venueRepository.findAll().stream()
                 .map(venue -> explainVenue(venue, startDate, actualEndDate,
-                        expectedAttendees, eventIdToExclude))
+                        expectedAttendees, eventIdToExclude, eventType))
                 .toList();
     }
 
     private VenueFitResponse explainVenue(
             Venue venue, LocalDate startDate, LocalDate endDate,
-            Integer expectedAttendees, Long excludedEventId) {
-        LocalDate blockedFrom = startDate.minusDays(venue.getSetupBufferDays());
-        LocalDate blockedThrough = endDate.plusDays(venue.getTeardownBufferDays());
+            Integer expectedAttendees, Long excludedEventId, String eventType) {
+        var window = bookingWindow(venue, eventType, startDate, endDate);
+        LocalDate blockedFrom = window.from();
+        LocalDate blockedThrough = window.through();
         List<String> explanation = new ArrayList<>();
+        List<String> blockers = new ArrayList<>();
 
         if (venue.isActive()) {
             explanation.add("Venue is active.");
         } else {
-            explanation.add("Venue is inactive and cannot be booked.");
+            blockers.add("Venue is inactive and cannot be booked.");
         }
 
         if (expectedAttendees == null) {
             explanation.add("No attendee count was supplied, so capacity was not checked.");
         } else if (exceedsCapacity(venue, expectedAttendees)) {
-            explanation.add("Capacity " + venue.getCapacity() + " is below "
+            blockers.add("Capacity " + venue.getCapacity() + " is below "
                     + expectedAttendees + " expected attendees.");
         } else if (venue.getCapacity() == null) {
             explanation.add("No capacity limit is configured.");
@@ -259,7 +366,7 @@ public class VenueService {
         boolean blockedDate = unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(
                 venue.getId(), blockedFrom, blockedThrough);
         if (blockedDate) {
-            explanation.add("An administrator-blocked date overlaps the setup, event, or teardown window.");
+            blockers.add("An administrator-blocked date overlaps the setup, event, or teardown window.");
         } else {
             explanation.add("No administrator-blocked date overlaps " + blockedFrom + " through " + blockedThrough + ".");
         }
@@ -267,29 +374,238 @@ public class VenueService {
         long confirmedBookings = venueBookingRepository.countConfirmedBookingsInRangeExcludingEvent(
                 venue.getId(), blockedFrom, blockedThrough, excludedEventId);
         if (confirmedBookings > 0) {
-            explanation.add("Another confirmed venue booking overlaps the setup, event, or teardown window.");
+            blockers.add("Another confirmed venue booking overlaps the setup, event, or teardown window.");
         }
 
         long scheduledEvents = eventRepository.countVenueEventsInRangeExcludingEvent(
                 venue.getId(), blockedFrom, blockedThrough, DEAD_STATUSES, excludedEventId);
         if (scheduledEvents > 0) {
-            explanation.add("Another active event uses this venue during the setup, event, or teardown window.");
+            blockers.add("Another active event uses this venue during the setup, event, or teardown window.");
         }
 
-        boolean eligible = venue.isActive()
-                && !exceedsCapacity(venue, expectedAttendees)
-                && confirmedBookings == 0
-                && scheduledEvents == 0
-                && !blockedDate;
+        explanation.addAll(blockers);
         return new VenueFitResponse(venue.getId(), venue.getName(), venue.getLocation(),
-                venue.getCapacity(), venue.isActive(), eligible, blockedFrom, blockedThrough,
-                List.copyOf(explanation));
+                venue.getCapacity(), venue.isActive(), blockers.isEmpty(), blockedFrom, blockedThrough,
+                List.copyOf(explanation), List.copyOf(blockers));
     }
 
     /**
      * Books a venue for an event on a specific date range with setup/teardown buffers.
      * Uses database-level unique constraint (uq_venue_date) to prevent double-booking.
+
      */
+    /**
+     * The coordinator grid: every active venue against the next N days.
+     *
+     * Built from two bulk queries rather than one per cell. With 20 venues over 30
+     * days that is the difference between 2 queries and 600.
+     */
+    @Transactional(readOnly = true)
+    public VenueAvailabilityGridResponse getAvailabilityGrid(int daysAhead) {
+        if (daysAhead < 1 || daysAhead > 90) {
+            throw new BusinessException("daysAhead must be between 1 and 90");
+        }
+
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate = startDate.plusDays(daysAhead - 1L);
+        LocalDateTime now = LocalDateTime.now();
+
+        List<Venue> venues = venueRepository.findAll().stream()
+                .filter(Venue::isActive)
+                .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+                .toList();
+
+        // Key is venueId + date, because the unique constraint guarantees one row per pair.
+        Map<String, VenueBooking> bookingIndex = new HashMap<>();
+        for (VenueBooking vb : venueBookingRepository.findBlockingRowsInRange(startDate, endDate, now)) {
+            bookingIndex.put(cellKey(vb.getVenue().getId(), vb.getBookingDate()), vb);
+        }
+
+        // Legacy path: events that carry a venueId without a venue_bookings row.
+        Map<String, Event> legacyIndex = new HashMap<>();
+        for (Event e : eventRepository.findVenueBookedEventsInRange(startDate, endDate, DEAD_STATUSES)) {
+            legacyIndex.put(cellKey(e.getVenueId(), e.getInquiry().getEventDate()), e);
+        }
+
+        List<VenueAvailabilityGridResponse.VenueRow> rows = new ArrayList<>();
+        for (Venue venue : venues) {
+            List<VenueAvailabilityGridResponse.DayCell> days = new ArrayList<>();
+            for (int i = 0; i < daysAhead; i++) {
+                LocalDate date = startDate.plusDays(i);
+                days.add(buildCell(venue.getId(), date, bookingIndex, legacyIndex, now));
+            }
+            rows.add(VenueAvailabilityGridResponse.VenueRow.builder()
+                    .venueId(venue.getId())
+                    .name(venue.getName())
+                    .location(venue.getLocation())
+                    .capacity(venue.getCapacity())
+                    .days(days)
+                    .build());
+        }
+
+        return VenueAvailabilityGridResponse.builder()
+                .startDate(startDate)
+                .endDate(endDate)
+                .venues(rows)
+                .build();
+    }
+
+    private VenueAvailabilityGridResponse.DayCell buildCell(
+            Long venueId,
+            LocalDate date,
+            Map<String, VenueBooking> bookingIndex,
+            Map<String, Event> legacyIndex,
+            LocalDateTime now) {
+
+        String key = cellKey(venueId, date);
+
+        VenueBooking vb = bookingIndex.get(key);
+        if (vb != null) {
+            if (vb.isActiveHold(now)) {
+                return VenueAvailabilityGridResponse.DayCell.builder()
+                        .date(date)
+                        .status("HELD")
+                        .bookingId(vb.getId())
+                        .heldBy(vb.getHeldBy())
+                        .expiresAt(vb.getExpiresAt())
+                        .build();
+            }
+            if (vb.getStatus() == VenueBooking.BookingStatus.CONFIRMED) {
+                Event event = vb.getEvent();
+                return VenueAvailabilityGridResponse.DayCell.builder()
+                        .date(date)
+                        .status("BOOKED")
+                        .bookingId(vb.getId())
+                        .eventName(event != null ? event.getName() : "Booked")
+                        .eventId(event != null ? event.getId() : null)
+                        .build();
+            }
+        }
+
+        Event legacy = legacyIndex.get(key);
+        if (legacy != null) {
+            return VenueAvailabilityGridResponse.DayCell.builder()
+                    .date(date)
+                    .status("BOOKED")
+                    .eventName(legacy.getName())
+                    .eventId(legacy.getId())
+                    .build();
+        }
+
+        return VenueAvailabilityGridResponse.DayCell.builder()
+                .date(date)
+                .status("FREE")
+                .build();
+    }
+
+    private String cellKey(Long venueId, LocalDate date) {
+        return venueId + "|" + date;
+    }
+
+    // --- Holds ---
+
+    /**
+     * Places a hold across consecutive dates starting at startDate.
+     *
+     * All or nothing: if any date in the span is unavailable the whole call fails and
+     * nothing is written, so a coordinator never ends up with a partial hold they
+     * didn't ask for.
+     */
+    @Transactional
+    public List<VenueBooking> holdVenue(Long venueId, LocalDate startDate, int days, String heldBy) {
+        if (days < 1 || days > MAX_HOLD_DAYS) {
+            throw new BusinessException("A hold must cover between 1 and " + MAX_HOLD_DAYS + " days");
+        }
+
+        LocalDate today = LocalDate.now();
+        if (startDate.isBefore(today)) {
+            throw new BusinessException("Cannot hold a date in the past: " + startDate);
+        }
+
+        Venue venue = getByIdForUpdate(venueId);
+        if (!venue.isActive()) {
+            throw new BusinessException("Venue is not active: " + venue.getName());
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime expiresAt = now.plusHours(holdExpiryHours);
+        List<VenueBooking> result = new ArrayList<>();
+
+        for (int i = 0; i < days; i++) {
+            LocalDate date = startDate.plusDays(i);
+
+            if (eventRepository.isVenueBookedOn(venueId, date, DEAD_STATUSES)) {
+                throw new BusinessException(
+                        String.format("Venue %s already has an event on %s", venue.getName(), date),
+                        "VENUE_CONFLICT");
+            }
+
+            VenueBooking existing = venueBookingRepository.findByVenueAndDate(venueId, date).orElse(null);
+
+            if (existing != null) {
+                if (existing.getStatus() == VenueBooking.BookingStatus.CONFIRMED) {
+                    throw new BusinessException(
+                            String.format("Venue %s is already booked on %s", venue.getName(), date),
+                            "VENUE_CONFLICT");
+                }
+                if (existing.isActiveHold(now)) {
+                    throw new BusinessException(
+                            String.format("Venue %s is already held on %s by %s until %s",
+                                    venue.getName(), date, existing.getHeldBy(), existing.getExpiresAt()),
+                            "VENUE_HELD");
+                }
+                // Cancelled or expired: recycle the row rather than insert and trip uq_venue_date.
+                existing.setStatus(VenueBooking.BookingStatus.HELD);
+                existing.setEvent(null);
+                existing.setExpiresAt(expiresAt);
+                existing.setHeldBy(heldBy);
+                result.add(venueBookingRepository.save(existing));
+                continue;
+            }
+
+            try {
+                VenueBooking hold = VenueBooking.builder()
+                        .venue(venue)
+                        .event(null)
+                        .bookingDate(date)
+                        .status(VenueBooking.BookingStatus.HELD)
+                        .expiresAt(expiresAt)
+                        .heldBy(heldBy)
+                        .build();
+                // saveAndFlush so a concurrent insert surfaces here, not at commit.
+                result.add(venueBookingRepository.saveAndFlush(hold));
+            } catch (DataIntegrityViolationException e) {
+                log.warn("Hold conflict: venue {} on {}", venueId, date);
+                throw new BusinessException(
+                        String.format("Venue %s was just taken on %s", venue.getName(), date),
+                        "VENUE_CONFLICT");
+            }
+        }
+
+        log.info("{} held venue {} for {} day(s) from {}", heldBy, venueId, days, startDate);
+        return result;
+    }
+
+    /** Releases one held date. Confirmed bookings are not touched by this path. */
+    @Transactional
+    public void releaseHold(Long bookingId) {
+        VenueBooking booking = venueBookingRepository.findById(bookingId)
+                .orElseThrow(() -> new EntityNotFoundException("VenueBooking", bookingId));
+
+        if (booking.getStatus() != VenueBooking.BookingStatus.HELD) {
+            throw new BusinessException(
+                    "Booking " + bookingId + " is not a hold, it is " + booking.getStatus(),
+                    "NOT_A_HOLD");
+        }
+
+        Long venueId = booking.getVenue().getId();
+        LocalDate date = booking.getBookingDate();
+        requireReleasableHold(booking);
+        venueBookingRepository.delete(booking);
+        log.info("Released hold {} on venue {} for {}", bookingId, venueId, date);
+    }
+
+
     @Transactional
     public List<VenueBooking> bookVenue(Long venueId, Long eventId, LocalDate startDate, LocalDate endDate) {
         Venue venue = getByIdForUpdate(venueId);
@@ -299,8 +615,10 @@ public class VenueService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event", eventId));
 
+
         Integer expectedAttendees = event.getInquiry() != null
                 ? event.getInquiry().getExpectedAttendees() : null;
+        if (event.getInquiry() != null) LayoutCapacity.requireFit(venue, event.getInquiry().getTableSetup(), expectedAttendees);
         if (exceedsCapacity(venue, expectedAttendees)) {
             throw new BusinessException(
                     String.format("Venue capacity is %d, but this event expects %d attendees.",
@@ -319,8 +637,10 @@ public class VenueService {
         }
 
         // 2. Calculate the full blocked range including buffers
-        LocalDate blockStart = startDate.minusDays(venue.getSetupBufferDays());
-        LocalDate blockEnd = actualEndDate.plusDays(venue.getTeardownBufferDays());
+        String eventType = event.getInquiry() == null ? null : event.getInquiry().getEventType();
+        var window = bookingWindow(venue, eventType, startDate, actualEndDate);
+        LocalDate blockStart = window.from();
+        LocalDate blockEnd = window.through();
 
         if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(venueId, blockStart, blockEnd)) {
             throw new BusinessException("Venue is unavailable during the event setup or booking period.",
@@ -349,6 +669,9 @@ public class VenueService {
                             throw new BusinessException("Venue is already booked on " + bookingDate, "VENUE_CONFLICT");
                         }
                         existing.setEvent(event);
+                        if (existing.isActiveHold(LocalDateTime.now()) && !java.util.Objects.equals(
+                                existing.getHeldBy(), "contract:" + event.getInquiry().getId()))
+                            throw new BusinessException("The venue is held for another booking on " + bookingDate, "VENUE_HELD");
                         existing.setStatus(VenueBooking.BookingStatus.CONFIRMED);
                         return existing;
                     })
@@ -366,18 +689,48 @@ public class VenueService {
             return venueBookingRepository.saveAll(bookings);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException("Concurrent booking detected.", "VENUE_CONFLICT");
+
         }
+    }
+
+    @Transactional
+    public void holdForContract(Long inquiryId, Long venueId, LocalDate from, LocalDate through, java.time.Instant deadline) {
+        getByIdForUpdate(venueId);
+        if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(venueId, from, through))
+            throw new BusinessException("The venue is blocked during the requested booking window.", "VENUE_UNAVAILABLE");
+        int days = Math.toIntExact(java.time.temporal.ChronoUnit.DAYS.between(from, through) + 1);
+        var rows = holdVenue(venueId, from, days, "contract:" + inquiryId);
+        var expiry = java.time.LocalDateTime.ofInstant(deadline, java.time.ZoneId.systemDefault());
+        rows.forEach(row -> row.setExpiresAt(expiry));
+        venueBookingRepository.saveAll(rows);
+    }
+
+    public boolean hasContractHold(Long inquiryId, Long venueId, LocalDate from, LocalDate through) {
+        return venueBookingRepository.findByVenueId(venueId).stream()
+                .filter(row -> !row.getBookingDate().isBefore(from) && !row.getBookingDate().isAfter(through))
+                .filter(row -> row.isActiveHold(LocalDateTime.now()) && java.util.Objects.equals(row.getHeldBy(), "contract:" + inquiryId))
+                .count() == java.time.temporal.ChronoUnit.DAYS.between(from, through) + 1;
+    }
+
+    @Transactional
+    public void releaseContractHolds(Long inquiryId) {
+        var rows = venueBookingRepository.findAll().stream().filter(row -> ("contract:" + inquiryId).equals(row.getHeldBy())
+                && row.getStatus() == VenueBooking.BookingStatus.HELD).toList();
+        for (var row : rows) { getByIdForUpdate(row.getVenue().getId()); row.setStatus(VenueBooking.BookingStatus.CANCELLED); }
+        venueBookingRepository.saveAll(rows);
     }
 
     @Transactional
     public void cancelVenueBooking(Long bookingId) {
         VenueBooking booking = venueBookingRepository.findById(bookingId)
                 .orElseThrow(() -> new EntityNotFoundException("VenueBooking", bookingId));
+        requireReleasableHold(booking);
 
         booking.setStatus(VenueBooking.BookingStatus.CANCELLED);
         venueBookingRepository.save(booking);
         log.info("Cancelled venue booking {}", bookingId);
     }
+
 
     @Transactional
     public void cancelVenueBookingsForEvent(Long eventId) {
@@ -388,6 +741,12 @@ public class VenueService {
         venueBookingRepository.saveAll(bookings);
         log.info("Cancelled {} venue bookings for event {}", bookings.size(), eventId);
     }
+
+    private void requireReleasableHold(VenueBooking booking) {
+        if (booking.isActiveHold(LocalDateTime.now()) && booking.getHeldBy() != null && booking.getHeldBy().startsWith("contract:"))
+            throw new BusinessException("This signed contract protects the venue until the payment deadline.", "CONTRACT_HOLD_PROTECTED");
+    }
+
 
     @Transactional(readOnly = true)
     public List<VenueBookingResponse> getVenueBookings(Long venueId) {
@@ -444,7 +803,7 @@ public class VenueService {
                 && expectedAttendees > venue.getCapacity();
     }
 
-    private Venue getByIdForUpdate(Long id) {
+    Venue getByIdForUpdate(Long id) {
         return venueRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException("Venue not found with id: " + id));
     }

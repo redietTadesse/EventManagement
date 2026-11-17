@@ -12,7 +12,7 @@ function ExcludedVendorList({ excludedVendors = [] }) {
         {excludedVendors.map((vendor, index) => (
           <li key={vendor.vendorId || index} className="text-xs text-rose-800">
             <span className="font-medium">{vendor.companyName || vendor.vendorName || 'Vendor'}</span>
-            <span> — {vendor.reason || 'Not eligible for this event.'}</span>
+            <span> — {vendor.reason || 'Does not meet the requirements for this event.'}</span>
           </li>
         ))}
       </ul>
@@ -43,7 +43,7 @@ function AssignmentDecisionPanel({
         <span>
           <span className="block text-sm font-semibold text-slate-900">Assignment decision</span>
           <span className="block text-xs text-slate-600">
-            {decisionLoading ? 'Refreshing eligibility' : `${alternativeVendors.length} eligible alternative${alternativeVendors.length === 1 ? '' : 's'}`}
+            {decisionLoading ? 'Checking vendors' : `${alternativeVendors.length} eligible alternative${alternativeVendors.length === 1 ? '' : 's'}`}
           </span>
         </span>
         <ChevronDownIcon className={`h-4 w-4 shrink-0 text-indigo-700 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -55,7 +55,7 @@ function AssignmentDecisionPanel({
           {decisionLoading && <p role="status" className="text-xs text-slate-500">Checking event-specific vendor eligibility…</p>}
           {decisionError && <p role="alert" className="text-xs text-rose-700">{decisionError}</p>}
           {!decisionLoading && !decisionError && alternativeVendors.length === 0 && (
-            <p className="text-xs text-slate-600">No eligible alternative is available for this category and event date.</p>
+            <p className="text-xs text-slate-600">No suitable replacement is available for this service and date.</p>
           )}
           {alternativeVendors.slice(0, 4).map((vendor, index) => (
             <div key={vendor.id || vendor.vendorId || index} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
@@ -255,4 +255,3 @@ export default function PipelineLadder({
     </div>
   );
 }
-

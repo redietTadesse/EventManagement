@@ -35,6 +35,8 @@ public class Venue {
 
     @PositiveOrZero
     private Integer capacity;
+    @Column(name = "layout_capacities", columnDefinition = "TEXT")
+    private String layoutCapacities;
 
     @Size(max = 255)
     private String location;

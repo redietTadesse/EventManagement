@@ -25,7 +25,7 @@ public class EmailController {
     private final EmailService emailService;
 
     @GetMapping("/log")
-    @Operation(summary = "Get email log", description = "Returns list of emails that would have been sent (for testing)")
+    @Operation(summary = "Get email log", description = "Returns recent email attempts and their delivery outcomes for this server session")
     public ResponseEntity<List<String>> getEmailLog() {
         return ResponseEntity.ok(emailService.getEmailLog());
     }

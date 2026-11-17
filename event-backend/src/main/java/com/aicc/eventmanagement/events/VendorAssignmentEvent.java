@@ -1,7 +1,7 @@
 package com.aicc.eventmanagement.events;
 
-import com.aicc.eventmanagement.entities.VendorAssignment;
 import lombok.Getter;
+import com.aicc.eventmanagement.entities.VendorAssignment;
 import org.springframework.context.ApplicationEvent;
 
 /**

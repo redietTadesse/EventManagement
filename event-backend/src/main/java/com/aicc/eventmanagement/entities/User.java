@@ -36,6 +36,9 @@ public class User {
     private String fullName;
 
     private String phone;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name="google_subject",unique=true)
+    private String googleSubject;
 
     // FIXED: Removed the duplicate column and the 'countByIsActive' typo
     @Column(name = "is_active")
@@ -48,5 +51,5 @@ public class User {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-    } 
+    }
 }

@@ -29,6 +29,20 @@ public class Inquiry {
     @Column(name = "client_id", nullable = false)
     private Long clientId;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @ManyToOne
+    @JoinColumn(name = "coordinator_id")
+    private User coordinator;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "coordinator_version", nullable = false)
+    private long coordinatorVersion;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @OneToMany(mappedBy = "inquiry", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private java.util.List<CoordinatorAssignmentHistory> coordinatorHistory = new java.util.ArrayList<>();
+
     @NotBlank(message = "Client name is required")
     @Size(max = 100, message = "Client name must not exceed 100 characters")
     @Column(name = "client_name", nullable = false)
@@ -54,6 +68,16 @@ public class Inquiry {
 
     @Column(columnDefinition = "TEXT")
     private String requirements;
+
+    @Column(name = "table_setup", length = 30)
+    private String tableSetup;
+    @Column(name = "event_name", length = 200)
+    private String eventName;
+    @Column(name = "unmet_needs", columnDefinition = "TEXT")
+    private String unmetNeeds;
+    private String experience;
+    @Column(name = "proposal_version", nullable = false)
+    private int proposalVersion;
 
     // FIXED: Only one declaration of requestedCategories
     @Column(name = "requested_categories", columnDefinition = "TEXT")

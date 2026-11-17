@@ -4,7 +4,7 @@ import { ToastProvider } from './context/ToastContext';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import RootRedirect from './components/RootRedirect';
-import PortalSelect from './components/PortalSelect';
+import LandingPage from './components/LandingPage';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
 import VendorApplication from './components/VendorApplication';
@@ -15,6 +15,7 @@ import ClientInquiries from './client/ClientInquiries';
 import ClientInquiryDetail from './client/ClientInquiryDetail';
 import ClientEventHistory from './client/ClientEventHistory';
 import ClientEventDetail from './client/ClientEventDetail';
+import ClientVenues from './client/ClientVenues';
 
 import CoordinatorDashboard from './coordinator/Dashboard';
 import AllInquiries from './coordinator/AllInquiries';
@@ -22,6 +23,9 @@ import InquiryDetail from './coordinator/InquiryDetail';
 import Events from './coordinator/Events';
 import EventDetail from './coordinator/EventDetail';
 import Venues from './coordinator/Venues';
+import VenueSchedule from './coordinator/VenueSchedule';
+import BookingFollowups from './coordinator/BookingFollowups';
+import AutomaticAssistance from './coordinator/AutomaticAssistance';
 import VenueDetail from './coordinator/VenueDetail';
 import MasterCalendar from './components/MasterCalendar';
 import AvailabilityGrid from './coordinator/AvailabilityGrid';
@@ -33,7 +37,9 @@ import AssignmentDetail from './vendor/AssignmentDetail';
 import OpenAssignments from './vendor/OpenAssignments';
 
 import AdminDashboard from './admin/Dashboard';
+import AdminCoordinators from './admin/Coordinators';
 import VendorManagement from './admin/VendorManagement';
+import VendorApplications from './admin/VendorApplications';
 import VendorForm from './admin/VendorForm';
 import VendorDetail from './admin/VendorDetail';
 import AdminVenues from './admin/Venues';
@@ -41,8 +47,7 @@ import AdminVenues from './admin/Venues';
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public Routes */}
-      <Route path="/" element={<PortalSelect />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/login/:portal?" element={<Login />} />
       <Route path="/vendor-application" element={<VendorApplication />} />
@@ -50,6 +55,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute allowedRoles={['CLIENT']} />}>
         <Route path="/client/dashboard" element={<ClientDashboard />} />
         <Route path="/client/new-inquiry" element={<NewInquiry />} />
+        <Route path="/client/venues" element={<ClientVenues />} />
         <Route path="/client/inquiries" element={<ClientInquiries />} />
         <Route path="/client/inquiries/:id" element={<ClientInquiryDetail />} />
         <Route path="/client/events" element={<ClientEventHistory />} />
@@ -62,6 +68,9 @@ function AppRoutes() {
         <Route path="/coordinator/inquiries/:id" element={<InquiryDetail />} />
         <Route path="/coordinator/events" element={<Events />} />
         <Route path="/coordinator/events/:id" element={<EventDetail />} />
+        <Route path="/coordinator/assistance" element={<AutomaticAssistance />} />
+        <Route path="/coordinator/follow-ups" element={<BookingFollowups />} />
+        <Route path="/coordinator/venue-schedule" element={<VenueSchedule />} />
         <Route path="/coordinator/venues" element={<Venues />} />
         <Route path="/coordinator/venues/:id" element={<VenueDetail />} />
         <Route path="/coordinator/calendar" element={<MasterCalendar />} />
@@ -78,14 +87,15 @@ function AppRoutes() {
 
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/coordinators" element={<AdminCoordinators />} />
         <Route path="/admin/vendors" element={<VendorManagement />} />
+        <Route path="/admin/vendor-applications" element={<VendorApplications />} />
         <Route path="/admin/vendors/new" element={<VendorForm />} />
         <Route path="/admin/vendors/:id/edit" element={<VendorForm />} />
         <Route path="/admin/vendors/:id" element={<VendorDetail />} />
         <Route path="/admin/venues" element={<AdminVenues />} />
       </Route>
 
-      {/* Fallback */}
       <Route path="*" element={<RootRedirect />} />
     </Routes>
   );

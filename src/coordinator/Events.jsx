@@ -5,6 +5,9 @@ import StatusBadge from '../components/StatusBadge';
 import ResponsiveTable from '../components/ResponsiveTable';
 import EmptyState from '../components/EmptyState';
 import api from '../api/axios';
+import { eventPage } from '../utils/eventPages';
+import EventPageControls from '../components/EventPageControls';
+import { useApp } from '../context/AppContext';
 
 const EVENT_STATUS_OPTIONS = [
   { value: 'EVENT_CREATED', label: 'Event created' },
@@ -32,6 +35,9 @@ const formatEventDate = (value) => {
 };
 
 export default function Events() {
+  const { state } = useApp();
+  const [ownership, setOwnership] = useState('all');
+  const [pageNumber, setPageNumber] = useState(1);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -39,6 +45,7 @@ export default function Events() {
   const [dateTo, setDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const requestController = useRef(null);
+  useEffect(() => { setPageNumber(1); }, [ownership, dateFrom, dateTo, statusFilter]);
 
   const loadEvents = useCallback(async () => {
     requestController.current?.abort();
@@ -76,10 +83,13 @@ export default function Events() {
     if (dateFrom && eventEnd < dateFrom) return false;
     if (dateTo && eventStart > dateTo) return false;
     if (statusFilter && event.status !== statusFilter) return false;
+    if (ownership === 'mine' && event.coordinator?.id !== state.currentUser?.id) return false;
+    if (ownership === 'unassigned' && event.coordinator) return false;
     return true;
   });
 
   const invalidDateRange = dateFrom && dateTo && dateFrom > dateTo;
+  const page = eventPage(filteredEvents, pageNumber);
 
   return (
     <Layout title="Events">
@@ -94,6 +104,15 @@ export default function Events() {
         {/* Filters */}
         <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-4">
           <div className="flex flex-wrap gap-3">
+            <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+              Coordinator ownership
+              <select value={ownership} onChange={(event) => setOwnership(event.target.value)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <option value="all">All events</option>
+                <option value="mine">My events</option>
+                <option value="unassigned">Unassigned events</option>
+              </select>
+            </label>
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
               From date
               <input
@@ -125,7 +144,7 @@ export default function Events() {
             </select>
             <button
               type="button"
-              onClick={() => { setDateFrom(''); setDateTo(''); setStatusFilter(''); }}
+              onClick={() => { setDateFrom(''); setDateTo(''); setStatusFilter(''); setOwnership('all'); }}
               className="self-end px-3 py-2 text-sm text-slate-500 hover:text-slate-700"
             >
               Clear
@@ -173,6 +192,7 @@ export default function Events() {
                   <span className="text-sm text-slate-600 font-medium">{event.name || 'Untitled event'}</span>
                 )},
                 { key: 'client', label: 'Client', render: (event) => event.clientName || 'Client unavailable' },
+                { key: 'coordinator', label: 'Handled by', render: (event) => event.coordinator?.name || 'Unassigned' },
                 { key: 'date', label: 'Date range', render: (event) => (
                   <span>
                     {formatEventDate(event.eventDate)}
@@ -191,10 +211,11 @@ export default function Events() {
                   </Link>
                 )},
               ]}
-              data={invalidDateRange ? [] : filteredEvents}
+              data={invalidDateRange ? [] : page.rows}
             />
           )}
         </div>
+        {!loading && !loadError && !invalidDateRange && <EventPageControls page={page} onChange={setPageNumber} />}
       </div>
     </Layout>
   );

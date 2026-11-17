@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import VendorPerformanceModal from '../components/VendorPerformanceModal';
+import VendorDateBlocks from './VendorDateBlocks';
 import api from '../api/axios';
 import { normalizeVendor } from '../utils/vendors';
 
@@ -47,6 +48,7 @@ export default function VendorDetail() {
         {[['Company name', vendor.companyName], ['Service category', vendor.serviceCategory], ['Email', vendor.email], ['Phone', vendor.phone], ['Insurance expiry', vendor.insuranceExpiryDate], ['Rating', vendor.rating == null ? 'Not rated' : `${vendor.rating} / 5`]].map(([label, value]) => <div key={label}><dt className="text-sm text-slate-500">{label}</dt><dd className="break-words font-medium">{value || '—'}</dd></div>)}
       </dl>{vendor.description && <p className="mt-5 whitespace-pre-wrap text-sm text-slate-600">{vendor.description}</p>}</section>
       <div className="flex flex-wrap gap-3"><Link to={`/admin/vendors/${id}/edit`} className="rounded-lg bg-indigo-600 px-4 py-2 text-white">Edit Vendor</Link><button disabled={saving} onClick={toggle} className="rounded-lg border px-4 py-2 disabled:opacity-50">{saving ? 'Saving…' : vendor.isActive ? 'Deactivate' : 'Activate'}</button><button onClick={() => setProfileOpen(true)} className="rounded-lg border px-4 py-2">Performance and history</button></div>
+      <VendorDateBlocks key={vendor.id} vendorId={vendor.id} />
       {profileOpen && <VendorPerformanceModal vendorId={vendor.id} onClose={() => setProfileOpen(false)} />}
     </>}
   </div></Layout>;

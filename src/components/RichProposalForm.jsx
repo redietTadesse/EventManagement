@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { pricingTiers } from '../utils/constants';
 import { useApp } from '../context/AppContext';
 import VendorSuggestions from './VendorSuggestions';
 import api from '../api/axios';
 import { proposalDraft } from '../utils/proposals';
+import InquiryDateCalendar from '../client/InquiryDateCalendar';
+import TentativeVenueRequests from './TentativeVenueRequests';
 
 /**
  * Coordinator proposal composer.
@@ -15,7 +16,7 @@ import { proposalDraft } from '../utils/proposals';
  *   venue            String  (required)
  *   venueId          Long
  *   venueDetails     String  (JSON-serialised, NOT an object)
- *   price            Integer (required, >= 0)
+ *   price            Integer (required, > 0)
  *   terms            String  (required)
  *   vendorShortlist  Map<String, List<Long>>  (values MUST be arrays of vendor IDs)
  *   pricingTier      String
@@ -36,6 +37,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     customPrice: '',
     terms: '',
     vendorShortlist: {}, // category -> array of vendor IDs
+    eventName: inquiry?.eventName || '', eventDate: inquiry?.eventDate || '',
+    endDate: inquiry?.endDate || '', expectedAttendees: inquiry?.expectedAttendees || 1,
+    tableSetup: inquiry?.tableSetup || 'THEATRE',
   });
 
   const [selectedCategories, setSelectedCategories] = useState(() => {
@@ -51,7 +55,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           ? JSON.parse(inquiry.proposal)
           : inquiry.proposal;
 
-        setFormData(proposalDraft(proposal));
+        setFormData(previous=>({...previous,...proposalDraft(proposal)}));
 
         if (proposal.categories?.length) {
           setSelectedCategories(proposal.categories);
@@ -67,7 +71,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
   useEffect(() => {
     if (!inquiry?.eventType) return;
     let cancelled = false;
-    api.get('/vendors/service-categories', { params: { eventType: inquiry.eventType } })
+    api.get('/vendors/service-categories')
       .then((response) => {
         if (cancelled) return;
         const canonicalCategories = response.data || [];
@@ -99,7 +103,8 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     setLoading(true);
     setError('');
 
-    fetchAvailableVenues(inquiry.eventDate, inquiry.expectedAttendees, inquiry.endDate)
+    api.get('/venues/available',{params:{date:formData.eventDate,endDate:formData.endDate||formData.eventDate,
+      attendees:formData.expectedAttendees,eventType:inquiry.eventType,tableSetup:formData.tableSetup,inquiryId:editMode?inquiry.id:undefined}}).then(({data})=>data)
       .then((venueList) => {
         if (cancelled) return;
         setVenues(venueList || []);
@@ -110,21 +115,12 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [inquiry?.eventDate, inquiry?.endDate, inquiry?.expectedAttendees, fetchAvailableVenues]);
+  }, [formData.eventDate, formData.endDate, formData.expectedAttendees, formData.tableSetup, inquiry?.eventType]);
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 
-  // The configured venue rate is treated as a daily base rate for proposals.
-  const basePrice = Number(selectedVenue?.hourlyRate) || 0;
-  const tierMultiplier = pricingTiers[formData.pricingTier]?.multiplier || 1;
-  const start = new Date(inquiry?.eventDate);
-  const end = new Date(inquiry?.endDate || inquiry?.eventDate);
-  const days = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
-    ? 1
-    : Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
-  const calculatedPrice = formData.customPrice
-    ? parseInt(formData.customPrice, 10)
-    : Math.round(basePrice * tierMultiplier * days);
+  const quotedPrice = Number(formData.customPrice);
+  const validPrice = Number.isInteger(quotedPrice) && quotedPrice > 0 && quotedPrice <= 2147483647;
 
   const toggleVendorForCategory = (category, vendorId) => {
     setFormData((prev) => {
@@ -143,7 +139,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
   const handlePrev = () => setStep(step - 1);
 
   const handleSubmit = async () => {
-    if (!inquiry) return;
+    if (!inquiry || !validPrice) return;
     setSubmitting(true);
     setError('');
     try {
@@ -166,11 +162,14 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
               location: selectedVenue.location,
             })
           : null,
-        price: Number.isFinite(calculatedPrice) ? calculatedPrice : 0,
+        price: quotedPrice,
         terms: formData.terms,
         vendorShortlist: shortlist,
         pricingTier: formData.pricingTier,
         categories: selectedCategories,
+        eventName: formData.eventName, eventDate: formData.eventDate, endDate: formData.endDate||formData.eventDate,
+        expectedAttendees: Number(formData.expectedAttendees), tableSetup: formData.tableSetup,
+        expectedVersion: inquiry.proposalVersion,
       };
 
       const saved = editMode
@@ -198,6 +197,15 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
       {step === 1 && (
         <div>
+          <TentativeVenueRequests start={formData.eventDate} end={formData.endDate||formData.eventDate}/>
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">Event name<input maxLength={200} className="mt-1 w-full rounded-lg border p-2" value={formData.eventName} onChange={e=>setFormData({...formData,eventName:e.target.value})}/></label>
+            <label className="text-sm">Attendance<input type="number" min={1} className="mt-1 w-full rounded-lg border p-2" value={formData.expectedAttendees} onChange={e=>setFormData({...formData,expectedAttendees:e.target.value})}/></label>
+            <label className="text-sm">Start date<input type="date" className="mt-1 w-full rounded-lg border p-2" value={formData.eventDate} onChange={e=>setFormData({...formData,eventDate:e.target.value})}/></label>
+            <label className="text-sm">End date<input type="date" className="mt-1 w-full rounded-lg border p-2" value={formData.endDate} onChange={e=>setFormData({...formData,endDate:e.target.value})}/></label>
+            <label className="text-sm">Seating setup<select className="mt-1 w-full rounded-lg border p-2" value={formData.tableSetup} onChange={e=>setFormData({...formData,tableSetup:e.target.value,venueId:''})}>{['THEATRE','CLASSROOM','BANQUET','CABARET','BOARDROOM','U_SHAPE','UNDECIDED'].map(value=><option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}</select></label>
+          </div>
+          {editMode&&<p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm">Sending a revised proposal saves the previous version. Any existing acceptance, signatures and payment hold will be replaced. The client must accept and sign the new terms.</p>}
           <h3 className="font-semibold text-lg mb-4">Step 1: Venue &amp; Pricing</h3>
           <div className="space-y-4">
             <div>
@@ -222,18 +230,21 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                 {venues.map(v => (
                   <option key={v.id} value={v.id}>
                     {v.name}
-                    {v.capacity ? ` (Capacity: ${v.capacity}` : ' ('}
-                    {v.hourlyRate ? `, Base Daily Rate: ETB ${Number(v.hourlyRate).toLocaleString()}/day)` : ')'}
+                    {v.capacity ? ` (Capacity: ${v.capacity})` : ''}
                   </option>
                 ))}
               </select>
-              {!loading && venues.length === 0 && (
+              {!loading && !error && venues.length === 0 && (
                 <p className="text-sm text-amber-700 mt-1">
-                  No venues are available on {inquiry?.eventDate}. Every venue is either booked
-                  or none are registered.
+                  No suitable venue is available for the requested dates and attendance.
                 </p>
               )}
             </div>
+
+            {inquiry?.eventDate && (
+              <InquiryDateCalendar key={inquiry.id} readOnly eventType={inquiry.eventType} start={inquiry.eventDate}
+                end={inquiry.endDate || ''} attendees={inquiry.expectedAttendees} />
+            )}
 
             {selectedVenue && (
               <div className="p-3 bg-ice/10 rounded-lg">
@@ -246,46 +257,21 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                 {selectedVenue.description && (
                   <p className="text-sm"><strong>Notes:</strong> {selectedVenue.description}</p>
                 )}
-                <p className="text-sm">
-                  <strong>Base Daily Rate:</strong>{' '}
-                  {selectedVenue.hourlyRate
-                    ? `ETB ${Number(selectedVenue.hourlyRate).toLocaleString()}/day`
-                    : 'Not set'}
-                </p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Pricing Tier</label>
-              <div className="grid grid-cols-3 gap-2">
-                {Object.entries(pricingTiers).map(([key, tier]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, pricingTier: key })}
-                    className={`p-3 rounded-lg border-2 text-left ${
-                      formData.pricingTier === key
-                        ? 'border-navy bg-navy/10 text-navy'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="font-medium">{tier.name}</div>
-                    <div className="text-xs text-slate-500">{tier.multiplier}x venue rate</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Custom Price (ETB)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Quoted total (ETB)</label>
               <input
                 type="number"
-                placeholder={`Calculated: ETB ${calculatedPrice.toLocaleString()}`}
+                min={1}
+                step={1}
+                required
                 value={formData.customPrice}
                 onChange={(e) => setFormData({ ...formData, customPrice: e.target.value })}
                 className="w-full rounded-lg border-slate-300 shadow-sm focus:border-navy focus:ring-navy"
               />
-              <p className="text-xs text-slate-500 mt-1">Leave empty to use calculated price</p>
+              <p className="text-xs text-slate-500 mt-1">Enter the total you are quoting for the full booking window and agreed services.</p>
             </div>
 
             <div>
@@ -294,7 +280,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                 value={formData.terms}
                 onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
                 rows={3}
-                placeholder="Payment terms, cancellation policy, etc."
+                placeholder="Include payment instructions, due dates, and cancellation terms."
                 className="w-full rounded-lg border-slate-300 shadow-sm focus:border-navy focus:ring-navy"
                 required
               />
@@ -307,7 +293,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
             <button
               onClick={handleNext}
               className="btn-primary"
-              disabled={!selectedVenue || !formData.terms.trim()}
+              disabled={!selectedVenue || !validPrice || !formData.terms.trim()}
             >
               Next: Suggest Vendors →
             </button>
@@ -317,9 +303,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
       {step === 2 && (
         <div>
-          <h3 className="font-semibold text-lg mb-4">Step 2: Vendor Shortlist</h3>
+          <h3 className="font-semibold text-lg mb-4">Step 2: Preferred vendors</h3>
           <p className="text-sm text-slate-500 mb-4">
-            Suggest preferred vendors for each category (client will see these recommendations).
+            Choose vendors to try first for each service. The client will see these choices. After acceptance and payment review, the system checks them before sending offers. Saved client preferences come first. If these vendors cannot take the work, the system tries other suitable vendors.
           </p>
           {inquiry?.requestedCategories?.length > 0 && (
             <p className="text-xs text-slate-500 mb-3">
@@ -348,7 +334,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           <div className="space-y-4">
             {categories.length === 0 && (
               <p className="text-sm text-amber-700">
-                No service categories are mapped for event type “{inquiry?.eventType}”.
+                An empty selection keeps the inquiry’s existing service categories.
               </p>
             )}
             {categories.map(cat => {
@@ -359,12 +345,16 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
                   <label className="block text-sm font-medium text-slate-700 mb-3 capitalize">
                     {cat.replace('_', ' ')}
                   </label>
-                  <VendorSuggestions
+                  {cat === 'venue' ? (
+                    <p className="text-sm text-slate-600">The AICC venue is selected in the venue step above.</p>
+                  ) : cat === 'catering' && inquiry?.eventType?.trim().toLowerCase() !== 'wedding' ? (
+                    <p className="text-sm text-slate-600">AICC provides catering in-house for this event. External catering vendors are available for weddings.</p>
+                  ) : <VendorSuggestions
                     category={cat}
                     eventDate={inquiry?.eventDate}
                     selectedVendorIds={chosenIds}
                     onSelectVendor={(vendor) => toggleVendorForCategory(cat, Number(vendor.id))}
-                  />
+                  />}
                 </div>
               );
             })}

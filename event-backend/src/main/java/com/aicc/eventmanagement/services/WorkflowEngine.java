@@ -30,7 +30,7 @@ public class WorkflowEngine {
         transitionTable.put(EventStatus.PROPOSAL_SENT,
                 Set.of(EventStatus.PROPOSAL_ACCEPTED, EventStatus.PROPOSAL_REJECTED));
         transitionTable.put(EventStatus.PROPOSAL_ACCEPTED,
-                Set.of(EventStatus.EVENT_CREATED));
+                Set.of(EventStatus.EVENT_CREATED, EventStatus.PROPOSAL_SENT));
         transitionTable.put(EventStatus.PROPOSAL_REJECTED, Set.of());
         transitionTable.put(EventStatus.EVENT_CREATED,
                 Set.of(EventStatus.AWAITING_VENDORS, EventStatus.NEEDS_COORDINATOR, EventStatus.CLOSED));
@@ -53,6 +53,7 @@ public class WorkflowEngine {
         transitionRoleMap.put("PROPOSAL_SENT_PROPOSAL_REJECTED", Set.of(Role.CLIENT));
 
         transitionRoleMap.put("PROPOSAL_ACCEPTED_EVENT_CREATED", Set.of(Role.COORDINATOR));
+        transitionRoleMap.put("PROPOSAL_ACCEPTED_PROPOSAL_SENT", Set.of(Role.COORDINATOR));
 
         transitionRoleMap.put("EVENT_CREATED_AWAITING_VENDORS", Set.of(Role.COORDINATOR));
         transitionRoleMap.put("EVENT_CREATED_NEEDS_COORDINATOR", Set.of(Role.COORDINATOR));

@@ -11,7 +11,6 @@ const initialState = {
   users: [],
   inquiries: [],
   vendors: [],
-  notifications: [],   // client-side only; no backend endpoint yet
   loading: false,
   error: null,
 };
@@ -26,12 +25,6 @@ const reducer = (state, action) => {
     case 'UPDATE_INQUIRY':
       return { ...state, inquiries: state.inquiries.map(i => i.id === action.payload.id ? action.payload : i) };
     case 'SET_VENDORS': return { ...state, vendors: action.payload };
-    case 'SET_NOTIFICATIONS': return { ...state, notifications: action.payload };
-    case 'ADD_NOTIFICATION': return { ...state, notifications: [action.payload, ...state.notifications] };
-    case 'MARK_NOTIFICATION_READ':
-      return { ...state, notifications: state.notifications.map(n => n.id === action.payload ? { ...n, isRead: true } : n) };
-    case 'MARK_ALL_READ':
-      return { ...state, notifications: state.notifications.map(n => ({ ...n, isRead: true })) };
     case 'SET_LOADING': return { ...state, loading: action.payload };
     case 'SET_ERROR':   return { ...state, error: action.payload };
     case 'CLEAR_ERROR': return { ...state, error: null };
@@ -62,17 +55,17 @@ export const AppProvider = ({ children }) => {
 
   // ===== AUTH =====
 
-   const login = async (username, password) => {
+  const login = async (username, password) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'CLEAR_ERROR' });
     try {
       const res = await authApi.post('/auth/login', { username, password });
 
       // Backend returns JwtResponse { accessToken, tokenType, role }
-      const { accessToken, token, jwt, role } = res.data || {};
-      const tokenValue = accessToken || token || jwt;
+      const { accessToken, role } = res.data || {};
+      const tokenValue = typeof accessToken === 'string' ? accessToken.trim() : '';
 
-      if (!tokenValue) {
+      if (!tokenValue || ['undefined', 'null'].includes(tokenValue)) {
         throw new Error('Login failed: no token returned by server');
       }
 
@@ -192,6 +185,7 @@ export const AppProvider = ({ children }) => {
       const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
       const body = {
+        ...proposal,
         venue,
         venueId: venueId ?? null,
         venueDetails: venueDetails == null
@@ -226,6 +220,7 @@ export const AppProvider = ({ children }) => {
       const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
       const body = {
+        ...proposal,
         venue,
         venueId: venueId ?? null,
         venueDetails: venueDetails == null
@@ -286,23 +281,6 @@ export const AppProvider = ({ children }) => {
     const res = await api.get(`/inquiries/${inquiryId}/conversion-preview`);
     return res.data;
   }, []);
-
-  const convertInquiryToEvent = useCallback(async (inquiryId, eventData) => {
-    try {
-      const res = await api.post(`/inquiries/${inquiryId}/convert`, eventData);
-      fetchInquiries().catch((refreshError) => {
-        console.warn('Event was created, but inquiries could not be refreshed.', refreshError);
-      });
-      showToast('Event created successfully', 'success');
-      return res.data;
-    } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || 'Failed to convert inquiry to event';
-      console.error('Convert error:', err);
-      console.error('Error response:', err.response?.data);
-      showToast(msg, 'error', 5000, true);
-      throw err;
-    }
-  }, [fetchInquiries, showToast]);
 
   // ===== ASSIGNMENTS =====
 
@@ -382,8 +360,8 @@ export const AppProvider = ({ children }) => {
 
   // ===== VENUES =====
 
-  const fetchAvailableVenues = useCallback(async (date, attendees, endDate) => {
-    const res = await api.get('/venues/available', { params: { date, attendees, endDate } });
+  const fetchAvailableVenues = useCallback(async (date, attendees, endDate, eventType) => {
+    const res = await api.get('/venues/available', { params: { date, attendees, endDate, eventType } });
     return res.data;
   }, []);
 
@@ -512,30 +490,13 @@ export const AppProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  // ===== NOTIFICATIONS (client-side only) =====
-
-  const addNotification = useCallback((notification) => {
-    dispatch({
-      type: 'ADD_NOTIFICATION',
-      payload: { id: Date.now(), isRead: false, createdAt: new Date().toISOString(), ...notification },
-    });
-  }, []);
-
-  const markNotificationRead = useCallback((id) => {
-    dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id });
-  }, []);
-
-  const markAllNotificationsRead = useCallback(() => {
-    dispatch({ type: 'MARK_ALL_READ' });
-  }, []);
-
   const value = {
     state,
     dispatch,
     login, registerClient, logout,
     fetchUsers, fetchVendors, toggleUserStatus, createVendor, toggleVendorStatus, fetchMyVendorProfile,
     fetchInquiries, fetchMyInquiries, fetchInquiryById, downloadInquiryQuote, createInquiry, updateInquiry,
-    sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion, convertInquiryToEvent,
+    sendProposal, updateProposal, acceptProposal, rejectProposal, previewConversion,
     fetchAssignmentsForEvent, respondToAssignment, claimAssignment, forceAssign, manuallyAssignForEvent, fetchOpenAssignments,
     fetchMyAssignments, fetchMyAssignment, rateAssignment,
     fetchAvailableVenues, fetchAllVenues, fetchVenueById, fetchVenueBookings,
@@ -544,7 +505,6 @@ export const AppProvider = ({ children }) => {
     fetchCoordinatorStats, fetchCoordinatorExceptions,
     fetchEventHistory, fetchInquiryHistory, fetchRecentHistory,
     fetchChecklist, createChecklist, updateChecklist, regenerateChecklist, toggleChecklistItem,
-    addNotification, markNotificationRead, markAllNotificationsRead,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

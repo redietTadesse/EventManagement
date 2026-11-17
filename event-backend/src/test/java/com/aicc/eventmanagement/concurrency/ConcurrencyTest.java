@@ -1,9 +1,10 @@
 package com.aicc.eventmanagement.concurrency;
 
 import com.aicc.eventmanagement.entities.Event;
-import com.aicc.eventmanagement.entities.Inquiry;
-import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorAssignment;
+import com.aicc.eventmanagement.entities.Inquiry;
+import java.time.LocalDate;
+import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
@@ -82,6 +83,7 @@ class ConcurrencyTest {
                 .vendor(vendor)
                 .vendorName(vendor.getCompanyName())
                 .serviceCategory("av")
+                    .serviceOrder("Two microphones and stage lighting")
                 .status(VendorAssignmentStatus.PENDING)
                 .build());
 

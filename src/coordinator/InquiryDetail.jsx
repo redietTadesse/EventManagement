@@ -1,27 +1,30 @@
+import InquiryBusinessDetails from '../components/InquiryBusinessDetails';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import AuditTimeline from '../components/AuditTimeline';
 import StatusBadge from '../components/StatusBadge';
 import RichProposalForm from '../components/RichProposalForm';
+import BookingAgreement from '../components/BookingAgreement';
 import ConversionPreviewModal from '../components/ConversionPreviewModal';
+import CoordinatorOwnership from '../components/CoordinatorOwnership';
+import InquiryEditForm from './InquiryEditForm';
 import { useApp } from '../context/AppContext';
 
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { fetchInquiryById, downloadInquiryQuote, convertInquiryToEvent, previewConversion, updateProposal } = useApp();
+  const { state, fetchInquiryById, downloadInquiryQuote, previewConversion, updateProposal } = useApp();
   const [loading, setLoading] = useState(true);
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [preview, setPreview] = useState(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [venueWarning, setVenueWarning] = useState('');
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
 
   const loadInquiry = useCallback(async () => {
     setLoading(true);
@@ -42,15 +45,9 @@ export default function InquiryDetail() {
   const handleOpenPreview = async () => {
     setPreviewLoading(true);
     setError('');
-    try {
-      const data = await previewConversion(id);
-      setPreview(data);
-      setShowPreview(true);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load preview');
-    } finally {
-      setPreviewLoading(false);
-    }
+    try { setPreview(await previewConversion(id)); }
+    catch (err) { setError(err.response?.data?.message || 'Could not load the booking preview.'); }
+    finally { setPreviewLoading(false); }
   };
 
   const handleDownloadQuote = async () => {
@@ -73,43 +70,6 @@ export default function InquiryDetail() {
     }
   };
 
-  const handleConfirmConvert = async () => {
-    setSubmitting(true);
-    setError('');
-    setVenueWarning('');
-    try {
-      // Auto-generate a sensible event name since we removed the manual input
-      const defaultName = `${inquiry.eventType.charAt(0).toUpperCase() + inquiry.eventType.slice(1)} - ${inquiry.clientName}`;
-
-      // The proposal's venue may have been booked by another event between
-      // proposal and convert. The preview tells us via venue.available — never
-      // send a known-booked venueId, or the backend 400s with VENUE_CONFLICT.
-      // Backend also degrades best-effort, but skipping upfront is cleaner.
-      const venueTaken = preview?.venue && preview.venue.available === false;
-      if (venueTaken) {
-        setVenueWarning(
-          preview.venue.message ||
-          'That venue is no longer available — converting without a venue booking. You can assign a free venue afterwards.'
-        );
-      }
-
-      const createdEvent = await convertInquiryToEvent(id, {
-        name: defaultName,
-        venue: venueTaken ? null : (preview?.venue?.venueName || null),
-        venueId: venueTaken ? null : (preview?.venue?.venueId || null),
-      });
-      setShowPreview(false);
-      navigate(`/coordinator/events/${createdEvent.id}`);
-    } catch (err) {
-      console.error('Convert error:', err);
-      console.error('Error response:', err.response?.data);
-      const errorMsg = err.response?.data?.message || err.response?.data || err.message || 'Failed to convert';
-      setError(errorMsg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   if (loading) {
     return (
       <Layout title="Inquiry Detail">
@@ -129,8 +89,9 @@ export default function InquiryDetail() {
   }
 
   const canConvert = inquiry?.status === 'PROPOSAL_ACCEPTED';
-  const canSendProposal = inquiry?.status === 'INQUIRY_SUBMITTED';
-  const canEditProposal = inquiry?.status === 'PROPOSAL_SENT';
+  const readOnly = inquiry.coordinator != null && String(inquiry.coordinator.id) !== String(state.currentUser?.id);
+  const canSendProposal = !readOnly && inquiry.status === 'INQUIRY_SUBMITTED';
+  const canEditProposal = !readOnly && ['PROPOSAL_SENT','PROPOSAL_ACCEPTED'].includes(inquiry.status);
 
   return (
     <Layout title="Inquiry Detail">
@@ -157,6 +118,14 @@ export default function InquiryDetail() {
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
+        <div className="md:col-span-2">
+          <CoordinatorOwnership key={id} inquiryId={id}
+            closed={['COMPLETED', 'CANCELLED', 'CLOSED', 'PROPOSAL_REJECTED'].includes(inquiry.event?.status || inquiry.status)}
+            onChanged={(coordinator) => setInquiry((previous) => ({ ...previous, coordinator }))} />
+        </div>
+        {readOnly && <p className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Read only. {inquiry.coordinator.name} is the lead coordinator. An administrator can reassign this inquiry.
+        </p>}
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex justify-between items-start">
             <h3 className="text-xl font-bold text-gray-800">Inquiry #{inquiry.id}</h3>
@@ -185,6 +154,8 @@ export default function InquiryDetail() {
                 <p className="font-medium capitalize">{inquiry.requestedCategories.join(', ')}</p>
               </div>
             )}
+            <InquiryBusinessDetails inquiry={inquiry} />
+            {inquiry.tableSetup && <p className="text-sm"><strong>Table and seating setup:</strong> {inquiry.tableSetup.replaceAll('_', ' ').toLowerCase()}</p>}
             {inquiry.requirements && (
               <div>
                 <p className="text-sm text-gray-500">Client Requirements</p>
@@ -192,9 +163,13 @@ export default function InquiryDetail() {
               </div>
             )}
           </div>
+          {canSendProposal && (editingDetails ? <InquiryEditForm key={id} inquiry={inquiry}
+            onSaved={saved => { setInquiry(saved); setEditingDetails(false); }}
+            onCancel={() => setEditingDetails(false)} />
+            : <button type="button" className="btn-outline mt-4" onClick={() => setEditingDetails(true)}>Edit inquiry details</button>)}
         </div>
 
-        {canSendProposal && (
+        {canSendProposal && !editingDetails && (
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Compose Proposal</h3>
             <RichProposalForm
@@ -264,31 +239,14 @@ export default function InquiryDetail() {
           </div>
         )}
 
-        {canConvert && (
-          <div className="bg-white rounded-xl shadow p-6 flex flex-col justify-center items-center text-center">
-            <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Proposal Accepted</h3>
-            <p className="text-sm text-gray-500 mb-6 max-w-sm">
-              The client has accepted the proposal. You are ready to create the event and assign vendors.
-            </p>
-            <button
-              onClick={handleOpenPreview}
-              disabled={previewLoading}
-              className="w-full max-w-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {previewLoading ? 'Analyzing...' : 'Review & Convert to Event'}
-            </button>
-            {venueWarning && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 max-w-sm">
-                {venueWarning}
-              </p>
-            )}
-          </div>
-        )}
+        {canConvert && <button type="button" className="rounded-lg border bg-white p-3"
+          disabled={previewLoading} onClick={handleOpenPreview}>
+          {previewLoading ? 'Checking options…' : 'Preview venue and vendor options'}
+        </button>}
+
+        {!readOnly && (canConvert || inquiry.event || inquiry.status === 'EVENT_CREATED') &&
+          <BookingAgreement key={inquiry.id} inquiryId={inquiry.id}
+            onBooked={event => navigate(`/coordinator/events/${event.id}`)} />}
 
         {!canConvert && !canSendProposal && (
           <div className="bg-white rounded-xl shadow p-6">
@@ -302,14 +260,11 @@ export default function InquiryDetail() {
         )}
       </div>
 
-      {showPreview && preview && (
-        <ConversionPreviewModal
-          preview={preview}
-          onConfirm={handleConfirmConvert}
-          onCancel={() => setShowPreview(false)}
-          submitting={submitting}
-        />
-      )}
+      {preview && <ConversionPreviewModal preview={preview} onCancel={() => setPreview(null)} />}
+      <div className="mt-6">
+        <AuditTimeline key={inquiry.id} referenceType="INQUIRY" referenceId={inquiry.id}
+          refreshKey={inquiry.updatedAt || inquiry.status} title="Inquiry history" expandedByDefault={false} />
+      </div>
     </Layout>
   );
 }

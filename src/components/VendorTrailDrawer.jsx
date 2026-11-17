@@ -97,7 +97,7 @@ export default function VendorDecisionHistory({ eventId, refreshKey = 0, expande
                         )}
                         {(snapshot.considered || []).length > 0 && (
                           <div className="overflow-x-auto mt-2">
-                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Eligible candidates ranked</p>
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Suitable vendors, in recommended order</p>
                             <div className="space-y-1">
                               {snapshot.considered.map((candidate, index) => (
                                 <div key={`${candidate.vendorId || candidate.vendorName}-${index}`} className="rounded bg-slate-800/70 px-2 py-2 text-xs">
