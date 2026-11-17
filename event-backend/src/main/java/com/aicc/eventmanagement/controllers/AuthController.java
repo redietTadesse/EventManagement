@@ -2,10 +2,12 @@ package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.enums.Role;
+import com.aicc.eventmanagement.enums.VendorApplicationStatus;
 import com.aicc.eventmanagement.payload.JwtResponse;
 import com.aicc.eventmanagement.payload.LoginRequest;
 import com.aicc.eventmanagement.payload.SignupRequest;
 import com.aicc.eventmanagement.repositories.UserRepository;
+import com.aicc.eventmanagement.repositories.VendorApplicationRepository;
 import com.aicc.eventmanagement.security.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,9 @@ public class AuthController {
     UserRepository userRepository;
 
     @Autowired
+    VendorApplicationRepository vendorApplicationRepository;
+
+    @Autowired
     PasswordEncoder encoder;
 
     @Autowired
@@ -29,6 +34,11 @@ public class AuthController {
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
         User user = userRepository.findByUsername(loginRequest.getUsername()).orElse(null);
 
+        if (user == null && isPendingVendorApplicant(loginRequest)) {
+            return ResponseEntity.status(403).body(
+                    "Your vendor application is still awaiting approval. You can sign in once an administrator approves it.");
+        }
+
         if (user == null || !encoder.matches(loginRequest.getPassword(), user.getPasswordHash())) {
             return ResponseEntity.badRequest().body("Error: Invalid username or password!");
         }
@@ -36,6 +46,17 @@ public class AuthController {
 
         String jwt = jwtUtils.generateJwtToken(user.getUsername(), user.getRole().name());
         return ResponseEntity.ok(new JwtResponse(jwt, user.getRole().name()));
+    }
+
+    // Only true when the password also matches, so this cannot be used to discover who has applied.
+    private boolean isPendingVendorApplicant(LoginRequest loginRequest) {
+        if (loginRequest.getUsername() == null || loginRequest.getPassword() == null) {
+            return false;
+        }
+        return vendorApplicationRepository
+                .findFirstByUsernameAndStatus(loginRequest.getUsername(), VendorApplicationStatus.PENDING)
+                .filter(a -> encoder.matches(loginRequest.getPassword(), a.getPasswordHash()))
+                .isPresent();
     }
 
     @PostMapping("/register")
