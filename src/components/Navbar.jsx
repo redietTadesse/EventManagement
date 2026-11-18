@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Dialog } from '@headlessui/react';
@@ -13,11 +12,13 @@ import {
   UsersIcon,
   ClipboardDocumentListIcon,
   PlusCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 
 import { useApp } from '../context/AppContext';
 import NotificationsBell from './NotificationsBell';
 import Brand from './Brand';
+import api from '../api/axios';
 
 const navigation = {
   CLIENT: [
@@ -33,6 +34,7 @@ const navigation = {
     ['/coordinator/events', 'Events', ClipboardDocumentListIcon],
     ['/coordinator/assistance', 'Automatic updates', InboxStackIcon],
     ['/coordinator/calendar', 'Calendar', CalendarDaysIcon],
+    ['/coordinator/incident-reviews', 'Incident reviews', ExclamationTriangleIcon],
     ['/coordinator/vendors', 'Vendor directory', UsersIcon],
     ['/coordinator/venue-schedule', 'Venue schedule', BuildingOffice2Icon],
     ['/coordinator/venues', 'Venue directory', BuildingOffice2Icon],
@@ -65,12 +67,37 @@ export default function Navbar({ title }) {
   } = useApp();
 
   const [open, setOpen] = useState(false);
+  const [pendingIncidents, setPendingIncidents] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
+
+  // Live count of pending incident reports for coordinators/admins.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role !== 'COORDINATOR' && currentUser.role !== 'ADMIN') return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const { data } = await api.get('/incidents/pending/count');
+        if (!cancelled) setPendingIncidents(Number(data) || 0);
+      } catch {
+        // Ignore — the badge just stays at its last value.
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [currentUser, location.pathname]);
 
   if (!currentUser) {
     return null;
@@ -136,7 +163,15 @@ export default function Navbar({ title }) {
               className="h-5 w-5 shrink-0"
               aria-hidden="true"
             />
-            <span>{label}</span>
+            <span className="flex-1">{label}</span>
+            {path === '/coordinator/incident-reviews' && pendingIncidents > 0 && (
+              <span
+                className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-none text-white"
+                aria-label={`${pendingIncidents} pending`}
+              >
+                {pendingIncidents}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

@@ -10,6 +10,7 @@ import EventOperationsPanel from '../components/EventOperationsPanel';
 import ChangeDateModal from '../components/ChangeDateModal';
 import EventIssues from '../components/EventIssues';
 import CoordinatorOwnership from '../components/CoordinatorOwnership';
+import CoordinatorReportModal from './CoordinatorReportModal';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -69,6 +70,7 @@ export default function EventDetail() {
   const [decisionLoadingByCategory, setDecisionLoadingByCategory] = useState({});
   const [decisionErrorByCategory, setDecisionErrorByCategory] = useState({});
   const [showDateModal, setShowDateModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [readinessRefresh, setReadinessRefresh] = useState(0);
   const [venueOptions, setVenueOptions] = useState([]);
   const [venueOptionsLoading, setVenueOptionsLoading] = useState(false);
@@ -628,6 +630,9 @@ useEffect(() => {
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={refreshingOperations || Boolean(lifecycleSaving)} onClick={handleRefreshOperations} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">{refreshingOperations ? 'Refreshing…' : 'Refresh event data'}</button>
                 {actions.reschedule && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => { setDateFeedback(''); setShowDateModal(true); }} className="rounded-lg border border-indigo-300 px-3 py-2 text-sm text-indigo-700 disabled:opacity-50">Change date</button>}
+                {event.status === 'COMPLETED' && (
+                  <button type="button" onClick={() => setShowReportModal(true)} className="rounded-lg border border-rose-300 px-3 py-2 text-sm text-rose-700 hover:bg-rose-50">Report Incident</button>
+                )}
                 {actions.complete && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => handleLifecycleAction('COMPLETED')} className="rounded-lg border border-emerald-300 px-3 py-2 text-sm text-emerald-700 disabled:opacity-50">{lifecycleSaving === 'COMPLETED' ? 'Completing…' : 'Complete event'}</button>}
                 {actions.cancel && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => handleLifecycleAction('CANCELLED')} className="rounded-lg border border-rose-300 px-3 py-2 text-sm text-rose-700 disabled:opacity-50">{lifecycleSaving === 'CANCELLED' ? 'Cancelling…' : 'Cancel event'}</button>}
               </div>
@@ -948,7 +953,7 @@ useEffect(() => {
       <ManualAssignModal
         isOpen={!readOnly && forceAssignModal}
         onClose={() => { if (!assignmentSaving) { setForceAssignModal(false); setSelectedAssignment(null); } }}
-        onAssign={(vendorId, reason) => handleForceAssign(selectedAssignment?.id, vendorId, selectedAssignment?.serviceCategory, reason)}
+        onAssign={(vendorId, reason) => handleForceAssign(selectedAssignment?.id, selectedAssignment?.vendorId, selectedAssignment?.serviceCategory, reason)}
         availableVendors={selectedAssignment ? alternativesByCategory[selectedAssignment.serviceCategory] || [] : []}
         loading={Boolean(selectedAssignment && decisionLoadingByCategory[selectedAssignment.serviceCategory])}
         submitting={assignmentSaving}
@@ -961,6 +966,17 @@ useEffect(() => {
         setDateFeedback(`Event rescheduled to ${formatEventDate(newDate)}. Template task deadlines were refreshed where applicable.`);
         await refreshAfterAction();
       }} />}
+
+      {showReportModal && event && (
+        <CoordinatorReportModal
+          event={event}
+          onClose={() => setShowReportModal(false)}
+          onSaved={() => {
+            // Optionally refresh — coordinator reports are auto-confirmed, so no queue row appears
+            refreshDerivedData();
+          }}
+        />
+      )}
     </Layout>
   );
 }

@@ -1,10 +1,12 @@
+
 package com.aicc.eventmanagement.repositories;
 
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.payload.DashboardUpcomingEvent;
-import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,10 +19,27 @@ import java.util.Optional;
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
 
+    // Fetch event checklist and inquiry together.
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
+    @Query("SELECT DISTINCT e FROM Event e WHERE e.id = :id")
+    Optional<Event> findByIdWithDetails(@Param("id") Long id);
+
+    // Fetch all events with their checklist and inquiry.
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
+    @Query("SELECT DISTINCT e FROM Event e")
+    List<Event> findAllWithDetails();
+
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
     List<Event> findByStatus(EventStatus status);
 
     @Query("select e.status, count(e) from Event e group by e.status")
     List<Object[]> countGroupedByStatus();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM Event e WHERE e.id = :id")
+    Optional<Event> findByIdForUpdate(@Param("id") Long id);
+
+    boolean existsByVenueId(Long venueId);
 
     @Query("""
            SELECT new com.aicc.eventmanagement.payload.DashboardUpcomingEvent(
@@ -35,28 +54,39 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             @Param("end") LocalDate end,
             @Param("excludedStatuses") List<EventStatus> excludedStatuses);
 
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
     Optional<Event> findByInquiryId(Long inquiryId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT e FROM Event e WHERE e.id = :id")
-    Optional<Event> findByIdForUpdate(@Param("id") Long id);
-
-    boolean existsByVenueId(Long venueId);
-
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
     List<Event> findByInquiry_ClientId(Long clientId);
 
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
     List<Event> findByStatusNotIn(List<EventStatus> statuses);
 
-    @Query("SELECT e FROM Event e WHERE e.status NOT IN :statuses AND e.inquiry.eventDate >= CURRENT_DATE")
-    List<Event> findAllActiveEvents(@Param("statuses") List<EventStatus> statuses);
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
+    @Query("""
+           SELECT DISTINCT e FROM Event e
+           WHERE e.status NOT IN :statuses
+             AND e.inquiry.eventDate >= CURRENT_DATE
+           """)
+    List<Event> findAllActiveEvents(
+            @Param("statuses") List<EventStatus> statuses);
 
-    @Query("SELECT e FROM Event e WHERE e.status IN :statuses")
-    List<Event> findByStatusIn(@Param("statuses") List<EventStatus> statuses);
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
+    @Query("SELECT DISTINCT e FROM Event e WHERE e.status IN :statuses")
+    List<Event> findByStatusIn(
+            @Param("statuses") List<EventStatus> statuses);
 
-    @Query("SELECT e FROM Event e WHERE e.status = :status AND e.inquiry.eventDate BETWEEN :start AND :end")
-    List<Event> findUpcomingByStatus(@Param("status") EventStatus status,
-                                     @Param("start") LocalDate start,
-                                     @Param("end") LocalDate end);
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
+    @Query("""
+           SELECT DISTINCT e FROM Event e
+           WHERE e.status = :status
+             AND e.inquiry.eventDate BETWEEN :start AND :end
+           """)
+    List<Event> findUpcomingByStatus(
+            @Param("status") EventStatus status,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
 
     @Query("""
            SELECT CASE WHEN COUNT(e) > 0 THEN true ELSE false END
@@ -65,9 +95,10 @@ public interface EventRepository extends JpaRepository<Event, Long> {
              AND e.inquiry.eventDate = :date
              AND e.status NOT IN :excludedStatuses
            """)
-    boolean isVenueBookedOn(@Param("venueId") Long venueId,
-                            @Param("date") LocalDate date,
-                            @Param("excludedStatuses") List<EventStatus> excludedStatuses);
+    boolean isVenueBookedOn(
+            @Param("venueId") Long venueId,
+            @Param("date") LocalDate date,
+            @Param("excludedStatuses") List<EventStatus> excludedStatuses);
 
     @Query("SELECT COUNT(e) FROM Event e " +
             "WHERE e.venueId = :venueId " +
@@ -81,13 +112,15 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             @Param("excludedStatuses") List<EventStatus> excludedStatuses,
             @Param("excludedEventId") Long excludedEventId);
 
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
     @Query("""
-           SELECT e FROM Event e
+           SELECT DISTINCT e FROM Event e
            WHERE e.status = :status
              AND e.inquiry.eventDate < :today
            """)
-    List<Event> findPastEventsByStatus(@Param("status") EventStatus status,
-                                       @Param("today") LocalDate today);
+    List<Event> findPastEventsByStatus(
+            @Param("status") EventStatus status,
+            @Param("today") LocalDate today);
 
     @Query("""
            SELECT DISTINCT e.venueId
@@ -96,15 +129,19 @@ public interface EventRepository extends JpaRepository<Event, Long> {
              AND e.venueId IS NOT NULL
              AND e.status NOT IN :excludedStatuses
            """)
-    List<Long> findBookedVenueIdsOn(@Param("date") LocalDate date,
-                                    @Param("excludedStatuses") List<EventStatus> excludedStatuses);
+    List<Long> findBookedVenueIdsOn(
+            @Param("date") LocalDate date,
+            @Param("excludedStatuses") List<EventStatus> excludedStatuses);
+
+    @EntityGraph(attributePaths = {"checklist", "inquiry"})
     @Query("""
-           SELECT e FROM Event e
+           SELECT DISTINCT e FROM Event e
            WHERE e.venueId IS NOT NULL
              AND e.inquiry.eventDate BETWEEN :start AND :end
              AND e.status NOT IN :excludedStatuses
            """)
-    List<Event> findVenueBookedEventsInRange(@Param("start") LocalDate start,
-                                             @Param("end") LocalDate end,
-                                             @Param("excludedStatuses") List<EventStatus> excludedStatuses);
+    List<Event> findVenueBookedEventsInRange(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end,
+            @Param("excludedStatuses") List<EventStatus> excludedStatuses);
 }

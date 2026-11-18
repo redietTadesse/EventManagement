@@ -91,6 +91,7 @@ export default function VendorDashboard() {
   const closed = assignments.filter(a => a.status === 'EXPIRED' || a.status === 'CANCELLED');
   const insuranceExpiryDate = profile?.insuranceExpiryDate?.slice(0, 10);
   const insuranceExpired = insuranceExpiryDate && insuranceExpiryDate < getLocalDate();
+  const isFlagged = Boolean(profile?.flaggedForDeactivation);
 
   const upcoming = accepted.filter(item => item.eventDate >= getLocalDate())
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
@@ -106,6 +107,33 @@ export default function VendorDashboard() {
     <PageHeader eyebrow="Vendor workspace" title={profile?.companyName || currentUser?.fullName || 'Your assignments'}
       subtitle="Respond to service offers and prepare for your upcoming commitments."
       action={<Link to="/vendor/open" className="btn-primary">Explore open requests<ArrowRightIcon className="h-4 w-4" /></Link>} />
+
+    {isFlagged && (
+      <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-5" role="alert">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl leading-none" aria-hidden="true">⚠</span>
+          <div className="flex-1">
+            <h2 className="text-base font-bold text-rose-900">
+              Your account is flagged for possible termination
+            </h2>
+            <p className="mt-1 text-sm text-rose-800">
+              Your account has accumulated confirmed no-show reports. Termination is
+              pending review by your coordinator.
+            </p>
+            <p className="mt-2 text-sm text-rose-800">
+              <strong>To dispute this:</strong> contact your coordinator at{' '}
+              <a href="mailto:coordinator@aicc.et" className="font-medium underline">
+                coordinator@aicc.et
+              </a>{' '}
+              with any evidence you may have (photos, GPS logs, delivery signatures, or
+              staff check-in records) for your recent events. If the reports were filed
+              in error, your coordinator can reverse them.
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+
     {(profileError || assignmentsError) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
       {profileError || assignmentsError}
       <button type="button" onClick={() => { setLoading(true); setReloadKey(key => key + 1); }} className="ml-3 font-semibold underline">Try again</button>

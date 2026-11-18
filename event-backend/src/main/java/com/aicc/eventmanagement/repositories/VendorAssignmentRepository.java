@@ -1,4 +1,3 @@
-
 package com.aicc.eventmanagement.repositories;
 
 import com.aicc.eventmanagement.entities.VendorAssignment;

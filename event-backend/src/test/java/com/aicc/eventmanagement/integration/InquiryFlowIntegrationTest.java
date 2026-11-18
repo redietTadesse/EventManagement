@@ -1,4 +1,3 @@
-
 package com.aicc.eventmanagement.integration;
 
 import com.aicc.eventmanagement.entities.Inquiry;
