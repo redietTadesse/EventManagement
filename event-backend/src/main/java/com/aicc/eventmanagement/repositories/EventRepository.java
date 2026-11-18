@@ -5,6 +5,8 @@ import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.payload.DashboardUpcomingEvent;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,6 +31,15 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     @EntityGraph(attributePaths = {"checklist", "inquiry"})
     List<Event> findByStatus(EventStatus status);
+
+    @Query("select e.status, count(e) from Event e group by e.status")
+    List<Object[]> countGroupedByStatus();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM Event e WHERE e.id = :id")
+    Optional<Event> findByIdForUpdate(@Param("id") Long id);
+
+    boolean existsByVenueId(Long venueId);
 
     @Query("""
            SELECT new com.aicc.eventmanagement.payload.DashboardUpcomingEvent(
