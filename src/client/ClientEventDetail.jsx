@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import VendorRatingForm from '../components/VendorRatingForm';
+import NoShowReportButton from '../components/NoShowReportButton';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 
@@ -15,6 +16,7 @@ export default function ClientEventDetail() {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reportedNoShows, setReportedNoShows] = useState(new Set());
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -26,7 +28,7 @@ export default function ClientEventDetail() {
         setEvent(data);
         const assignmentsData = await fetchAssignmentsForEvent(data.id);
         setAssignments(assignmentsData || []);
-        
+
         setError('');
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load event details');
@@ -34,7 +36,7 @@ export default function ClientEventDetail() {
         setLoading(false);
       }
     };
-    
+
     loadEvent();
   }, [id, fetchAssignmentsForEvent]);
 
@@ -67,10 +69,22 @@ export default function ClientEventDetail() {
     return acc;
   }, {});
 
+  const eventIsCompleted = eventData.status === 'COMPLETED';
+
   const acceptedAssignments = assignments.filter(a => a.status === 'ACCEPTED');
   const completedAssignments = assignments.filter(a => a.status === 'COMPLETED');
-  const reviewableAssignments = completedAssignments.filter(assignment => assignment.vendorId);
   const pendingAssignments = assignments.filter(a => a.status === 'PENDING');
+
+  // Rateable only when the EVENT itself is completed (advisor requirement).
+  // Still requires the assignment to be COMPLETED to match the backend guard.
+  const reviewableAssignments = eventIsCompleted
+    ? completedAssignments.filter(a => a.vendorId)
+    : [];
+
+  // Reportable: any vendor assigned to this completed event.
+  const reportableAssignments = eventIsCompleted
+    ? assignments.filter(a => a.vendorId && ['ACCEPTED', 'COMPLETED'].includes(a.status))
+    : [];
 
   return (
     <Layout title="Event Detail">
@@ -120,16 +134,67 @@ export default function ClientEventDetail() {
           )}
         </div>
 
-        {reviewableAssignments.length > 0 && <section className="surface space-y-4 p-5 sm:p-6" aria-labelledby="vendor-reviews-title">
-          <div>
-            <h2 id="vendor-reviews-title" className="font-semibold text-slate-900">Review completed services</h2>
-            <p className="mt-1 text-sm text-slate-600">Rate the vendors who delivered services for this event.</p>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {reviewableAssignments.map(assignment => <VendorRatingForm key={assignment.id} assignment={assignment}
-              onSaved={saved => setAssignments(items => items.map(item => item.id === saved.id ? saved : item))} />)}
-          </div>
-        </section>}
+        {/* Post-event: rating + no-show reports — only visible when the event is COMPLETED */}
+        {eventIsCompleted && (reviewableAssignments.length > 0 || reportableAssignments.length > 0) && (
+          <section className="surface space-y-4 p-5 sm:p-6" aria-labelledby="vendor-reviews-title">
+            <div>
+              <h2 id="vendor-reviews-title" className="font-semibold text-slate-900">
+                Post-event: rate vendors &amp; report no-shows
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                The event is complete. Rate the vendors who delivered services, and report any
+                vendor who failed to show up. No-show reports are reviewed by a coordinator before
+                any action is taken.
+              </p>
+            </div>
+
+            {reviewableAssignments.length > 0 && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {reviewableAssignments.map(assignment => (
+                  <VendorRatingForm
+                    key={`rate-${assignment.id}`}
+                    assignment={assignment}
+                    onSaved={saved =>
+                      setAssignments(items => items.map(item => (item.id === saved.id ? saved : item)))
+                    }
+                  />
+                ))}
+              </div>
+            )}
+
+            {reportableAssignments.length > 0 && (
+              <div className="space-y-2 border-t border-slate-200 pt-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Report a no-show
+                </p>
+                {reportableAssignments.map(assignment =>
+                  reportedNoShows.has(assignment.id) ? (
+                    <p
+                      key={`reported-${assignment.id}`}
+                      className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+                    >
+                      ⏳ No-show report for <strong>{assignment.vendorName}</strong> — awaiting
+                      coordinator review.
+                    </p>
+                  ) : (
+                    <NoShowReportButton
+                      key={`ns-${assignment.id}`}
+                      eventId={eventData.id}
+                      assignment={assignment}
+                      onReported={id =>
+                        setReportedNoShows(prev => {
+                          const next = new Set(prev);
+                          next.add(id);
+                          return next;
+                        })
+                      }
+                    />
+                  )
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Assignment Summary */}
         <div className="grid grid-cols-3 gap-4">
@@ -172,7 +237,7 @@ export default function ClientEventDetail() {
                               {assignment.vendorName || 'Unassigned'}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {assignment.status} 
+                              {assignment.status}
                               {assignment.respondedAt && ` · ${new Date(assignment.respondedAt).toLocaleDateString()}`}
                             </p>
                           </div>
