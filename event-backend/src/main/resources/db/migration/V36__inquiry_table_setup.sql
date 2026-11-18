@@ -1,0 +1,1 @@
+ALTER TABLE inquiries ADD COLUMN table_setup VARCHAR(30) NULL;

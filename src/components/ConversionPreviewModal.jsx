@@ -97,7 +97,7 @@ export default function ConversionPreviewModal({ preview, onCancel }) {
                             <p className="text-xs text-amber-700 mt-1">⚠ {cat.warning}</p>
                           )}
                           {!top && (
-                            <p className="text-xs text-rose-400 mt-1">No eligible vendors for this category</p>
+                            <p className="text-xs text-rose-400 mt-1">No suitable vendors for this service</p>
                           )}
                         </div>
                         <svg
@@ -139,7 +139,7 @@ export default function ConversionPreviewModal({ preview, onCancel }) {
                           </div>
                         )}
                         <p className="text-xs text-slate-400 italic mt-2">
-                          This is the current ranking preview. Eligibility is checked again when offers are created; client-preferred vendors may be considered first. A decline triggers the next eligible assignment attempt.
+                          These are the current vendor recommendations. The system checks each vendor again before sending an offer. It may try the vendor preferred by the client first. If a vendor declines, it tries the next suitable vendor.
                         </p>
                       </div>
                     )}

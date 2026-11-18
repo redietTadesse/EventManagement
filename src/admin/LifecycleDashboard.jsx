@@ -35,11 +35,11 @@ export default function LifecycleDashboard() {
 
   return <section className="surface overflow-hidden" aria-labelledby="lifecycle-title" aria-busy={loading}>
     <div className="section-heading">
-      <div><h2 id="lifecycle-title">Event lifecycle</h2>
+      <div><h2 id="lifecycle-title">Event progress</h2>
         <p>Current stage across all inquiries and events. Select a stage to see what to check.</p></div>
-      <button className="btn-outline" type="button" onClick={() => { reload(); proposals.reload(); }} disabled={loading}>Refresh lifecycle</button>
+      <button className="btn-outline" type="button" onClick={() => { reload(); proposals.reload(); }} disabled={loading}>Refresh progress</button>
     </div>
-    {loading ? <p role="status" className="p-6 text-sm text-slate-600">Loading lifecycle counts…</p>
+    {loading ? <p role="status" className="p-6 text-sm text-slate-600">Loading event progress…</p>
       : error ? <p role="alert" className="p-6 text-sm text-rose-800">{error}</p>
       : <div className="space-y-4 p-5 sm:p-6">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
@@ -45,41 +46,22 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class VendorServiceAssignmentSafetyTest {
 
-    @Mock
-    private VendorRepository vendorRepository;
+    @Mock private VendorRepository vendorRepository;
+    @Mock private VendorBookedDateRepository bookedDateRepository;
+    @Mock private VendorAssignmentRepository assignmentRepository;
+    @Mock private EventRepository eventRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private WorkflowEngine workflowEngine;
+    @Mock private VendorRankingService rankingService;
+    @Mock private VendorEligibilityService eligibilityService;
+    @Mock private VendorRatingService ratingService;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private NotificationService notifications;
 
-    @Mock
-    private VendorBookedDateRepository bookedDateRepository;
+    @Mock private AutomaticAssistance assistance;
 
-    @Mock
-    private VendorAssignmentRepository assignmentRepository;
-
-    @Mock
-    private EventRepository eventRepository;
-
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private ApplicationEventPublisher eventPublisher;
-
-    @Mock
-    private WorkflowEngine workflowEngine;
-
-    @Mock
-    private VendorRankingService rankingService;
-
-    @Mock
-    private VendorEligibilityService eligibilityService;
-
-    @Mock
-    private VendorRatingService ratingService;
-
-    @Mock
-    private PasswordEncoder passwordEncoder;
-
-    @InjectMocks
-    private VendorService vendorService;
+    @InjectMocks private VendorService vendorService;
 
     @BeforeEach
     void allowEligibleVendorByDefault() {
@@ -127,11 +109,36 @@ class VendorServiceAssignmentSafetyTest {
     }
 
     private void stubEventAndVendor(Event event, Vendor vendor) {
-        when(eventRepository.findById(event.getId()))
-                .thenReturn(Optional.of(event));
+        when(eventRepository.findByIdForUpdate(event.getId())).thenReturn(Optional.of(event));
+        when(vendorRepository.findById(vendor.getId())).thenReturn(Optional.of(vendor));
+    }
 
-        when(vendorRepository.findById(vendor.getId()))
-                .thenReturn(Optional.of(vendor));
+    @Test
+    void initialOfferUsesTheAcceptedProposalVendorBeforeGeneralRanking() {
+        Event event = event();
+        Vendor chosen = vendor(14L, "av", true, null);
+        event.getInquiry().setProposal("{\"vendorShortlist\":[{\"category\":\"av\",\"vendors\":[{\"id\":14}]}]}");
+        when(vendorRepository.findById(14L)).thenReturn(Optional.of(chosen));
+        when(assignmentRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        var offers = vendorService.autoAssignForEvent(event);
+        assertThat(offers).hasSize(1);
+        assertThat(offers.get(0).getVendor()).isSameAs(chosen);
+        assertThat(offers.get(0).getStatus()).isEqualTo(VendorAssignmentStatus.PENDING);
+        assertThat(offers.get(0).getDecisionSnapshot()).contains("accepted proposal");
+        org.mockito.Mockito.verifyNoInteractions(rankingService);
+    }
+
+    @Test
+    void explicitClientPreferenceStillComesBeforeProposalChoices() {
+        Event event = event();
+        Vendor chosen = vendor(15L, "av", true, null);
+        event.getInquiry().setPreferredVendorIds("[15]");
+        event.getInquiry().setProposal("{\"vendorShortlist\":{\"av\":[14]}}");
+        when(vendorRepository.findById(15L)).thenReturn(Optional.of(chosen));
+        when(assignmentRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        var offers = vendorService.autoAssignForEvent(event);
+        assertThat(offers.get(0).getVendor()).isSameAs(chosen);
+        assertThat(offers.get(0).getSelectionReason()).isEqualTo(SelectionReason.CLIENT_PREFERRED);
     }
 
     @Test
@@ -354,7 +361,7 @@ class VendorServiceAssignmentSafetyTest {
     }
 
     @Test
-    void exhaustedRankingOpensAnUnclaimedPoolAttempt() {
+    void exhaustedRankingFlagsTheServiceWithoutCreatingAnotherOffer() {
         Event event = event();
 
         Vendor oldVendor = vendor(
@@ -365,38 +372,14 @@ class VendorServiceAssignmentSafetyTest {
         );
 
         VendorAssignment failed = VendorAssignment.builder()
-                .id(10L)
-                .event(event)
-                .vendor(oldVendor)
-                .vendorName(oldVendor.getCompanyName())
-                .serviceCategory("av")
-                .status(VendorAssignmentStatus.DECLINED)
-                .build();
-
-        when(rankingService.selectForEvent(
-                1L,
-                "conference",
-                "av",
-                event.getInquiry().getEventDate()
-        )).thenReturn(Optional.empty());
-
-        when(assignmentRepository.findByEventIdAndServiceCategory(
-                1L,
-                "av"
-        )).thenReturn(List.of(failed));
-
-        ArgumentCaptor<VendorAssignment> captor =
-                ArgumentCaptor.forClass(VendorAssignment.class);
+                .id(10L).event(event).vendor(oldVendor).vendorName(oldVendor.getCompanyName())
+                .serviceCategory("av").status(VendorAssignmentStatus.DECLINED).build();
+        when(rankingService.selectForEvent(1L, "conference", "av", event.getInquiry().getEventDate()))
+                .thenReturn(Optional.empty());
 
         vendorService.advanceAfterFailedAttempt(failed, Role.VENDOR);
 
-        verify(assignmentRepository).save(captor.capture());
-
-        assertThat(captor.getValue().getStatus())
-                .isEqualTo(VendorAssignmentStatus.OPEN);
-
-        assertThat(captor.getValue().getVendor()).isNull();
-
+        verify(assignmentRepository, org.mockito.Mockito.never()).save(any(VendorAssignment.class));
         assertThat(event.getUnfilledCategories()).isEqualTo("av");
     }
 }

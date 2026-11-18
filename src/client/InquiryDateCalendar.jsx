@@ -18,7 +18,7 @@ const dayLabel = {
 };
 const dayMark = { available: '✓', unavailable: '×', unknown: '?', past: '' };
 
-export default function InquiryDateCalendar({ start, end, attendees, eventType, onChange, readOnly = false }) {
+export default function InquiryDateCalendar({ start, end, attendees, eventType, tableSetup, onChange, readOnly = false }) {
   const now = new Date();
   const today = dateKey(now);
   const tomorrow = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
@@ -40,9 +40,16 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
   const firstDay = dateKey(month);
   const lastDay = dateKey(new Date(year, monthIndex, days));
   const attendance = Number.isInteger(Number(attendees)) && Number(attendees) > 0 ? Number(attendees) : undefined;
-  const monthResult = useVenueAvailabilityCalendar(firstDay, lastDay, attendance, revision, eventType);
+  const monthResult = useVenueAvailabilityCalendar(firstDay, lastDay, attendance, revision, eventType, tableSetup);
   const validRange = start > today && (!end || end >= start);
-  const rangeKey = [start, end, attendance, revision, eventType].join('/');
+  const rangeKey = [start, end, attendance, revision, eventType, tableSetup].join('/');
+  const [tentative, setTentative] = useState([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get('/venues/tentative', {params:{start:firstDay,end:lastDay},signal:controller.signal})
+      .then(({data})=>setTentative(data)).catch(()=>setTentative([]));
+    return ()=>controller.abort();
+  }, [firstDay,lastDay,revision]);
 
   useEffect(() => {
     if (!validRange) return;
@@ -50,7 +57,7 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
     const timer = setTimeout(async () => {
       try {
         const { data } = await api.get('/venues/availability/reasons', {
-          params: { date: start, endDate: end || undefined, attendees: attendance, eventType },
+          params: { date: start, endDate: end || undefined, attendees: attendance, eventType, tableSetup },
           signal: controller.signal,
         });
         if (!controller.signal.aborted) {
@@ -85,6 +92,7 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
   return (
     <fieldset className="mb-5 space-y-3 rounded-xl border border-slate-200 p-3 sm:p-4">
       <legend className="px-1 text-sm font-semibold text-slate-900">Event dates and venue availability</legend>
+      {tentative.length > 0 && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Some rooms have accepted proposals this month. These are tentative, so you can continue your request. A signed contract hold or confirmed booking will block those rooms.</p>}
       {['exhibition', 'trade_show'].includes(eventType) && <p className="text-sm text-slate-600">Exhibition venue bookings cover at least seven days, including setup and takedown.</p>}
       {eventType === 'meeting' && <p className="text-sm text-slate-600">A one-day meeting reserves three days: one setup day, the meeting day, and one takedown day.</p>}
       <p className="text-sm text-slate-600">
@@ -132,8 +140,9 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
           const status = date <= today ? 'past' : available === undefined ? 'unknown' : available ? 'available' : 'unavailable';
           const selected = Boolean(start && date >= start && date <= (end || start));
           const label = blockedRangeStart && end ? 'No suitable venue for the selected range' : dayLabel[status];
-          const className = `min-h-9 rounded text-sm disabled:cursor-default ${dayStyle[status]} ${selected ? 'ring-2 ring-inset ring-indigo-600 font-bold' : ''}`;
-          const content = <>{day}{' '}<span aria-hidden="true" className="text-xs">{dayMark[status]}</span></>;
+          const isTentative=tentative.some(row=>date>=row.from&&date<=row.through);
+          const className = `min-h-9 rounded text-sm disabled:cursor-default ${isTentative&&status==='available'?'bg-amber-100 text-amber-950':dayStyle[status]} ${selected ? 'ring-2 ring-inset ring-indigo-600 font-bold' : ''}`;
+          const content = <>{day}{' '}<span aria-hidden="true" className="text-xs">{dayMark[status]}</span>{isTentative&&<span className="sr-only">Accepted proposal in progress; you may continue your inquiry.</span>}</>;
           if (status === 'unavailable') {
             return <button key={date} type="button" aria-label={`${date}, ${label}. Show reasons`}
               title={`${label}. Show reasons`} className={className}
@@ -174,6 +183,7 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
         </p>
       )}
       {validRange && !rangeResult && <p role="status" className="text-sm text-slate-600">Checking your selected dates…</p>}
+      {inspectedDate&&!readOnly&&<button type="button" className="btn-outline" onClick={()=>selectDate(inspectedDate,choosingEnd)}>Use this date and ask AICC for alternatives</button>}
       {validRange && rangeResult?.venues && (
         <div ref={rangeReasons} tabIndex={-1}><VenueAvailabilityReasons venues={rangeResult.venues}
           dateLabel={[end && end !== start ? `${start} through ${end}` : start, attendance && `${attendance} attendees`].filter(Boolean).join(' · ')} /></div>

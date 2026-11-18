@@ -4,6 +4,7 @@ import VendorSuggestions from './VendorSuggestions';
 import api from '../api/axios';
 import { proposalDraft } from '../utils/proposals';
 import InquiryDateCalendar from '../client/InquiryDateCalendar';
+import TentativeVenueRequests from './TentativeVenueRequests';
 
 /**
  * Coordinator proposal composer.
@@ -36,6 +37,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     customPrice: '',
     terms: '',
     vendorShortlist: {}, // category -> array of vendor IDs
+    eventName: inquiry?.eventName || '', eventDate: inquiry?.eventDate || '',
+    endDate: inquiry?.endDate || '', expectedAttendees: inquiry?.expectedAttendees || 1,
+    tableSetup: inquiry?.tableSetup || 'THEATRE',
   });
 
   const [selectedCategories, setSelectedCategories] = useState(() => {
@@ -51,7 +55,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
           ? JSON.parse(inquiry.proposal)
           : inquiry.proposal;
 
-        setFormData(proposalDraft(proposal));
+        setFormData(previous=>({...previous,...proposalDraft(proposal)}));
 
         if (proposal.categories?.length) {
           setSelectedCategories(proposal.categories);
@@ -67,7 +71,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
   useEffect(() => {
     if (!inquiry?.eventType) return;
     let cancelled = false;
-    api.get('/vendors/service-categories', { params: { eventType: inquiry.eventType } })
+    api.get('/vendors/service-categories')
       .then((response) => {
         if (cancelled) return;
         const canonicalCategories = response.data || [];
@@ -99,7 +103,8 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
     setLoading(true);
     setError('');
 
-    fetchAvailableVenues(inquiry.eventDate, inquiry.expectedAttendees, inquiry.endDate, inquiry.eventType)
+    api.get('/venues/available',{params:{date:formData.eventDate,endDate:formData.endDate||formData.eventDate,
+      attendees:formData.expectedAttendees,eventType:inquiry.eventType,tableSetup:formData.tableSetup,inquiryId:editMode?inquiry.id:undefined}}).then(({data})=>data)
       .then((venueList) => {
         if (cancelled) return;
         setVenues(venueList || []);
@@ -110,7 +115,7 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [inquiry?.eventDate, inquiry?.endDate, inquiry?.expectedAttendees, inquiry?.eventType, fetchAvailableVenues]);
+  }, [formData.eventDate, formData.endDate, formData.expectedAttendees, formData.tableSetup, inquiry?.eventType]);
 
   const selectedVenue = venues.find(v => v.id === parseInt(formData.venueId));
 
@@ -162,6 +167,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
         vendorShortlist: shortlist,
         pricingTier: formData.pricingTier,
         categories: selectedCategories,
+        eventName: formData.eventName, eventDate: formData.eventDate, endDate: formData.endDate||formData.eventDate,
+        expectedAttendees: Number(formData.expectedAttendees), tableSetup: formData.tableSetup,
+        expectedVersion: inquiry.proposalVersion,
       };
 
       const saved = editMode
@@ -189,6 +197,15 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
       {step === 1 && (
         <div>
+          <TentativeVenueRequests start={formData.eventDate} end={formData.endDate||formData.eventDate}/>
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">Event name<input maxLength={200} className="mt-1 w-full rounded-lg border p-2" value={formData.eventName} onChange={e=>setFormData({...formData,eventName:e.target.value})}/></label>
+            <label className="text-sm">Attendance<input type="number" min={1} className="mt-1 w-full rounded-lg border p-2" value={formData.expectedAttendees} onChange={e=>setFormData({...formData,expectedAttendees:e.target.value})}/></label>
+            <label className="text-sm">Start date<input type="date" className="mt-1 w-full rounded-lg border p-2" value={formData.eventDate} onChange={e=>setFormData({...formData,eventDate:e.target.value})}/></label>
+            <label className="text-sm">End date<input type="date" className="mt-1 w-full rounded-lg border p-2" value={formData.endDate} onChange={e=>setFormData({...formData,endDate:e.target.value})}/></label>
+            <label className="text-sm">Seating setup<select className="mt-1 w-full rounded-lg border p-2" value={formData.tableSetup} onChange={e=>setFormData({...formData,tableSetup:e.target.value,venueId:''})}>{['THEATRE','CLASSROOM','BANQUET','CABARET','BOARDROOM','U_SHAPE','UNDECIDED'].map(value=><option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}</select></label>
+          </div>
+          {editMode&&<p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm">Sending a revised proposal saves the previous version. Any existing acceptance, signatures and payment hold will be replaced. The client must accept and sign the new terms.</p>}
           <h3 className="font-semibold text-lg mb-4">Step 1: Venue &amp; Pricing</h3>
           <div className="space-y-4">
             <div>
@@ -286,9 +303,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
 
       {step === 2 && (
         <div>
-          <h3 className="font-semibold text-lg mb-4">Step 2: Vendor Shortlist</h3>
+          <h3 className="font-semibold text-lg mb-4">Step 2: Preferred vendors</h3>
           <p className="text-sm text-slate-500 mb-4">
-            Suggest preferred vendors for each category (client will see these recommendations).
+            Choose vendors to try first for each service. The client will see these choices. After acceptance and payment review, the system checks them before sending offers. Saved client preferences come first. If these vendors cannot take the work, the system tries other suitable vendors.
           </p>
           {inquiry?.requestedCategories?.length > 0 && (
             <p className="text-xs text-slate-500 mb-3">

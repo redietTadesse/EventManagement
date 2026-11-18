@@ -130,8 +130,15 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
             <span>{label}<span className="sr-only">{done ? ', complete' : ', pending'}</span></span>
           </li>)}
         </ol>
+        {contract.paymentDueAt && !booked && <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-950">
+          {contract.paymentHoldActive ? 'Venue held for you until ' : new Date(contract.paymentDueAt) > new Date() ? 'Payment deadline: ' : 'The payment hold ended on '}
+          <strong>{new Date(contract.paymentDueAt).toLocaleString()}</strong>.
+          {' '}{contract.paymentHoldActive ? 'The hold covers setup, event days, and takedown.' : 'There is no active payment hold. Venue availability must be checked.'} Upload payment and allow time for receipt review before this deadline. After it ends, availability must be checked again.
+        </p>}
         <dl className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 [&_dt]:mb-1 [&_dt]:text-xs [&_dt]:font-medium [&_dt]:text-slate-500 [&_dd]:font-medium">
           <div><dt>Proposal</dt><dd>{terms.proposalNumber}</dd></div>
+          {terms.eventName&&<div><dt>Event</dt><dd>{terms.eventName}</dd></div>}
+          {terms.tableSetup&&<div><dt>Seating setup</dt><dd>{terms.tableSetup.replaceAll('_',' ')}</dd></div>}
           <div><dt>Client</dt><dd>{terms.client}</dd></div>
           <div><dt>Event dates</dt><dd>{terms.eventDate} through {terms.endDate}</dd></div>
           <div><dt>Venue</dt><dd>{terms.venue}</dd></div>
@@ -144,7 +151,7 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
         <p>Client signature: {contract.clientSignature || 'Pending'}{contract.clientSignedAt && ` (${new Date(contract.clientSignedAt).toLocaleString()})`}</p>
         <p>AICC coordinator signature: {contract.coordinatorSignature || 'Pending'}{contract.coordinatorSignedAt && ` (${new Date(contract.coordinatorSignedAt).toLocaleString()})`}</p>
         {contract.state !== 'BOOKED' && <p className="text-sm text-slate-600">
-          The venue is not reserved until the assigned coordinator verifies payment and the booking succeeds.
+          An accepted proposal is tentative. Both signatures create a seven-day hold. The booking becomes final after the assigned coordinator verifies payment.
         </p>}
         {contract.availabilityWarning && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">
           {contract.availabilityWarning}{' '}

@@ -44,7 +44,7 @@ export default function VendorApplication() {
         establishedYear: formData.establishedYear ? Number(formData.establishedYear) : null,
         website: formData.website || null,
       };
-      const res = await api.post('/vendors/apply', payload);
+      const res = await api.post('/vendor-applications', payload);
       setSubmitted(res.data);
     } catch (err) {
       const data = err.response?.data;
@@ -211,21 +211,21 @@ export default function VendorApplication() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Website
+                      Website (optional)
                     </label>
                     <input
-                      type="url"
+                      type="text"
                       name="website"
                       value={formData.website}
                       onChange={handleChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="https://yourcompany.com"
+                      placeholder="yourcompany.com"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Year Established
+                      Year Established (optional)
                     </label>
                     <input
                       type="number"

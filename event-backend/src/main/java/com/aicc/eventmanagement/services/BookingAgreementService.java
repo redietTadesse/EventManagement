@@ -39,11 +39,20 @@ public class BookingAgreementService {
     public record Terms(String proposalNumber, String client, String eventType, LocalDate eventDate,
                         LocalDate endDate, Integer attendees, Long venueId, String venue, String venueDetails,
                         LocalDate bookedFrom, LocalDate bookedThrough, int totalEtb,
-                        List<String> services, String proposalTerms) {}
+                        List<String> services, String proposalTerms,
+                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String eventName,
+                        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String tableSetup) {}
     public record View(String state, Terms terms, String revision, String clientSignature, Instant clientSignedAt,
                        String coordinatorSignature, Instant coordinatorSignedAt, Instant receiptUploadedAt,
                        String rejectionReason, Instant verifiedAt, boolean client, boolean canManage,
-                       String availabilityWarning) {}
+                       String availabilityWarning, boolean paymentHoldActive) {
+        @com.fasterxml.jackson.annotation.JsonProperty("paymentDueAt")
+        public Instant paymentDueAt() {
+            if (clientSignedAt == null || coordinatorSignedAt == null) return null;
+            return (clientSignedAt.isAfter(coordinatorSignedAt) ? clientSignedAt : coordinatorSignedAt)
+                    .plus(java.time.Duration.ofDays(7));
+        }
+    }
     public record Receipt(byte[] contents, String type) {}
 
     @Transactional(readOnly = true)
@@ -94,7 +103,10 @@ public class BookingAgreementService {
         }
         agreements.save(agreement);
         if (!signedBefore && agreement.getClientSignedAt() != null && agreement.getCoordinatorSignedAt() != null) {
-            notifyClient(inquiry, "Contract signed", "Both signatures are recorded. Open the inquiry for payment instructions and receipt upload.");
+            Instant signedAt = agreement.getClientSignedAt().isAfter(agreement.getCoordinatorSignedAt())
+                    ? agreement.getClientSignedAt() : agreement.getCoordinatorSignedAt();
+            venues.holdForContract(id, terms.venueId(), terms.bookedFrom(), terms.bookedThrough(), signedAt.plus(java.time.Duration.ofDays(7)));
+            notifyClient(inquiry, "Contract signed", "The venue is held for seven days. Upload your payment receipt and allow time for coordinator review before the deadline.");
         }
         return view(inquiry, user, agreement);
     }
@@ -173,13 +185,13 @@ public class BookingAgreementService {
     private View view(Inquiry inquiry, User user, BookingAgreement agreement) {
         boolean client = user.getRole() == Role.CLIENT;
         if (agreement == null && inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED) {
-            return new View("NOT_AVAILABLE", null, null, null, null, null, null, null, null, null, client, !client, null);
+            return new View("NOT_AVAILABLE", null, null, null, null, null, null, null, null, null, client, !client, null, false);
         }
         Terms terms = agreement == null ? currentTerms(inquiry) : decode(agreement.getTermsSnapshot());
         String revision = revision(agreement == null ? encode(terms) : agreement.getTermsSnapshot());
         if (agreement == null) {
             return new View("AWAITING_SIGNATURES", terms, revision, null, null, null, null, null, null, null, client, !client,
-                    availabilityWarning(terms));
+                    availabilityWarning(terms), false);
         }
         String state = agreement.getVerifiedAt() != null ? "BOOKED"
                 : !matchesCurrentTerms(inquiry, agreement) ? "TERMS_CHANGED"
@@ -190,7 +202,10 @@ public class BookingAgreementService {
         return new View(state, terms, revision, agreement.getClientSignature(), agreement.getClientSignedAt(),
                 agreement.getCoordinatorSignature(), agreement.getCoordinatorSignedAt(), agreement.getReceiptUploadedAt(),
                 agreement.getRejectionReason(), agreement.getVerifiedAt(), client, !client,
-                state.equals("BOOKED") || state.equals("TERMS_CHANGED") ? null : availabilityWarning(terms));
+                state.equals("BOOKED") || state.equals("TERMS_CHANGED")
+                        || venues.hasContractHold(inquiry.getId(), terms.venueId(), terms.bookedFrom(), terms.bookedThrough())
+                        ? null : availabilityWarning(terms), !state.equals("BOOKED") &&
+                        venues.hasContractHold(inquiry.getId(), terms.venueId(), terms.bookedFrom(), terms.bookedThrough()));
     }
 
     private boolean matchesCurrentTerms(Inquiry inquiry, BookingAgreement agreement) {
@@ -231,6 +246,7 @@ public class BookingAgreementService {
                 throw error("The accepted proposal must include a venue and a positive total in ETB.");
             }
             Venue venue = venues.getById(venueId.asLong());
+            LayoutCapacity.requireFit(venue, inquiry.getTableSetup(), inquiry.getExpectedAttendees());
             LocalDate start = inquiry.getEventDate();
             LocalDate end = inquiry.getEndDate() == null ? start : inquiry.getEndDate();
             if (end.isBefore(start)) throw error("The event end date cannot precede the start date.");
@@ -242,7 +258,7 @@ public class BookingAgreementService {
             return new Terms(proposal.path("proposalNumber").asText(), inquiry.getClientName(), inquiry.getEventType(),
                     start, end, inquiry.getExpectedAttendees(), venue.getId(), proposal.path("venue").asText(venue.getName()),
                     proposal.path("venueDetails").asText(null), window.from(), window.through(), price.asInt(),
-                    services, proposal.path("terms").asText(""));
+                    services, proposal.path("terms").asText(""), inquiry.getEventName(), inquiry.getTableSetup());
         } catch (IOException | IllegalArgumentException e) {
             throw error("The accepted proposal has no readable contract terms.");
         }

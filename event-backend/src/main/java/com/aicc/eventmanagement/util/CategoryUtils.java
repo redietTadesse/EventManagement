@@ -24,11 +24,12 @@ public final class CategoryUtils {
     );
 
     private static final Map<String, String> CATEGORY_ALIASES = Map.of(
-            "audio_visual", "av"
+            "audio_visual", "av", "booth builder", "booth_builder", "booth_building", "booth_builder"
     );
 
-    private static final List<String> ALL_CATEGORIES = EVENT_TYPE_DEFAULTS.values().stream()
+    private static final List<String> ALL_CATEGORIES = java.util.stream.Stream.concat(EVENT_TYPE_DEFAULTS.values().stream()
             .flatMap(Collection::stream)
+            , java.util.stream.Stream.of("tv", "screen", "booth_builder"))
             .map(CategoryUtils::canonicalize)
             .distinct()
             .sorted()

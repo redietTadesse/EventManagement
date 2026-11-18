@@ -29,6 +29,8 @@ import java.util.Set;
 @Slf4j
 public class ChecklistService {
 
+    private final AutomaticAssistance assistance;
+
     private final ChecklistRepository checklistRepository;
     private final EventRepository eventRepository;
 
@@ -243,6 +245,8 @@ public class ChecklistService {
         }
         if (!newTasks.isEmpty()) {
             checklistRepository.saveAll(newTasks);
+            assistance.record(event.getInquiry(), eventId, "PREPARATION", "The preparation plan was created",
+                    newTasks.size() + " missing tasks were added for " + event.getName() + ".", false);
         }
         return checklistRepository.findByEventIdWithDependencies(eventId);
     }

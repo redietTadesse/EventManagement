@@ -5,7 +5,6 @@ import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.Inquiry;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.EventStatus;
-import com.aicc.eventmanagement.enums.SelectionReason;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import com.aicc.eventmanagement.repositories.InquiryRepository;
@@ -21,7 +20,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -181,16 +179,14 @@ class EventRollupTest {
     }
 
     @Test
-    @DisplayName("Exhausted ranked list leaves the decline intact and opens a separate pool row")
-    void declinedAttemptSurvivesAndPoolRowIsOpened() {
+    @DisplayName("Exhausted ranked list keeps the decline and requests coordinator action")
+    void declinedAttemptSurvivesEscalation() {
         assignment("av", vendor("AV Pros", "av"), VendorAssignmentStatus.PENDING);
         assignment("security", vendor("Guard Corp", "security"), VendorAssignmentStatus.PENDING);
         Vendor cateringVendor = vendor("Cater Co", "catering");
         VendorAssignment catering = assignment(
                 "catering", cateringVendor, VendorAssignmentStatus.PENDING);
 
-        // Vendor declines and no alternative catering vendor exists, so the ranked
-        // list is exhausted and the category goes to the pool.
         VendorAssignment responded = vendorService.respondToAssignment(
                 catering.getId(), "DECLINED", "Fully booked");
 
@@ -201,17 +197,8 @@ class EventRollupTest {
         assertThat(responded.getVendor().getId()).isEqualTo(cateringVendor.getId());
         assertThat(responded.getDeclineReason()).isEqualTo("Fully booked");
 
-        // The pool offer is a separate row belonging to nobody.
-        List<VendorAssignment> attempts =
-                assignmentRepository.findByEventIdAndServiceCategory(event.getId(), "catering");
-        assertThat(attempts).hasSize(2);
-
-        VendorAssignment poolRow = attempts.stream()
-                .max(Comparator.comparing(VendorAssignment::getId))
-                .orElseThrow();
-        assertThat(poolRow.getStatus()).isEqualTo(VendorAssignmentStatus.OPEN);
-        assertThat(poolRow.getVendor()).isNull();
-        assertThat(poolRow.getSelectionReason()).isEqualTo(SelectionReason.POOL_OPENED);
+        assertThat(assignmentRepository.findByEventIdAndServiceCategory(event.getId(), "catering"))
+                .extracting(VendorAssignment::getId).containsExactly(catering.getId());
 
         Event reloaded = eventRepository.findById(event.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(EventStatus.NEEDS_COORDINATOR);

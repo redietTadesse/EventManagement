@@ -1,4 +1,3 @@
-
 package com.aicc.eventmanagement.controllers;
 
 import com.aicc.eventmanagement.entities.User;
@@ -8,6 +7,7 @@ import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.exceptions.BusinessException;
 import com.aicc.eventmanagement.payload.AvailabilityGridResponse;
 import com.aicc.eventmanagement.payload.CreateVendorRequest;
+import com.aicc.eventmanagement.payload.UpdateVendorRequest;
 import com.aicc.eventmanagement.payload.VendorAssignmentResponse;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.services.AvailabilityService;
@@ -17,6 +17,7 @@ import com.aicc.eventmanagement.services.ConflictResolutionService.ResolutionSug
 import com.aicc.eventmanagement.services.VendorRatingService;
 import com.aicc.eventmanagement.services.VendorRatingService.RatingStats;
 import com.aicc.eventmanagement.services.VendorService;
+import com.aicc.eventmanagement.util.CategoryUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -67,6 +68,19 @@ public class VendorController {
     }
 
     // =========================================================
+    // SERVICE CATEGORIES
+    // =========================================================
+
+    @GetMapping("/service-categories")
+    @Operation(summary = "Get canonical vendor service categories")
+    public ResponseEntity<List<String>> getServiceCategories(
+            @RequestParam(required = false) String eventType) {
+        return ResponseEntity.ok(eventType == null || eventType.isBlank()
+                ? CategoryUtils.allCategories()
+                : CategoryUtils.categoriesForEventType(eventType));
+    }
+
+    // =========================================================
     // AVAILABILITY
     // =========================================================
 
@@ -93,6 +107,18 @@ public class VendorController {
     @Operation(summary = "Get all vendors")
     public ResponseEntity<List<Vendor>> getAllVendors() {
         return ResponseEntity.ok(vendorService.getAllVendors());
+    }
+
+    // =========================================================
+    // UPDATE VENDOR
+    // =========================================================
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Update a vendor")
+    public ResponseEntity<Vendor> updateVendor(@PathVariable Long id,
+            @Valid @RequestBody UpdateVendorRequest request) {
+        return ResponseEntity.ok(vendorService.updateVendor(id, request));
     }
 
     // =========================================================

@@ -13,9 +13,9 @@ export default function EventTimeline({ timeline, status, proposalAccepted }) {
   ];
   const next = stopped || timeline.eventConfirmed ? -1 : steps.findIndex(([, done]) => !done);
 
-  return <section className="surface p-5 sm:p-6" aria-label="Event progress">
-    <h2 className="font-semibold text-slate-900">Event progress</h2>
-    <ol className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+  return <section className="border-t border-white/15 bg-[#1a3a3c] p-5 sm:p-7" aria-label="Event progress">
+    <h3 className="text-sm font-semibold text-emerald-50">Booking milestones</h3>
+    <ol className="mt-3 grid gap-2 sm:grid-cols-3">
       {steps.map(([label, done, detail], index) => (
         <li key={label} aria-current={index === next ? 'step' : undefined}
           className={`flex items-start gap-2 rounded-xl border p-3 ${done ? 'border-emerald-100 bg-emerald-50' : index === next ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>

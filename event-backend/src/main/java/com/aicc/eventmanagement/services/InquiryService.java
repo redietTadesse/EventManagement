@@ -67,8 +67,10 @@ public class InquiryService {
     private final ChecklistService checklistService;
     private final VenueBookingRepository venueBookingRepository;
     private final CoordinatorAssignmentService coordinatorAssignmentService;
+    private final com.aicc.eventmanagement.repositories.ProposalRevisionRepository proposalRevisions;
+    private final com.aicc.eventmanagement.repositories.BookingAgreementRepository bookingAgreements;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     private List<String> canonicalCategories(Collection<String> selected) {
         if (selected == null) return List.of();
@@ -89,11 +91,19 @@ public class InquiryService {
 
     public Inquiry createInquiry(CreateInquiryRequest request) {
         validateInquiryDates(request.getEventDate(), request.getEndDate());
-        ensureInquiryDatesAvailable(request.getEventDate(), request.getEndDate(),
-                request.getExpectedAttendees(), request.getEventType());
+        var fit = venueService.explainVenueFit(request.getEventDate(), request.getEndDate(),
+                request.getExpectedAttendees(), null, request.getEventType());
+        List<String> unmet = new ArrayList<>();
+        if (fit.stream().noneMatch(option -> option.eligible() &&
+                LayoutCapacity.capacity(venueService.getById(option.venueId()), request.getTableSetup()) != null &&
+                LayoutCapacity.capacity(venueService.getById(option.venueId()), request.getTableSetup()) >= request.getExpectedAttendees()))
+            unmet.add("No suitable venue for the requested dates, attendance and seating setup");
 
         List<String> submitted = request.getRequestedCategories();
         List<String> requestedCategories = canonicalCategories(submitted);
+        for (String category : CategoryUtils.externalVendorCategories(request.getEventType(), requestedCategories))
+            if (rankingService.rank(category, request.getEventDate(), Set.of(), request.getEventType()).isEmpty())
+                unmet.add("No available vendor for " + category);
 
         Inquiry inquiry = Inquiry.builder()
                 .clientId(request.getClientId())
@@ -103,6 +113,9 @@ public class InquiryService {
                 .endDate(request.getEndDate())
                 .expectedAttendees(request.getExpectedAttendees())
                 .requirements(request.getRequirements())
+                .tableSetup(request.getTableSetup())
+                .eventName(request.getEventName() == null ? null : request.getEventName().strip())
+                .unmetNeeds(unmet.isEmpty() ? null : String.join("; ", unmet))
                 .requestedCategories(CategoryUtils.join(requestedCategories))
                 .categories(CategoryUtils.join(requestedCategories))
                 .status(EventStatus.INQUIRY_SUBMITTED)
@@ -253,7 +266,8 @@ public class InquiryService {
 
         Event event = Event.builder()
                 .inquiry(inquiry)
-                .name(request.getName() != null ? request.getName() : inquiry.getEventType() + " - " + inquiry.getClientName())
+                .name(inquiry.getEventName() != null && !inquiry.getEventName().isBlank() ? inquiry.getEventName()
+                        : request.getName() != null ? request.getName() : inquiry.getEventType() + " - " + inquiry.getClientName())
                 .status(EventStatus.EVENT_CREATED)
                 .venue(request.getVenue())
                 .venueId(request.getVenueId())
@@ -466,6 +480,13 @@ public class InquiryService {
         }
 
         workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_SENT, userRole);
+        if(request.getEventName()!=null)inquiry.setEventName(request.getEventName().strip());
+        if(request.getEventDate()!=null)inquiry.setEventDate(request.getEventDate());
+        if(request.getEndDate()!=null)inquiry.setEndDate(request.getEndDate());
+        if(request.getExpectedAttendees()!=null)inquiry.setExpectedAttendees(request.getExpectedAttendees());
+        if(request.getTableSetup()!=null)inquiry.setTableSetup(request.getTableSetup());
+        validateInquiryDates(inquiry.getEventDate(),inquiry.getEndDate());
+        LayoutCapacity.requireFit(venueService.getById(request.getVenueId()),inquiry.getTableSetup(),inquiry.getExpectedAttendees());
         List<String> categories = resolveProposalCategories(inquiry, request.getCategories());
         String proposalJson = buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
                 request.getPrice(), request.getTerms(), categories, request.getPricingTier(),
@@ -473,6 +494,7 @@ public class InquiryService {
         inquiry.setCategories(CategoryUtils.join(categories));
         inquiry.setProposal(proposalJson);
         inquiry.setStatus(EventStatus.PROPOSAL_SENT);
+        inquiry.setProposalVersion(inquiry.getProposalVersion() + 1);
 
         Inquiry saved = inquiryRepository.save(inquiry);
 
@@ -490,7 +512,13 @@ public class InquiryService {
 
     @Transactional
     public Inquiry acceptProposal(Long id, List<String> finalCategories, Role userRole) {
+        return acceptProposal(id, finalCategories, userRole, null);
+    }
+
+    @Transactional
+    public Inquiry acceptProposal(Long id, List<String> finalCategories, Role userRole, Integer version) {
         Inquiry inquiry = lockInquiry(id);
+        if(version!=null && version!=inquiry.getProposalVersion())throw new BusinessException("This proposal changed. Refresh and review the latest version.","STALE_PROPOSAL");
 
         workflowEngine.validateTransition(inquiry.getStatus(), EventStatus.PROPOSAL_ACCEPTED, userRole);
         if (finalCategories != null) {
@@ -549,9 +577,37 @@ public class InquiryService {
     @Transactional
     public Inquiry updateProposal(Long id, UpdateProposalRequest request, Role userRole) {
         Inquiry inquiry = lockInquiry(id);
-        if (inquiry.getStatus() != EventStatus.PROPOSAL_SENT) {
-            throw new BusinessException(String.format("Cannot update proposal. Inquiry status is: %s (expected: PROPOSAL_SENT)", inquiry.getStatus()), "INVALID_STATE");
+        if (inquiry.getEvent() != null || (inquiry.getStatus() != EventStatus.PROPOSAL_SENT && inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED)) {
+            throw new BusinessException("Only an unbooked proposal can be revised.", "INVALID_STATE");
         }
+
+        if (request.getExpectedVersion() != null && request.getExpectedVersion() != inquiry.getProposalVersion())
+            throw new BusinessException("This proposal changed. Refresh before editing.", "STALE_PROPOSAL");
+        var revision = new com.aicc.eventmanagement.entities.ProposalRevision();
+        revision.setInquiryId(id); revision.setRevisionNumber(inquiry.getProposalVersion());
+        revision.setProposalJson(inquiry.getProposal()); revision.setCreatedAt(LocalDateTime.now());
+        var agreement = bookingAgreements.findById(id).orElse(null);
+        if (agreement != null) {
+            if (agreement.getVerifiedAt() != null) throw new BusinessException("Use the event change process for a booked event.", "ALREADY_BOOKED");
+            try { revision.setAgreementArchive(objectMapper.writeValueAsString(agreement)); }
+            catch (Exception ex) { throw new IllegalStateException("Could not preserve the previous agreement", ex); }
+            venueService.releaseContractHolds(id);
+            bookingAgreements.delete(agreement); bookingAgreements.flush();
+        }
+        proposalRevisions.save(revision);
+        if (request.getEventDate() != null) inquiry.setEventDate(request.getEventDate());
+        if (request.getEndDate() != null) inquiry.setEndDate(request.getEndDate());
+        if (request.getExpectedAttendees() != null) inquiry.setExpectedAttendees(request.getExpectedAttendees());
+        if (request.getTableSetup() != null) inquiry.setTableSetup(request.getTableSetup());
+        if (request.getEventName() != null) inquiry.setEventName(request.getEventName().strip());
+        validateInquiryDates(inquiry.getEventDate(), inquiry.getEndDate());
+        LayoutCapacity.requireFit(venueService.getById(request.getVenueId()), inquiry.getTableSetup(), inquiry.getExpectedAttendees());
+        if (inquiry.getStatus() == EventStatus.PROPOSAL_ACCEPTED) {
+            inquiry.setStatus(EventStatus.PROPOSAL_SENT);
+            eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.PROPOSAL_ACCEPTED,
+                    EventStatus.PROPOSAL_SENT, String.valueOf(id), userRole));
+        }
+        inquiry.setProposalVersion(inquiry.getProposalVersion() + 1);
 
         List<String> categories = resolveProposalCategories(inquiry, request.getCategories());
         String proposalJson = buildProposalJsonInternal(request.getVenue(), request.getVenueId(), request.getVenueDetails(),
@@ -631,6 +687,9 @@ public class InquiryService {
         try {
             Map<String, Object> proposal = new LinkedHashMap<>();
             proposal.put("proposalNumber", String.format("AICC-P-%d-%03d", LocalDate.now().getYear(), inquiry.getId()));
+            proposal.put("eventName", inquiry.getEventName());
+            proposal.put("tableSetup", inquiry.getTableSetup());
+            proposal.put("endDate", inquiry.getEndDate());
             proposal.put("sentDate", LocalDateTime.now().toString());
             proposal.put("expiryDate", LocalDateTime.now().plusDays(7).toString());
             proposal.put("venue", venue);

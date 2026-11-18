@@ -1,4 +1,3 @@
-
 package com.aicc.eventmanagement.repositories;
 
 import com.aicc.eventmanagement.entities.VendorAssignment;
@@ -26,6 +25,9 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
     @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
     List<VendorAssignment> findByEventId(Long eventId);
 
+    @Query("select va.event.id from VendorAssignment va where va.id = :id")
+    Optional<Long> findEventIdForAssignment(@Param("id") Long id);
+
     @Query("SELECT va FROM VendorAssignment va " +
             "JOIN FETCH va.event event " +
             "JOIN FETCH event.inquiry inquiry " +
@@ -40,14 +42,12 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "WHERE event.id = :eventId")
     List<VendorAssignment> findDetailedByEventId(@Param("eventId") Long eventId);
 
-    @Query("SELECT va FROM VendorAssignment va " +
-            "JOIN FETCH va.event event " +
-            "JOIN FETCH event.inquiry inquiry " +
-            "LEFT JOIN FETCH va.vendor " +
-            "WHERE va.vendor.id = :vendorId")
-    List<VendorAssignment> findDetailedByVendorId(@Param("vendorId") Long vendorId);
-
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
     List<VendorAssignment> findByVendorId(Long vendorId);
+
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @Query("select va from VendorAssignment va where va.vendor.id = :vendorId")
+    List<VendorAssignment> findDetailedByVendorId(@Param("vendorId") Long vendorId);
 
     List<VendorAssignment> findByStatus(VendorAssignmentStatus status);
 
@@ -70,10 +70,21 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("cutoffDate") LocalDateTime cutoffDate
     );
 
-    @Query("SELECT va FROM VendorAssignment va WHERE va.status = 'PENDING' AND va.expiresAt < :now")
-    List<VendorAssignment> findExpiredPendingOffers(
-            @Param("now") LocalDateTime now
-    );
+    /**
+     * Offers that have passed their own deadline without an answer.
+     *
+     * Uses expires_at rather than an age cutoff computed by the caller, so the
+     * deadline shown to the vendor and the deadline enforced by the scheduler are
+     * the same stored value and cannot drift apart if the configured window changes.
+     */
+    @Query("SELECT va.id AS id, va.event.id AS eventId FROM VendorAssignment va " +
+            "WHERE va.status = 'PENDING' AND va.expiresAt <= :now ORDER BY va.event.id, va.id")
+    List<DueOffer> findExpiredPendingOffers(@Param("now") LocalDateTime now);
+
+    interface DueOffer {
+        Long getId();
+        Long getEventId();
+    }
 
     @Query("SELECT va FROM VendorAssignment va WHERE va.status = :status AND va.serviceCategory = :category")
     List<VendorAssignment> findByStatusAndServiceCategory(

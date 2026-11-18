@@ -60,16 +60,28 @@ export const AppProvider = ({ children }) => {
     dispatch({ type: 'CLEAR_ERROR' });
     try {
       const res = await authApi.post('/auth/login', { username, password });
-      const { accessToken, role } = res.data;
-      localStorage.setItem('token', accessToken);
+
+      // Backend returns JwtResponse { accessToken, tokenType, role }
+      const { accessToken, role } = res.data || {};
+      const tokenValue = typeof accessToken === 'string' ? accessToken.trim() : '';
+
+      if (!tokenValue || ['undefined', 'null'].includes(tokenValue)) {
+        throw new Error('Login failed: no token returned by server');
+      }
+
+      localStorage.setItem('token', tokenValue);
 
       const me = await api.get('/users/me');
-      const user = { ...me.data, role: role || me.data.role };
+      const user = { ...me.data, role: role || me.data?.role };
+
       dispatch({ type: 'LOGIN', payload: user });
       return user;
     } catch (err) {
       const raw = err.response?.data;
-      const msg = (raw && typeof raw === 'object') ? (raw.message || 'Login failed') : raw;
+      const msg =
+        raw && typeof raw === 'object'
+          ? raw.message || 'Login failed'
+          : raw || err.message || 'Login failed';
       dispatch({ type: 'SET_ERROR', payload: typeof msg === 'string' ? msg : 'Login failed' });
       throw err;
     } finally {
@@ -173,6 +185,7 @@ export const AppProvider = ({ children }) => {
       const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
       const body = {
+        ...proposal,
         venue,
         venueId: venueId ?? null,
         venueDetails: venueDetails == null
@@ -207,6 +220,7 @@ export const AppProvider = ({ children }) => {
       const { venue, venueId, venueDetails, price, terms, vendorShortlist, pricingTier, categories } = proposal;
 
       const body = {
+        ...proposal,
         venue,
         venueId: venueId ?? null,
         venueDetails: venueDetails == null

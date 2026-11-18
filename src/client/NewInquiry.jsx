@@ -1,22 +1,31 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
 import InquiryDateCalendar from './InquiryDateCalendar';
+import TentativeVenueRequests from '../components/TentativeVenueRequests';
+import { EVENT_TYPES, MAX_ATTENDEES, readEventPlan } from '../utils/eventPlan';
 
 export default function NewInquiry() {
   const { state, createInquiry } = useApp();
   const { currentUser, loading } = state;
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    eventType: 'conference',
-    eventDate: '',
-    endDate: '',
-    expectedAttendees: '',
-    requirements: '',
-    requestedCategories: [],
+  const [params] = useSearchParams();
+  const [form, setForm] = useState(() => {
+    const plan = readEventPlan(params);
+    const preferredVenue = params.get('preferredVenue')?.trim().slice(0, 200);
+    return {
+      eventType: plan.eventType,
+      eventDate: plan.date,
+      endDate: plan.endDate,
+      expectedAttendees: plan.attendees,
+      requirements: preferredVenue ? `Preferred venue: ${preferredVenue}` : '',
+      requestedCategories: [],
+      tableSetup: plan.tableSetup || 'UNDECIDED',
+      eventName: '',
+    };
   });
   const [availableCategories, setAvailableCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
@@ -26,14 +35,14 @@ export default function NewInquiry() {
   useEffect(() => {
     let active = true;
     const eventType = form.eventType;
-    api.get('/vendors/service-categories', { params: { eventType } })
-      .then((response) => {
+    Promise.all([api.get('/vendors/service-categories'), api.get('/vendors/service-categories', { params: { eventType } })])
+      .then(([response, defaults]) => {
         if (!active) return;
         const categories = response.data || [];
         setAvailableCategories(categories);
         if (!touchedCategories) {
           setForm((previous) => previous.eventType === eventType
-            ? { ...previous, requestedCategories: categories }
+            ? { ...previous, requestedCategories: defaults.data || [] }
             : previous);
         }
       })
@@ -106,6 +115,18 @@ export default function NewInquiry() {
           action={<Link className="btn-outline" to="/client/inquiries">My inquiries</Link>} />
         <form onSubmit={handleSubmit} className="surface p-5 sm:p-7">
           <h2 className="form-section-title">Event details</h2>
+          <TentativeVenueRequests start={form.eventDate} end={form.endDate||form.eventDate}/>
+          <label className="mb-4 block text-sm font-medium">Event name
+            <input name="eventName" value={form.eventName} onChange={handleChange} required maxLength={200}
+              placeholder="e.g. Medical Equipment Exhibition 2027" className="mt-2 w-full rounded-lg border p-3" />
+          </label>
+          <p className="mb-4 text-sm text-slate-600">You can send your request even if no suitable venue or service is available. A coordinator can discuss alternatives with you.</p>
+          <label className="mb-4 block text-sm font-medium">Table and seating setup
+            <select name="tableSetup" value={form.tableSetup} onChange={handleChange} className="mt-2 w-full rounded-lg border p-3">
+              {[['UNDECIDED','Help me choose'],['THEATRE','Theatre — rows of chairs'],['CLASSROOM','Classroom — tables facing the front'],['BANQUET','Banquet — round dining tables'],['CABARET','Cabaret — round tables facing the stage'],['BOARDROOM','Boardroom — one shared meeting table'],['U_SHAPE','U-shape — tables arranged in a U']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <span className="mt-1 block text-xs font-normal text-slate-500">Your coordinator will check the room capacity for your chosen setup.</span>
+          </label>
           <p className="form-section-note">Choose the event type and estimated attendance to check venue availability.</p>
           {error && (
             <div role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
@@ -114,31 +135,26 @@ export default function NewInquiry() {
           )}
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-event-type" className="block text-sm font-medium text-gray-700 mb-1">
               Event Type
             </label>
             <select
+              id="inquiry-event-type"
               name="eventType"
               value={form.eventType}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             >
-              <option value="conference">Conference</option>
-              <option value="meeting">Meeting</option>
-              <option value="exhibition">Exhibition</option>
-              <option value="wedding">Wedding</option>
-              <option value="trade_show">Trade Show</option>
-              <option value="concert">Concert</option>
-              <option value="gala">Gala</option>
-              <option value="seminar">Seminar</option>
+              {EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-attendees" className="block text-sm font-medium text-gray-700 mb-1">
               Expected Attendees
             </label>
             <input
+              id="inquiry-attendees"
               type="number"
               name="expectedAttendees"
               value={form.expectedAttendees}
@@ -146,13 +162,14 @@ export default function NewInquiry() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg"
               required
               min="1"
+              max={MAX_ATTENDEES}
             />
           </div>
 
           <p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-relaxed text-indigo-900">
             Available dates can be requested by multiple clients. An inquiry does not reserve a venue. The coordinator checks availability again when verifying payment and booking.
           </p>
-          <InquiryDateCalendar eventType={form.eventType} start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
+          <InquiryDateCalendar tableSetup={form.tableSetup} eventType={form.eventType} start={form.eventDate} end={form.endDate} attendees={form.expectedAttendees}
             onChange={(eventDate, endDate) => setForm((previous) => ({ ...previous, eventDate, endDate }))} />
 
           <div className="mb-4">
@@ -177,10 +194,11 @@ export default function NewInquiry() {
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="inquiry-requirements" className="block text-sm font-medium text-gray-700 mb-1">
               Requirements
             </label>
             <textarea
+              id="inquiry-requirements"
               name="requirements"
               rows="3"
               value={form.requirements}

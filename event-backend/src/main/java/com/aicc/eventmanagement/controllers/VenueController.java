@@ -36,6 +36,7 @@ import java.util.List;
 @Tag(name = "Venue Management", description = "CRUD, availability and hold endpoints for venues")
 public class VenueController {
     private final VenueService venueService;
+    private final com.aicc.eventmanagement.services.RecordAccessService recordAccess;
 
     @GetMapping
     @Operation(summary = "List all venues")
@@ -74,15 +75,21 @@ public class VenueController {
     }
 
     @GetMapping("/available")
+    @org.springframework.transaction.annotation.Transactional
+    @PreAuthorize("#inquiryId == null or hasAnyRole('COORDINATOR','ADMIN')")
     @Operation(summary = "List venues free on a date",
             description = "Returns active venues with no booking or live hold on the given date.")
     public ResponseEntity<List<VenueResponse>> availableOn(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) @Min(1) Integer attendees,
-            @RequestParam(required = false) String eventType) {
-        return ResponseEntity.ok(venueService.getAvailableVenues(date, endDate != null ? endDate : date,
-                        attendees, eventType).stream().map(VenueResponse::from).toList());
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) String tableSetup,
+            @RequestParam(required = false) Long inquiryId,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails principal) {
+        if(inquiryId!=null)recordAccess.requireInquiryWriteOwnership(inquiryId,principal.getUsername());
+        return ResponseEntity.ok(venueService.getAvailableForProposal(date, endDate != null ? endDate : date,
+                        attendees, eventType, tableSetup,inquiryId).stream().map(VenueResponse::from).toList());
     }
 
     @GetMapping("/availability/calendar")
@@ -91,8 +98,9 @@ public class VenueController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
             @RequestParam(required = false) Integer attendees,
-            @RequestParam(required = false) String eventType) {
-        return venueService.getAvailabilityCalendar(start, end, attendees, eventType);
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) String tableSetup) {
+        return venueService.getAvailabilityCalendar(start, end, attendees, eventType, tableSetup);
     }
 
     public record VenueAvailabilityReason(Long venueId, String name, boolean available, List<String> reasons) {}
@@ -103,8 +111,9 @@ public class VenueController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) Integer attendees,
-            @RequestParam(required = false) String eventType) {
-        return venueService.explainVenueFit(date, endDate, attendees, null, eventType).stream()
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) String tableSetup) {
+        return venueService.explainVenueFit(date, endDate, attendees, null, eventType, tableSetup).stream()
                 .map(v -> new VenueAvailabilityReason(v.venueId(), v.name(), v.eligible(), v.blockers())).toList();
     }
 
@@ -165,7 +174,7 @@ public class VenueController {
     }
 
     @GetMapping("/{id}/unavailable-dates")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     public ResponseEntity<List<VenueUnavailableDateResponse>> getUnavailableDates(@PathVariable Long id) {
         return ResponseEntity.ok(venueService.getUnavailableDates(id).stream().map(VenueUnavailableDateResponse::from).toList());
     }

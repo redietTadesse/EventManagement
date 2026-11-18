@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import { useApp } from '../context/AppContext';
 import useApiResource from '../hooks/useApiResource';
+import { eventPage } from '../utils/eventPages';
+import EventPageControls from '../components/EventPageControls';
 
 const FILTERS = ['ALL', 'EVENT_CREATED', 'AWAITING_VENDORS', 'NEEDS_COORDINATOR', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'CLOSED'];
 
@@ -12,11 +12,14 @@ export default function ClientEventHistory() {
   const [params, setParams] = useSearchParams();
 
   const status = params.get('status') || 'ALL';
+  const [pageNumber, setPageNumber] = useState(1);
+  useEffect(() => { setPageNumber(1); }, [status]);
 
   const filtered = status === 'ALL'
     ? myEvents
     : myEvents.filter(e => e.status === status);
 
+  const page = eventPage(filtered, pageNumber);
   if (loading) {
     return (
       <Layout title="My Events">
@@ -79,7 +82,7 @@ export default function ClientEventHistory() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map(event => (
+                {page.rows.map(event => (
                   <tr key={event.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-800">
                       {event.name}
@@ -106,6 +109,7 @@ export default function ClientEventHistory() {
             </div>
           </div>
         )}
+        {!error && <EventPageControls page={page} onChange={setPageNumber} />}
       </div>
     </Layout>
   );

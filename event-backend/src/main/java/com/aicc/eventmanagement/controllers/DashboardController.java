@@ -24,6 +24,18 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final RevenueDashboardService revenueDashboardService;
+    private final com.aicc.eventmanagement.services.ManagementReviewService managementReview;
+
+
+    @GetMapping("/booking-performance")
+    @PreAuthorize("hasRole('ADMIN')")
+    public com.aicc.eventmanagement.services.ManagementReviewService.Summary bookingPerformance(
+            @RequestParam(defaultValue = "90") int days,
+            @RequestParam(defaultValue = "7") int reviewDays) {
+        if ((days != 30 && days != 90 && days != 180) || (reviewDays != 3 && reviewDays != 7 && reviewDays != 14))
+            throw new BusinessException("Choose a supported report period and review threshold.", "INVALID_REPORT_PERIOD");
+        return managementReview.report(days, reviewDays);
+    }
 
     @GetMapping("/outlook")
     @PreAuthorize("hasRole('ADMIN')")

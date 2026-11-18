@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttentionItems, countLifecycleStages, createRequestTracker, lifecycleStages, makeDateRange, mergeDashboardResults, metricDisplay } from './dashboardModel.js';
+import { buildAttentionItems, buildOperationsQueue, countLifecycleStages, createRequestTracker, lifecycleStages, makeDateRange, mergeDashboardResults, metricDisplay } from './dashboardModel.js';
+
+test('the operations queue groups an event’s open services and ranks intervention ahead of waiting', () => {
+  const attention = buildAttentionItems({
+    openAssignments: [
+      { id: 1, eventId: 10, eventName: 'Conference', serviceCategory: 'AV' },
+      { id: 2, eventId: 10, eventName: 'Conference', serviceCategory: 'Security' },
+    ],
+  });
+  const queue = buildOperationsQueue(attention, [
+    { eventId: 9, eventName: 'Trade show', status: 'AWAITING_VENDORS', venue: 'Main Hall' },
+    { eventId: 10, eventName: 'Conference', status: 'NEEDS_COORDINATOR' },
+    { eventId: 11, eventName: 'Meeting', status: 'CONFIRMED' },
+  ]);
+  assert.deepEqual(queue.map(({ title }) => title), ['Conference', 'Trade show']);
+  assert.equal(queue[0].href, '/coordinator/events/10?tab=vendors');
+  assert.equal(queue[0].detail, 'AV offer unclaimed · Security offer unclaimed');
+  assert.equal(queue[1].detail, 'Main Hall · Waiting for vendor responses');
+});
 
 test('date range includes exactly the selected local calendar days', () => {
   assert.deepEqual(makeDateRange(new Date(2026, 9, 30, 23, 50), 7), { startDate: '2026-10-30', endDate: '2026-11-05' });

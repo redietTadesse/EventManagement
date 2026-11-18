@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import EventPlanForm from '../components/EventPlanForm';
 import { ArrowRightIcon, PlusIcon, CalendarDaysIcon, DocumentTextIcon, CheckCircleIcon, ClockIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -11,6 +12,7 @@ import { formatDate, snakeToTitleCase } from '../utils/helpers';
 import { calendarDateKey } from '../hooks/useVenueAvailabilityCalendar';
 
 export default function ClientDashboard() {
+  const navigate = useNavigate();
   const { state: { currentUser } } = useApp();
   const inquiries = useApiResource(currentUser?.id ? `/inquiries/client/${currentUser.id}` : null);
   const events = useApiResource('/events');
@@ -27,6 +29,14 @@ export default function ClientDashboard() {
     <PageHeader eyebrow="Your event journey" title={firstName ? `Welcome, ${firstName}` : 'Your event overview'}
       subtitle="Keep your plans moving, from the first inquiry to the day of your event."
       action={<Link to="/client/new-inquiry" className="btn-primary"><PlusIcon className="h-4 w-4" />Plan an event</Link>} />
+    <section className="surface overflow-hidden" aria-labelledby="venue-search-title">
+      <div className="section-heading"><div><p className="eyebrow">Plan your event</p><h2 id="venue-search-title">Find a suitable venue</h2><p>Check the event type, seating and full date range together. Your choices carry into the inquiry.</p></div></div>
+      <EventPlanForm plan={{ eventType: 'meeting', date: '', endDate: '', attendees: '', tableSetup: 'UNDECIDED' }} dateRequired
+        className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3 sm:p-6"
+        onSearch={params => navigate('/client/venues?' + params)}>
+        <button type="submit" className="btn-primary self-end">Check venues <ArrowRightIcon className="h-4 w-4" /></button>
+      </EventPlanForm>
+    </section>
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <StatCard label="Your inquiries" value={metric(inquiries, mine.length)} icon={<DocumentTextIcon />} detail="All event requests" />
       <StatCard label="Booking steps" value={metric(inquiries, decisions.length)} icon={<ClockIcon />} color="amber" detail="Proposals and accepted bookings" />

@@ -56,6 +56,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/vendors/apply").permitAll()
+                        // Public vendor application form. Only the POST on the collection is open;
+                        // listing and approve/reject stay ADMIN-only via @PreAuthorize.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/vendor-applications").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/vendors/service-categories").permitAll()
                         .requestMatchers("/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated()

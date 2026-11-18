@@ -9,6 +9,7 @@ const EMPTY_FORM = {
   hourlyRate: '',
   description: '',
   resources: '',
+  layouts: {},
   setupBufferDays: 1,
   teardownBufferDays: 1,
 };
@@ -21,6 +22,7 @@ function toForm(venue) {
     hourlyRate: venue.hourlyRate ?? '',
     description: venue.description || '',
     resources: venue.resources || '',
+    layouts: (()=>{try{return JSON.parse(venue.layoutCapacities||'{}');}catch{return {};}})(),
     setupBufferDays: venue.setupBufferDays ?? 1,
     teardownBufferDays: venue.teardownBufferDays ?? 1,
   };
@@ -109,6 +111,7 @@ export default function AdminVenues() {
       location: form.location.trim(),
       description: form.description.trim(),
       resources: form.resources.trim(),
+      layoutCapacities: JSON.stringify(Object.fromEntries(Object.entries(form.layouts).filter(([,value])=>value!=='').map(([key,value])=>[key,Number(value)]))),
       setupBufferDays: Number(form.setupBufferDays),
       teardownBufferDays: Number(form.teardownBufferDays),
     };
@@ -364,6 +367,7 @@ export default function AdminVenues() {
             {formError && <div role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{formError}</div>}
 
             <form onSubmit={handleSave} className="mt-5 grid gap-4 sm:grid-cols-2">
+              <fieldset className="sm:col-span-2"><legend className="text-sm font-semibold">Seats by setup</legend><p className="mt-1 text-xs text-slate-500">Leave unconfirmed layouts empty. Enter AICC-approved capacities only.</p><div className="mt-3 grid grid-cols-2 gap-3">{['THEATRE','CLASSROOM','BANQUET','CABARET','BOARDROOM','U_SHAPE'].map(setup=><label key={setup} className="text-sm">{setup.replaceAll('_',' ')}<input className="mt-1 w-full rounded-lg border p-2" type="number" min={1} value={form.layouts[setup]??''} onChange={e=>setForm({...form,layouts:{...form.layouts,[setup]:e.target.value}})}/></label>)}</div></fieldset>
               <label className="text-sm font-medium text-slate-700 sm:col-span-2">
                 Venue name <span className="text-rose-600">*</span>
                 <input required maxLength={255} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2" />

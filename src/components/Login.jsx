@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Link,
   useLocation,
@@ -8,6 +8,8 @@ import {
 } from 'react-router-dom';
 
 import { useApp } from '../context/AppContext';
+import GoogleClientSignIn from './GoogleClientSignIn';
+import api from '../api/axios';
 import { ROLE_DASHBOARDS } from '../utils/roles';
 
 import {
@@ -48,7 +50,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { login, registerClient } = useApp();
+  const { login, registerClient, dispatch } = useApp();
 
   const [mode, setMode] = useState('signin');
 
@@ -71,6 +73,7 @@ export default function Login() {
     ? SIGNUP_ALLOWED.includes(portalKey)
     : true;
 
+  useEffect(() => { window.scrollTo(0, 0); }, [portalKey]);
   const handleChange = (e) => {
     setForm((previous) => ({
       ...previous,
@@ -180,7 +183,7 @@ export default function Login() {
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors mb-6"
         >
           <ArrowLeftIcon className="w-4 h-4" />
-          All portals
+          Back to AICC
         </Link>
 
         {/* Authentication card */}
@@ -214,6 +217,13 @@ export default function Login() {
           </p>
 
           {/* Success notice */}
+          {signupAllowed && <GoogleClientSignIn onSignedIn={async token=>{
+            localStorage.setItem('token',token);
+            try { const {data}=await api.get('/users/me');dispatch({type:'LOGIN',payload:data});
+              const destination=location.state?.returnTo;
+              navigate(typeof destination==='string'&&destination.startsWith('/client/')?destination:'/client/dashboard',{replace:true});
+            } catch(error){localStorage.removeItem('token');throw error;}
+          }}/>}
           {notice && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl mb-4 text-sm flex items-center gap-2">
               <svg
@@ -365,6 +375,18 @@ export default function Login() {
 
                 </div>
               </div>
+
+              {(!portalKey || portalKey === 'vendor') && (
+                <p className="text-center text-sm text-slate-600">
+                  New vendor?{' '}
+                  <Link
+                    to="/vendor-application"
+                    className="text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
+                  >
+                    Register your company
+                  </Link>
+                </p>
+              )}
 
               {signupAllowed && (
                 <p className="text-center text-sm text-slate-600">

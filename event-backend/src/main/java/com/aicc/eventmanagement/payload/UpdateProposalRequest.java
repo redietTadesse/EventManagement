@@ -16,6 +16,15 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateProposalRequest {
+    private Integer expectedVersion;
+    @jakarta.validation.constraints.Size(max=200)
+    private String eventName;
+    @jakarta.validation.constraints.Future
+    private java.time.LocalDate eventDate;
+    private java.time.LocalDate endDate;
+    @Min(1) private Integer expectedAttendees;
+    @jakarta.validation.constraints.Pattern(regexp="THEATRE|CLASSROOM|BANQUET|CABARET|BOARDROOM|U_SHAPE|UNDECIDED")
+    private String tableSetup;
 
     @NotBlank(message = "Venue is required")
     private String venue;
