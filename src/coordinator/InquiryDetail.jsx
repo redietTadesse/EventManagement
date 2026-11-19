@@ -28,6 +28,7 @@ export default function InquiryDetail() {
   const [contractRevision, setContractRevision] = useState(0);
   const [section, setSection] = useState('request');
   const [editingProposal, setEditingProposal] = useState(false);
+  const [composerSession, setComposerSession] = useState(0);
   const [editingRequest, setEditingRequest] = useState(false);
   const [busy, setBusy] = useState('');
   const [preview, setPreview] = useState(null);
@@ -104,7 +105,7 @@ export default function InquiryDetail() {
         {canPrepare && (editingRequest ? <InquiryEditForm key={id} inquiry={inquiry} onSaved={saved => { setInquiry(saved); setEditingRequest(false); }} onCancel={() => setEditingRequest(false)} /> : <button type="button" className="btn-outline mt-5" onClick={() => setEditingRequest(true)}>Edit requirements</button>)}
       </section>
       <section role="tabpanel" id="booking-panel-proposal" aria-labelledby="booking-tab-proposal" hidden={section !== 'proposal'}>
-        {section === 'proposal' && ((canPrepare || editingProposal) ? <div className="case-panel"><p className="eyebrow">Venue, services & terms</p><h2>{editingProposal ? 'Revise the proposal' : 'Prepare the proposal'}</h2><RichProposalForm inquiry={inquiry} editMode={editingProposal} onSuccess={() => { setEditingProposal(false); loadInquiry(); }} onCancel={() => { setEditingProposal(false); selectSection('request'); }} /></div> : inquiry.proposal ? <ProposalReview key={`${inquiry.id}-${inquiry.proposalVersion}`} inquiry={inquiry}>
+        {((canPrepare || editingProposal) ? <div className="composer-host"><RichProposalForm key={`${id}-${inquiry.proposalVersion}-${composerSession}`} inquiry={inquiry} editMode={editingProposal} onSuccess={() => { setEditingProposal(false); loadInquiry(); }} onCancel={() => { setEditingProposal(false); setComposerSession(value => value + 1); selectSection('request'); }} /></div> : inquiry.proposal ? <ProposalReview key={`${inquiry.id}-${inquiry.proposalVersion}`} inquiry={inquiry}>
           {canRevise && <button type="button" className="btn-outline" onClick={() => setEditingProposal(true)}>Revise proposal</button>}
         </ProposalReview> : <div className="case-panel"><p className="text-sm text-slate-600">A proposal has not been sent yet.</p></div>)}
       </section>

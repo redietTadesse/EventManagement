@@ -963,13 +963,16 @@ useEffect(() => {
       <ManualAssignModal
         isOpen={!readOnly && forceAssignModal}
         onClose={() => { if (!assignmentSaving) { setForceAssignModal(false); setSelectedAssignment(null); } }}
-        onAssign={(vendorId, reason) => handleForceAssign(selectedAssignment?.id, selectedAssignment?.vendorId, selectedAssignment?.serviceCategory, reason)}
+        onAssign={(vendorId, reason) => handleForceAssign(selectedAssignment?.id, vendorId, selectedAssignment?.serviceCategory, reason)}
         availableVendors={selectedAssignment ? alternativesByCategory[selectedAssignment.serviceCategory] || [] : []}
         loading={Boolean(selectedAssignment && decisionLoadingByCategory[selectedAssignment.serviceCategory])}
         submitting={assignmentSaving}
         error={selectedAssignment && vendorFeedback[selectedAssignment.serviceCategory]?.type === 'error' ? vendorFeedback[selectedAssignment.serviceCategory].message : ''}
         loadError={selectedAssignment ? decisionErrorByCategory[selectedAssignment.serviceCategory] || '' : ''}
         serviceCategory={selectedAssignment?.serviceCategory}
+        eventName={event?.name}
+        eventDate={event?.date}
+        excludedVendors={selectedAssignment ? excludedVendorsByCategory[selectedAssignment.serviceCategory] || [] : []}
       />
       {!readOnly && showDateModal && <ChangeDateModal onClose={() => setShowDateModal(false)} eventId={id} currentDate={event.date} onDateChanged={async (newDate, record) => {
         setEvent(previous => ({ ...previous, status: record?.status || previous.status, date: record?.eventDate || newDate, endDate: record?.endDate || previous.endDate }));
