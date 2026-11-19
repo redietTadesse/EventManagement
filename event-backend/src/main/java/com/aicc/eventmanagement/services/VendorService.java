@@ -390,7 +390,7 @@ public class VendorService {
                                 .vendorName(candidate.getCompanyName())
                                 .serviceCategory(category)
                                 .selectionReason(preferredVendorIds.contains(vendorId)
-                                        ? SelectionReason.CLIENT_PREFERRED : SelectionReason.COORDINATOR_MANUAL)
+                                        ? SelectionReason.CLIENT_PREFERRED : SelectionReason.PROPOSAL_PREFERRED)
                                 .decisionSnapshot(buildClientPreferredSnapshot(
                                         category, eventDate, candidate, excludedPreferences,
                                         preferredVendorIds.contains(vendorId)))
@@ -539,7 +539,7 @@ public class VendorService {
         snapshot.put("selectedVendorId", selected.getId());
         snapshot.put("selectedVendorName", selected.getCompanyName());
         snapshot.put("selectionReason", (clientPreferred ? SelectionReason.CLIENT_PREFERRED
-                : SelectionReason.COORDINATOR_MANUAL).name());
+                : SelectionReason.PROPOSAL_PREFERRED).name());
         snapshot.put("reasoning", source);
         snapshot.put("considered", List.of(selectedCandidate));
         snapshot.put("excluded", excluded);
@@ -730,7 +730,8 @@ public class VendorService {
                 category, event.getId(), failedAttempt.getId(), failedAttempt.getStatus());
 
         SelectionReason reason = failedAttempt.getSelectionReason();
-        if (reason == SelectionReason.COORDINATOR_MANUAL || reason == SelectionReason.COORDINATOR_FORCED
+        if ((reason == SelectionReason.COORDINATOR_MANUAL && !isLegacyProposalChoice(failedAttempt))
+                || reason == SelectionReason.COORDINATOR_FORCED
                 || reason == SelectionReason.POOL_CLAIM) {
             flagCoordinatorAction(event, category, "The follow-up offer ended without acceptance.");
             return;
@@ -769,6 +770,18 @@ public class VendorService {
 
         log.info("Reassigned {} to vendor {} for event {} (score {}, reason {})",
                 category, s.vendor().getCompanyName(), event.getId(), s.score(), s.reason());
+    }
+
+    private boolean isLegacyProposalChoice(VendorAssignment assignment) {
+        // Earlier initial shortlist offers were labelled MANUAL. Preserve their
+        // recorded history while distinguishing them from a human recovery offer.
+        if (assignment.getDecisionSnapshot() == null) return false;
+        try {
+            return "Selected from the vendors listed in the accepted proposal".equals(
+                    objectMapper.readTree(assignment.getDecisionSnapshot()).path("reasoning").asText());
+        } catch (JsonProcessingException exception) {
+            return false;
+        }
     }
 
     @Transactional
@@ -851,6 +864,7 @@ public class VendorService {
             if (a.getStatus() == VendorAssignmentStatus.ACCEPTED) {
                 workflowEngine.transition(a, VendorAssignmentStatus.COMPLETED, triggeringRole);
                 assignmentRepository.save(a);
+                eventPublisher.publishEvent(new VendorAssignmentEvent(this, a));
                 closed++;
             }
         }
@@ -868,6 +882,7 @@ public class VendorService {
                     || s == VendorAssignmentStatus.OPEN) {
                 workflowEngine.transition(a, VendorAssignmentStatus.CANCELLED, triggeringRole);
                 assignmentRepository.save(a);
+                eventPublisher.publishEvent(new VendorAssignmentEvent(this, a));
                 cancelled++;
             }
         }

@@ -27,6 +27,6 @@ public class GoogleClientAuthController {
             user=users.saveAndFlush(user);
         }
         if(user.getRole()!=Role.CLIENT||!user.isActive())throw new BusinessException("This account cannot use client Google sign-in.","ACCESS_DENIED");
-        return new JwtResponse(jwt.generateJwtToken(user.getUsername(),"CLIENT"),"CLIENT");
+        return new JwtResponse(jwt.generateJwtToken(user.getUsername(),"CLIENT", user.getTokenVersion()),"CLIENT");
     }
 }

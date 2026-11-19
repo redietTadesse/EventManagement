@@ -10,10 +10,14 @@ import java.util.List;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select u from User u where u.id = :id")
+    Optional<User> findForPasswordUpdate(@org.springframework.data.repository.query.Param("id") Long id);
 
     Optional<User> findByUsername(String username);
 
     Optional<User> findByEmail(String email);
+    Optional<User> findByEmailIgnoreCase(String email);
     Optional<User> findByGoogleSubject(String googleSubject);
 
     boolean existsByUsername(String username);

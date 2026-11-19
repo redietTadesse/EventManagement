@@ -39,13 +39,17 @@ public class BookingFollowupService {
                        Instant startedAt, Instant firstSentAt, Instant lastSentAt,
                        Instant nextAt, Instant escalatedAt, boolean paused) {}
 
-    Action action(Inquiry inquiry, BookingAgreement agreement) {
+    Action action(Inquiry inquiry, BookingAgreement agreement, Instant now) {
         if (agreement == null || inquiry.getStatus() != EventStatus.PROPOSAL_ACCEPTED
                 || inquiry.getEvent() != null || agreement.getVerifiedAt() != null
                 || inquiry.getEventDate().isBefore(LocalDate.now())) return null;
         String label;
         boolean staff = false;
-        if (agreement.getClientSignedAt() == null) label = "Client signature";
+        if (agreement.getClientSignedAt() != null && agreement.getCoordinatorSignedAt() != null
+                && !now.isBefore((agreement.getClientSignedAt().isAfter(agreement.getCoordinatorSignedAt())
+                        ? agreement.getClientSignedAt() : agreement.getCoordinatorSignedAt()).plus(Duration.ofDays(7))))
+            label = "Contract hold expired";
+        else if (agreement.getClientSignedAt() == null) label = "Client signature";
         else if (agreement.getCoordinatorSignedAt() == null) { label = "Coordinator signature"; staff = true; }
         else if (agreement.getRejectionReason() != null) label = "Replacement receipt";
         else if (agreement.getReceiptUploadedAt() == null) label = "Payment receipt";
@@ -53,7 +57,8 @@ public class BookingFollowupService {
         Long owner = inquiry.getCoordinator() == null ? null : inquiry.getCoordinator().getId();
         // A new contract, receipt, or owner starts a fresh follow-up cycle.
         String identity = label + "|" + owner + "|" + agreement.getTermsSnapshot() + "|"
-                + agreement.getReceiptUploadedAt() + "|" + agreement.getRejectionReason();
+                + agreement.getReceiptUploadedAt() + "|" + agreement.getRejectionReason()
+                + "|" + agreement.getClientSignedAt() + "|" + agreement.getCoordinatorSignedAt();
         try {
             String token = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(identity.getBytes(StandardCharsets.UTF_8)));
@@ -85,10 +90,31 @@ public class BookingFollowupService {
         // The same inquiry lock is used by contract signatures, receipts, and ownership changes.
         Inquiry inquiry = inquiries.findForCoordinatorUpdate(inquiryId).orElse(null);
         if (inquiry == null) return;
-        Action action = action(inquiry, agreements.findById(inquiryId).orElse(null));
+        Action action = action(inquiry, agreements.findById(inquiryId).orElse(null), now);
         if (action == null) return;
         BookingFollowup state = current(inquiryId, action, now);
         followups.save(state);
+        // Expiry is a booking fact, so announce it once even if routine reminders
+        // were paused. Availability already ignores holds after their deadline.
+        if ("Contract hold expired".equals(action.label())) {
+            if (state.getSentCount() == 0) {
+                String message = "The seven-day contract hold for inquiry #" + inquiryId
+                        + " has expired. These dates are no longer protected. Contact the coordinator;"
+                        + " availability must be checked again before booking or making a payment.";
+                notifications.notifyUser(inquiry.getClientId(), Destination.CLIENT_INQUIRY, inquiryId,
+                        "Your venue hold expired", message);
+                if (inquiry.getCoordinator() != null)
+                    notifications.notifyUser(inquiry.getCoordinator().getId(), Destination.COORDINATOR_INQUIRY,
+                            inquiryId, "A venue hold expired", message);
+                state.setFirstSentAt(now);
+                state.setLastSentAt(now);
+                state.setSentCount(1);
+                state.setEscalatedAt(now);
+                state.setNextAt(null);
+                followups.save(state);
+            }
+            return;
+        }
         if (state.isPaused() || state.getEscalatedAt() != null || action.recipient() == null
                 || now.isBefore(state.getNextAt())) return;
         if (state.getSentCount() < Math.max(1, reminderLimit)) {
@@ -121,7 +147,7 @@ public class BookingFollowupService {
         List<View> result = new ArrayList<>();
         for (Inquiry inquiry : inquiries.findByStatus(EventStatus.PROPOSAL_ACCEPTED)) {
             if (inquiry.getCoordinator() == null || !username.equals(inquiry.getCoordinator().getUsername())) continue;
-            Action action = action(inquiry, agreements.findById(inquiry.getId()).orElse(null));
+            Action action = action(inquiry, agreements.findById(inquiry.getId()).orElse(null), Instant.now());
             if (action == null) continue;
             BookingFollowup state = followups.findById(inquiry.getId()).orElse(null);
             boolean current = state != null && action.token().equals(state.getStageToken());
@@ -141,7 +167,7 @@ public class BookingFollowupService {
                 .orElseThrow(() -> new EntityNotFoundException("Inquiry", id));
         if (inquiry.getCoordinator() == null || !username.equals(inquiry.getCoordinator().getUsername()))
             throw new AccessDeniedException("Only the assigned coordinator can manage follow-ups.");
-        Action action = action(inquiry, agreements.findById(id).orElse(null));
+        Action action = action(inquiry, agreements.findById(id).orElse(null), Instant.now());
         if (action == null) throw new BusinessException("This inquiry has no outstanding booking action.", "INVALID_STATE");
         Instant now = Instant.now();
         BookingFollowup state = current(id, action, now);

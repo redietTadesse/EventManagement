@@ -41,7 +41,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 String username = jwtUtils.getUserNameFromJwtToken(token);
                 User user = userRepository.findByUsername(username).orElse(null);
 
-                if (user != null && user.isActive()) {
+                if (user != null && user.isActive() && jwtUtils.matchesTokenVersion(token, user.getTokenVersion())) {
                     List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
                     org.springframework.security.core.userdetails.User principal =
                             new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPasswordHash(), authorities);

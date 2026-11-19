@@ -67,7 +67,24 @@ public class EmailNotificationListener {
         var booking = assignment.getEvent();
         if (booking == null || assignment.getVendor() == null) return;
         var status = assignment.getStatus();
-        if (status == VendorAssignmentStatus.PENDING && assignment.getRespondedAt() == null) {
+        if (status == VendorAssignmentStatus.CANCELLED || status == VendorAssignmentStatus.COMPLETED) {
+            notifications.notifyUser(assignment.getVendor().getUserId(), Destination.VENDOR_ASSIGNMENT,
+                    assignment.getId(), status == VendorAssignmentStatus.CANCELLED
+                            ? "Your event assignment was cancelled" : "Your event assignment is complete",
+                    "Your " + assignment.getServiceCategory() + " assignment for " + booking.getName()
+                            + (status == VendorAssignmentStatus.CANCELLED
+                            ? " was cancelled. You are no longer committed to this assignment." : " was marked complete."));
+        } else if (status == VendorAssignmentStatus.EXPIRED) {
+            notifications.notifyUser(assignment.getVendor().getUserId(), Destination.VENDOR_ASSIGNMENT,
+                    assignment.getId(), "Your vendor offer expired",
+                    "The response deadline for " + booking.getName() + " has passed. This offer can no longer be accepted.");
+            if (booking.getInquiry() != null && booking.getInquiry().getCoordinator() != null) {
+                notifications.notifyUser(booking.getInquiry().getCoordinator().getId(), Destination.COORDINATOR_EVENT,
+                        booking.getId(), "A vendor offer expired", assignment.getVendorName()
+                                + " did not respond to the " + assignment.getServiceCategory()
+                                + " offer. Open the event to check replacement offers or follow-up work.");
+            }
+        } else if (status == VendorAssignmentStatus.PENDING && assignment.getRespondedAt() == null) {
             notifications.notifyUser(assignment.getVendor().getUserId(), Destination.VENDOR_ASSIGNMENT,
                     assignment.getId(), "New vendor offer",
                     "Review the " + assignment.getServiceCategory() + " offer for " + booking.getName() + ".");

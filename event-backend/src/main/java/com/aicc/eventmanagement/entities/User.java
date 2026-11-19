@@ -40,6 +40,10 @@ public class User {
     @Column(name="google_subject",unique=true)
     private String googleSubject;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "token_version", nullable = false)
+    private long tokenVersion;
+
     // FIXED: Removed the duplicate column and the 'countByIsActive' typo
     @Column(name = "is_active")
     @Builder.Default

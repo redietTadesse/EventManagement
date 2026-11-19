@@ -93,15 +93,26 @@ public class BookingAgreementService {
             throw error("The signed terms differ from the current proposal. Ask the coordinator to review the booking.");
         }
         boolean signedBefore = agreement.getClientSignedAt() != null && agreement.getCoordinatorSignedAt() != null;
+        boolean addedSignature = false;
         if (user.getRole() == Role.CLIENT && agreement.getClientSignedAt() == null) {
             agreement.setClientSignature(name);
             agreement.setClientSignedAt(Instant.now());
+            addedSignature = true;
         } else if (user.getRole() == Role.COORDINATOR && agreement.getCoordinatorSignedAt() == null) {
             agreement.setCoordinatorSignature(name);
             agreement.setCoordinatorSignedBy(user.getId());
             agreement.setCoordinatorSignedAt(Instant.now());
+            addedSignature = true;
         }
         agreements.save(agreement);
+        if (addedSignature && user.getRole() == Role.CLIENT && inquiry.getCoordinator() != null) {
+            notifications.notifyUser(inquiry.getCoordinator().getId(), AppNotification.Destination.COORDINATOR_INQUIRY,
+                    id, "Client signed the booking contract", "The client signed the contract for "
+                            + inquiry.getEventName() + ". Open the inquiry to review the next booking action.");
+        } else if (addedSignature && agreement.getClientSignedAt() == null) {
+            notifyClient(inquiry, "AICC signed your booking contract",
+                    "The coordinator signed your contract. Review and sign it to begin the seven-day payment hold.");
+        }
         if (!signedBefore && agreement.getClientSignedAt() != null && agreement.getCoordinatorSignedAt() != null) {
             Instant signedAt = agreement.getClientSignedAt().isAfter(agreement.getCoordinatorSignedAt())
                     ? agreement.getClientSignedAt() : agreement.getCoordinatorSignedAt();
@@ -253,8 +264,13 @@ public class BookingAgreementService {
             var window = VenueBookingWindow.forEvent(inquiry.getEventType(), start, end,
                     venue.getSetupBufferDays(), venue.getTeardownBufferDays());
             var services = CategoryUtils.split(inquiry.getCategories());
-            if (services.isEmpty()) services = CategoryUtils.split(inquiry.getRequestedCategories());
-            if (services.isEmpty()) services = CategoryUtils.categoriesForEventType(inquiry.getEventType());
+            // An intentional empty proposal must not add services back into the contract.
+            if (services.isEmpty() && !"[]".equals(inquiry.getCategories())) {
+                services = CategoryUtils.split(inquiry.getRequestedCategories());
+                if (services.isEmpty() && !"[]".equals(inquiry.getRequestedCategories())) {
+                    services = CategoryUtils.categoriesForEventType(inquiry.getEventType());
+                }
+            }
             return new Terms(proposal.path("proposalNumber").asText(), inquiry.getClientName(), inquiry.getEventType(),
                     start, end, inquiry.getExpectedAttendees(), venue.getId(), proposal.path("venue").asText(venue.getName()),
                     proposal.path("venueDetails").asText(null), window.from(), window.through(), price.asInt(),

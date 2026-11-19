@@ -20,6 +20,7 @@ public class CoordinatorAssignmentService {
     private final InquiryRepository inquiries;
     private final UserRepository users;
     private final EventIssueRepository issues;
+    private final NotificationService notifications;
 
     private User actor(String username) {
         return users.findByUsername(username).orElseThrow(() -> new AccessDeniedException("User not found"));
@@ -120,6 +121,24 @@ public class CoordinatorAssignmentService {
             transferIssues(inquiry.getEvent().getId(), previous, coordinator, actor);
         }
         inquiries.saveAndFlush(inquiry);
+        boolean hasEvent = inquiry.getEvent() != null;
+        Long reference = hasEvent ? inquiry.getEvent().getId() : inquiry.getId();
+        AppNotification.Destination staffDestination = hasEvent
+                ? AppNotification.Destination.COORDINATOR_EVENT : AppNotification.Destination.COORDINATOR_INQUIRY;
+        if (!coordinator.getId().equals(actor.getId())) {
+            notifications.notifyUser(coordinator.getId(), staffDestination, reference,
+                    "Work assigned to you", "You are now handling inquiry #" + inquiry.getId()
+                            + ". Review its booking actions and any outstanding event issues. Handover reason: " + reason);
+        }
+        if (previous != null) {
+            if (!previous.getId().equals(actor.getId()))
+                notifications.notifyUser(previous.getId(), staffDestination, reference, "Work handed to another coordinator",
+                        "Inquiry #" + inquiry.getId() + " is now handled by " + Person.from(coordinator).name() + ".");
+            notifications.notifyUser(inquiry.getClientId(), hasEvent
+                            ? AppNotification.Destination.CLIENT_EVENT : AppNotification.Destination.CLIENT_INQUIRY,
+                    reference, "Your coordinator changed", Person.from(coordinator).name()
+                            + " is now handling your event request. Open your record to view the coordinator details.");
+        }
     }
 
     private void transferIssues(Long eventId, User previous, User coordinator, User actor) {

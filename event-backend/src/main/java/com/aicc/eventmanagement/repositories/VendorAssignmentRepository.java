@@ -20,10 +20,10 @@ import java.util.Optional;
 public interface VendorAssignmentRepository extends JpaRepository<VendorAssignment, Long> {
 
     // Override findById to load the relationships needed by the single assignment view.
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     Optional<VendorAssignment> findById(Long id);
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     List<VendorAssignment> findByEventId(Long eventId);
 
     @Query("select va.event.id from VendorAssignment va where va.id = :id")
@@ -43,23 +43,23 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "WHERE event.id = :eventId")
     List<VendorAssignment> findDetailedByEventId(@Param("eventId") Long eventId);
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     List<VendorAssignment> findByVendorId(Long vendorId);
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     @Query("select va from VendorAssignment va where va.vendor.id = :vendorId")
     List<VendorAssignment> findDetailedByVendorId(@Param("vendorId") Long vendorId);
 
     List<VendorAssignment> findByStatus(VendorAssignmentStatus status);
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     @Query("SELECT va FROM VendorAssignment va WHERE va.event.id = :eventId AND va.serviceCategory = :category")
     List<VendorAssignment> findByEventIdAndServiceCategory(
             @Param("eventId") Long eventId,
             @Param("category") String category
     );
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     @Query("SELECT va FROM VendorAssignment va WHERE va.vendor.id = :vendorId AND va.status = :status")
     List<VendorAssignment> findByVendorIdAndStatus(
             @Param("vendorId") Long vendorId,
@@ -256,7 +256,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("category") String category
     );
 
-    @EntityGraph(attributePaths = {"event", "event.inquiry", "vendor"})
+    @EntityGraph(attributePaths = {"event", "event.inquiry", "event.inquiry.coordinator", "vendor"})
     @Query("SELECT va FROM VendorAssignment va " +
             "JOIN va.event e " +
             "JOIN e.inquiry i " +

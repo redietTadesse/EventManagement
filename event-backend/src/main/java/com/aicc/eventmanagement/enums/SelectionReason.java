@@ -11,6 +11,7 @@ package com.aicc.eventmanagement.enums;
 public enum SelectionReason {
 
     CLIENT_PREFERRED("client preferred"),
+    PROPOSAL_PREFERRED("listed in accepted proposal"),
     TOP_RATED("top rated"),
     LEAST_LOADED("least loaded"),
     TIE_BREAK("tie broken by vendor id"),

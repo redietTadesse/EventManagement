@@ -20,6 +20,10 @@ public class VendorAssignmentResponse {
     private CoordinatorAssignmentPayload.Person coordinator;
     private String eventName;
     private LocalDate eventDate;
+    private String eventVenue;
+    private String eventClientName;
+    private Integer expectedAttendees;
+    private com.aicc.eventmanagement.enums.EventStatus eventStatus;
 
     private Long vendorId;
     private String vendorName;
@@ -66,6 +70,10 @@ public class VendorAssignmentResponse {
                                 ? event.getId()
                                 : null
                 )
+                .eventVenue(event != null ? event.getVenue() : null)
+                .eventStatus(event != null ? event.getStatus() : null)
+                .eventClientName(inquiry != null ? inquiry.getClientName() : null)
+                .expectedAttendees(inquiry != null ? inquiry.getExpectedAttendees() : null)
 
                 .coordinator(
                         inquiry != null

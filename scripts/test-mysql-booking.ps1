@@ -1,6 +1,7 @@
 param(
     [string]$Maven = 'mvn.cmd',
-    [string]$MySql = 'mysql.exe'
+    [string]$MySql = 'mysql.exe',
+    [switch]$AllScenarios
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -35,7 +36,8 @@ try {
         '+conversionRechecksVenueAndRollsBackEveryNewRecordOnConflict' +
         '+cancelledVenueRowsCanBeReusedForANewBooking' +
         '+signedContractProtectsEveryDateForSevenDaysAndReleasesOnExpiry'
-    & $Maven "-Dtest=MySqlBookingIntegrityTest#$tests" test
+    $testSelection = if ($AllScenarios) { 'MySqlBookingIntegrityTest' } else { "MySqlBookingIntegrityTest#$tests" }
+    & $Maven "-Dtest=$testSelection" test
     if ($LASTEXITCODE -ne 0) { throw 'MySQL booking integrity tests failed' }
 } finally {
     if ($created -and $schema -cmatch '^aicc_validation_[a-f0-9]{8}$') {

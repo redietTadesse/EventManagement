@@ -84,7 +84,7 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     @Query("""
            SELECT e FROM Event e
            WHERE e.status = :status
-             AND e.inquiry.eventDate < :today
+             AND COALESCE(e.inquiry.endDate, e.inquiry.eventDate) < :today
            """)
     List<Event> findPastEventsByStatus(@Param("status") EventStatus status,
                                        @Param("today") LocalDate today);

@@ -45,6 +45,14 @@ public class BrowserAuditServer {
         context.getBean(VenueRepository.class).save(Venue.builder().name("Audit Hall").capacity(500)
                 .hourlyRate(new java.math.BigDecimal("1000")).setupBufferDays(1).teardownBufferDays(1)
                 .active(true).build());
+        for (int number = 2; number <= 5; number++) {
+            var backup = users.save(User.builder().username("vendor" + number)
+                    .email("vendor" + number + "@audit.example.test").fullName("Audit Vendor " + number)
+                    .passwordHash(encoder.encode("Admin@123")).role(Role.VENDOR).isActive(true).build());
+            vendors.save(Vendor.builder().userId(backup.getId()).companyName("Audit AV " + number)
+                    .serviceCategory("av").email(backup.getEmail()).rating(4.0)
+                    .insuranceExpiryDate(LocalDate.now().plusYears(3)).isActive(true).build());
+        }
         System.out.println("BROWSER AUDIT READY: isolated H2 on port 18081; demo logins use Admin@123");
     }
 }

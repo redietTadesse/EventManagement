@@ -44,7 +44,7 @@ public class AuthController {
         }
         if (!user.isActive()) return ResponseEntity.status(403).body("This account is inactive. Contact the administrator.");
 
-        String jwt = jwtUtils.generateJwtToken(user.getUsername(), user.getRole().name());
+        String jwt = jwtUtils.generateJwtToken(user.getUsername(), user.getRole().name(), user.getTokenVersion());
         return ResponseEntity.ok(new JwtResponse(jwt, user.getRole().name()));
     }
 

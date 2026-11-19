@@ -50,6 +50,7 @@ public class EventService {
     private final ApplicationEventPublisher eventPublisher;
     private final VenueService venueService;
     private final ChecklistService checklistService;
+    private final NotificationService notifications;
 
     @Transactional
     public Event createEvent(Event event) {
@@ -354,6 +355,7 @@ public class EventService {
         }
 
         java.time.LocalDate shiftedEndDate = shiftedEndDate(event, newDate);
+        java.time.LocalDate oldDate = inquiry.getEventDate();
         inquiry.setEventDate(newDate);
         if (inquiry.getEndDate() != null) inquiry.setEndDate(shiftedEndDate);
         inquiryRepository.save(inquiry);
@@ -369,7 +371,19 @@ public class EventService {
             eventPublisher.publishEvent(new WorkflowTransitionEvent(this, EventStatus.CONFIRMED,
                     EventStatus.AWAITING_VENDORS, "EVENT-" + eventId, Role.COORDINATOR));
         }
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+        String dateMessage = event.getName() + " moved from " + oldDate + " to " + newDate
+                + (shiftedEndDate == null ? "" : " through " + shiftedEndDate)
+                + ". Open the event to review its dates and preparation work."
+                + (reconfirmations > 0 ? " Affected vendors must accept the new dates." : "");
+        notifications.notifyUser(inquiry.getClientId(), com.aicc.eventmanagement.entities.AppNotification.Destination.CLIENT_EVENT,
+                eventId, "Your event dates changed", dateMessage);
+        if (inquiry.getCoordinator() != null) {
+            notifications.notifyUser(inquiry.getCoordinator().getId(),
+                    com.aicc.eventmanagement.entities.AppNotification.Destination.COORDINATOR_EVENT,
+                    eventId, "Event dates changed", dateMessage);
+        }
+        return saved;
     }
 
     @Transactional

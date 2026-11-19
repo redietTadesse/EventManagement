@@ -22,6 +22,7 @@ public class EventIssueService {
     private final ChecklistRepository checklists;
     private final UserRepository users;
     private final RecordAccessService access;
+    private final NotificationService notifications;
 
     private User actor(String username) {
         return users.findByUsername(username).orElseThrow(() -> new AccessDeniedException("User not found"));
@@ -129,7 +130,12 @@ public class EventIssueService {
         // Staff set deadlines and responsibility after reviewing a vendor's report.
         if (staff(user)) issue.setDueDate(request.dueDate());
         addUpdate(issue, user, "Reported issue");
-        return View.from(issues.saveAndFlush(issue));
+        issues.saveAndFlush(issue);
+        Set<Long> recipients = new LinkedHashSet<>();
+        recipients.add(owner.getId());
+        if (event.getInquiry().getCoordinator() != null) recipients.add(event.getInquiry().getCoordinator().getId());
+        notifyPeople(issue, user, recipients, "Event issue reported", issue.getDescription());
+        return View.from(issue);
     }
 
     public View edit(Long id, Edit request, String username) {
@@ -152,6 +158,7 @@ public class EventIssueService {
                 && (request.resolutionNote() == null || request.resolutionNote().isBlank())) {
             throw new BusinessException("Describe how the issue was resolved", "RESOLUTION_REQUIRED");
         }
+        Long previousOwner = issue.getResponsible().getId();
         issue.setResponsible(responsible(issue.getEvent().getId(), request.responsibleUserId()));
         issue.setPriority(request.priority());
         issue.setDueDate(request.dueDate());
@@ -163,7 +170,47 @@ public class EventIssueService {
         }
         addUpdate(issue, user, "Status " + issue.getStatus() + ". Priority " + issue.getPriority()
                 + ". Responsible " + issue.getResponsible().getUsername() + ". Due " + issue.getDueDate());
-        return View.from(issues.saveAndFlush(issue));
+        issues.saveAndFlush(issue);
+        if (issue.getStatus() == EventIssue.Status.RESOLVED) {
+            Set<Long> recipients = new LinkedHashSet<>();
+            recipients.add(issue.getReportedBy().getId());
+            recipients.add(issue.getResponsible().getId());
+            if (issue.getAssignment() != null && issue.getAssignment().getVendor() != null)
+                recipients.add(issue.getAssignment().getVendor().getUserId());
+            if (issue.getEvent().getInquiry().getCoordinator() != null)
+                recipients.add(issue.getEvent().getInquiry().getCoordinator().getId());
+            notifyPeople(issue, user, recipients, "Event issue resolved", issue.getResolutionNote());
+        } else if (!previousOwner.equals(issue.getResponsible().getId())) {
+            notifyPeople(issue, user, Set.of(issue.getResponsible().getId()),
+                    "An event issue needs your attention", "You are responsible for following up this issue.");
+        }
+        return View.from(issue);
+    }
+
+    private void notifyPeople(EventIssue issue, User actor, Set<Long> recipients, String title, String detail) {
+        for (Long recipientId : recipients) {
+            if (recipientId == null || recipientId.equals(actor.getId())) continue;
+            User recipient = users.findById(recipientId).orElse(null);
+            if (recipient == null) continue;
+            AppNotification.Destination destination;
+            Long reference = issue.getEvent().getId();
+            if (recipient.getRole() == Role.VENDOR) {
+                // A vendor may only be linked to their own assignment, including when staff
+                // assigned responsibility without linking an assignment on the report.
+                VendorAssignment own = assignments.findByEventId(reference).stream()
+                        .filter(a -> a.getVendor() != null && recipientId.equals(a.getVendor().getUserId()))
+                        .findFirst().orElse(null);
+                if (own == null) continue;
+                destination = AppNotification.Destination.VENDOR_ASSIGNMENT;
+                reference = own.getId();
+            } else if (recipient.getRole() == Role.ADMIN) {
+                destination = AppNotification.Destination.ADMIN_OVERVIEW;
+            } else {
+                destination = AppNotification.Destination.COORDINATOR_EVENT;
+            }
+            notifications.notifyUser(recipientId, destination, reference, title,
+                    issue.getEvent().getName() + ": " + issue.getTitle() + ". " + detail);
+        }
     }
 
     public View note(Long id, Note request, String username) {

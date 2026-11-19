@@ -19,7 +19,7 @@ class GoogleClientAuthControllerTest {
   when(users.findByGoogleSubject("sub")).thenReturn(Optional.empty());
   when(encoder.encode(anyString())).thenReturn("hashed-random-password");
   when(users.saveAndFlush(any())).thenAnswer(invocation->{User user=invocation.getArgument(0);assertThat(user.getRole()).isEqualTo(Role.CLIENT);assertThat(user.getGoogleSubject()).isEqualTo("sub");return user;});
-  when(jwt.generateJwtToken(anyString(),eq("CLIENT"))).thenReturn("application-token");
+  when(jwt.generateJwtToken(anyString(),eq("CLIENT"),eq(0L))).thenReturn("application-token");
   assertThat(controller.login(new GoogleClientAuthController.Request("token","browser-nonce")).getAccessToken()).isEqualTo("application-token");
   when(users.existsByEmail("client@example.test")).thenReturn(true);
   assertThatThrownBy(()->controller.login(new GoogleClientAuthController.Request("token","browser-nonce"))).hasMessageContaining("existing username");

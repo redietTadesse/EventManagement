@@ -97,6 +97,10 @@ class EventLifecycleApiIntegrationTest {
     @Autowired private org.springframework.transaction.PlatformTransactionManager assistanceTransactions;
 
     @Autowired private com.aicc.eventmanagement.services.BookingFollowupService followups;
+    @Autowired private com.aicc.eventmanagement.services.AvailabilityWatchService availabilityWatches;
+    @Autowired private com.aicc.eventmanagement.repositories.AvailabilityWatchRepository watchRecords;
+    @Autowired private com.aicc.eventmanagement.repositories.PasswordRecoveryRepository recoveryRecords;
+    @Autowired private com.aicc.eventmanagement.services.NotificationService notifications;
     @Autowired private com.aicc.eventmanagement.repositories.BookingFollowupRepository followupStates;
     @Autowired private com.aicc.eventmanagement.services.VendorService vendorService;
     @org.springframework.boot.test.mock.mockito.SpyBean
@@ -370,7 +374,7 @@ class EventLifecycleApiIntegrationTest {
         assertThat(nodes(call(GET, "/notifications", coordinator, null, 200).path("items")))
                 .anyMatch(item -> item.path("title").asText().equals("Booking follow-up: Coordinator signature"));
         agreement = agreements.findById(inquiry).orElseThrow();
-        agreement.setCoordinatorSignedAt(now);
+        agreement.setCoordinatorSignedAt(now.plus(java.time.Duration.ofHours(196)));
         agreements.saveAndFlush(agreement);
         followups.process(inquiry, now.plus(java.time.Duration.ofHours(197)));
         assertThat(followupStates.findById(inquiry).orElseThrow().getStage()).isEqualTo("Payment receipt");
@@ -528,6 +532,8 @@ class EventLifecycleApiIntegrationTest {
         assertThat(impact.path("venueAvailable").asBoolean()).isTrue();
         assertThat(impact.path("needsReconfirmation").size()).isEqualTo(2);
         JsonNode changed = call(PUT, "/events/" + event + "/date?newDate=" + newDate, coordinator, null, 200);
+        assertNotice(client, "Your event dates changed", "/client/events/" + event);
+        assertNotice(coordinator, "Event dates changed", "/coordinator/events/" + event);
         assertThat(changed.path("eventDate").asText()).isEqualTo(newDate.toString());
         assertThat(changed.path("endDate").asText()).isEqualTo(newDate.plusDays(1).toString());
         assertThat(changed.path("status").asText()).isEqualTo("AWAITING_VENDORS");
@@ -548,6 +554,7 @@ class EventLifecycleApiIntegrationTest {
         call(PATCH, "/events/" + event + "/status?status=COMPLETED", coordinator, null, 200);
         assertThat(currentOffer(event, "av").path("status").asText()).isEqualTo("COMPLETED");
         assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("COMPLETED");
+        assertNotice(nextAv.user(), "Your event assignment is complete", "/vendor/assignments/" + replacement.path("id").asLong());
         long reviewedAssignment = currentOffer(event, "av").path("id").asLong();
         String ratePath = "/assignments/" + reviewedAssignment + "/rate";
         call(POST, ratePath, user("unrelated-reviewer", Role.CLIENT), Map.of("rating", 5), 403);
@@ -590,6 +597,9 @@ class EventLifecycleApiIntegrationTest {
                 call(PATCH, "/assignments/" + offer.path("id").asLong() + "/respond", ranked.get(index).user(),
                         Map.of("response", "ACCEPTED"), 400);
                 assertThat(vendorService.expireStaleOffers()).isEqualTo(1);
+                assertNotice(ranked.get(index).user(), "Your vendor offer expired",
+                        "/vendor/assignments/" + offer.path("id").asLong());
+                assertNotice(coordinator, "A vendor offer expired", "/coordinator/events/" + event);
             } else {
                 respond(offer, ranked.get(index).user(), "DECLINED");
             }
@@ -643,6 +653,8 @@ class EventLifecycleApiIntegrationTest {
         assertThat(cancelledTimeline.path("eventConfirmed").asBoolean()).isFalse();
         assertThat(currentOffer(event, "av").path("status").asText()).isEqualTo("CANCELLED");
         assertThat(currentOffer(event, "security").path("status").asText()).isEqualTo("CANCELLED");
+        assertNotice(lateVendor.user(), "Your event assignment was cancelled",
+                "/vendor/assignments/" + currentOffer(event, "security").path("id").asLong());
         assertThat(task(offers(event), declined.path("id").asLong()).path("status").asText()).isEqualTo("DECLINED");
         assertThat(bookings.findByEventId(event)).isNotEmpty()
                 .allSatisfy(booking -> assertThat(booking.getStatus()).isEqualTo(VenueBooking.BookingStatus.CANCELLED));
@@ -762,6 +774,94 @@ class EventLifecycleApiIntegrationTest {
     }
 
     @Test
+    void vendorOfferListsAndDetailIncludeTheHandlerAfterTheServiceTransactionCloses() throws Exception {
+        VendorActor supplier = vendor("Portal AV", "av", 4.0, date.plusYears(1));
+        long event = convert(acceptedInquiry(), 200).path("id").asLong();
+        JsonNode offer = currentOffer(event, "av");
+        long vendorId = offer.path("vendorId").asLong();
+        for (String path : List.of("/assignments/me", "/vendors/" + vendorId + "/assignments",
+                "/vendors/" + vendorId + "/pending")) {
+            assertThat(nodes(call(GET, path, supplier.user(), null, 200))).anySatisfy(item -> {
+                assertThat(item.path("id").asLong()).isEqualTo(offer.path("id").asLong());
+                assertThat(item.path("coordinator").path("name").asText()).isEqualTo(coordinator.getFullName());
+            });
+        }
+        JsonNode detail = call(GET, "/assignments/me/" + offer.path("id").asLong(), supplier.user(), null, 200);
+        assertThat(detail.path("coordinator").path("id").asLong()).isEqualTo(coordinator.getId());
+        assertThat(detail.path("eventVenue").asText()).isEqualTo(venue.getName());
+        assertThat(detail.path("eventClientName").asText()).isEqualTo(client.getFullName());
+        assertThat(detail.path("expectedAttendees").asInt()).isEqualTo(150);
+        assertThat(detail.path("eventStatus").asText()).isEqualTo(events.findById(event).orElseThrow().getStatus().name());
+    }
+
+    @Test
+    void initialProposalChoiceStillReceivesThreeAutomaticBackupsAfterDecline() throws Exception {
+        assertProposalChoiceBackups(false);
+    }
+
+    @Test
+    void previouslyRecordedProposalChoicesStillReceiveAutomaticBackups() throws Exception {
+        assertProposalChoiceBackups(true);
+    }
+
+    private void assertProposalChoiceBackups(boolean legacy) throws Exception {
+        var candidates = new java.util.ArrayList<VendorActor>();
+        for (int index = 0; index < 4; index++) {
+            candidates.add(vendor("Proposal backup " + index, "av", 4.0, date.plusYears(1)));
+        }
+        VendorActor preferred = vendor("Proposal choice", "av", 4.0, date.plusYears(1));
+        candidates.add(preferred);
+        long inquiry = submittedInquiry();
+        var chosen = new java.util.HashMap<>(proposal());
+        chosen.put("categories", List.of("av"));
+        chosen.put("vendorShortlist", Map.of("av", List.of(preferred.vendor().getId())));
+        call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, chosen, 200);
+        call(PATCH, "/inquiries/" + inquiry + "/accept", client, Map.of(), 200);
+        long event = convert(inquiry, 200).path("id").asLong();
+        JsonNode initial = currentOffer(event, "av");
+        assertThat(initial.path("vendorId").asLong()).isEqualTo(preferred.vendor().getId());
+        assertThat(initial.path("selectionReason").asText()).isEqualTo("PROPOSAL_PREFERRED");
+        if (legacy) jdbc.update("UPDATE vendor_assignments SET selection_reason = 'COORDINATOR_MANUAL' WHERE id = ?",
+                initial.path("id").asLong());
+        respond(initial, preferred.user(), "DECLINED");
+        for (int backup = 0; backup < 3; backup++) {
+            JsonNode next = currentOffer(event, "av");
+            assertThat(next.path("status").asText()).isEqualTo("PENDING");
+            VendorActor actor = candidates.stream().filter(v -> v.vendor().getId().equals(next.path("vendorId").asLong()))
+                    .findFirst().orElseThrow();
+            respond(next, actor.user(), "DECLINED");
+        }
+        assertThat(nodes(offers(event))).hasSize(4);
+        assertThat(events.findById(event).orElseThrow().getStatus()).isEqualTo(EventStatus.NEEDS_COORDINATOR);
+    }
+
+    @Test
+    void intentionallyEmptyProposalDoesNotRestoreRequestedServicesInTheContractOrBooking() throws Exception {
+        assertEmptyContractAndBooking(submittedInquiry());
+    }
+
+    @Test
+    void intentionallyEmptyInquiryDoesNotAddDefaultServicesAtSigningOrBooking() throws Exception {
+        long inquiry = call(POST, "/inquiries", client, Map.of("clientId", client.getId(),
+                "clientName", client.getFullName(), "eventType", "conference", "eventDate", date.toString(),
+                "expectedAttendees", 150, "requestedCategories", List.of()), 201).path("id").asLong();
+        assertEmptyContractAndBooking(inquiry);
+    }
+
+    private void assertEmptyContractAndBooking(long inquiry) throws Exception {
+        var emptyProposal = new java.util.HashMap<>(proposal());
+        emptyProposal.put("categories", List.of());
+        call(POST, "/inquiries/" + inquiry + "/proposal", coordinator, emptyProposal, 200);
+        call(PATCH, "/inquiries/" + inquiry + "/accept", client, Map.of(), 200);
+        JsonNode services = call(GET, agreementPath(inquiry), client, null, 200).path("terms").path("services");
+        assertThat(services.isArray()).isTrue();
+        assertThat(services).isEmpty();
+        long event = convert(inquiry, 200).path("id").asLong();
+        assertThat(nodes(offers(event))).isEmpty();
+        assertThat(events.findById(event).orElseThrow().getRequiredCategories()).isEqualTo("[]");
+    }
+
+    @Test
     void emptySelectionsStayEmptyUntilTheClientSelectsServices() throws Exception {
         vendor("Fallback AV", "av", 4.0, date.plusYears(1));
         JsonNode inquiry = call(POST, "/inquiries", client, Map.of(
@@ -796,6 +896,7 @@ class EventLifecycleApiIntegrationTest {
         User outsider = user("other-issue-vendor", Role.VENDOR);
         call(POST, path, outsider, report, 403);
         JsonNode issue = call(POST, path, supplier.user(), report, 201);
+        assertNotice(coordinator, "Event issue reported", "/coordinator/events/" + event);
         String issuePath = "/issues/" + issue.path("id").asLong();
         assertThat(issue.path("status").asText()).isEqualTo("OPEN");
         assertThat(issue.path("responsible").path("role").asText()).isEqualTo("COORDINATOR");
@@ -815,6 +916,8 @@ class EventLifecycleApiIntegrationTest {
         call(PUT, issuePath, coordinator, edit, 400);
         edit.put("status", "IN_PROGRESS");
         JsonNode assigned = call(PUT, issuePath, coordinator, edit, 200);
+        assertNotice(supplier.user(), "An event issue needs your attention",
+                "/vendor/assignments/" + offer.path("id").asLong());
         assertThat(assigned.path("overdue").asBoolean()).isTrue();
         assertThat(assigned.path("responsible").path("id").asLong()).isEqualTo(supplier.user().getId());
         assertThat(nodes(call(GET, "/issues", coordinator, null, 200)))
@@ -827,6 +930,9 @@ class EventLifecycleApiIntegrationTest {
         call(PUT, issuePath, coordinator, edit, 400);
         edit.put("resolutionNote", "Replacement tested and verified");
         JsonNode resolved = call(PUT, issuePath, coordinator, edit, 200);
+        assertNotice(supplier.user(), "Event issue resolved", "/vendor/assignments/" + offer.path("id").asLong());
+        assertThat(nodes(call(GET, "/notifications", supplier.user(), null, 200).path("items")))
+                .filteredOn(item -> item.path("title").asText().equals("Event issue resolved")).hasSize(1);
         assertThat(resolved.path("resolvedBy").path("id").asLong()).isEqualTo(coordinator.getId());
         assertThat(resolved.path("overdue").asBoolean()).isFalse();
         JsonNode persisted = nodes(call(GET, path, supplier.user(), null, 200)).get(0);
@@ -900,6 +1006,8 @@ class EventLifecycleApiIntegrationTest {
         replacement.setActive(true);
         users.saveAndFlush(replacement);
         JsonNode reassigned = call(PUT, ownerPath, admin, handover, 200);
+        assertNotice(replacement, "Work assigned to you", "/coordinator/inquiries/" + inquiry);
+        assertNotice(client, "Your coordinator changed", "/client/inquiries/" + inquiry);
         call(PUT, ownerPath, admin, handover, 409);
         call(GET, "/inquiries/" + inquiry, coordinator, null, 200);
         call(PUT, "/inquiries/" + inquiry, coordinator, Map.of("requirements", "Unauthorized change"), 409);
@@ -929,6 +1037,9 @@ class EventLifecycleApiIntegrationTest {
         handover.put("expectedVersion", reassigned.path("version").asLong());
         handover.put("reason", "Lead coordinator returned");
         JsonNode finalOwner = call(PUT, ownerPath, admin, handover, 200);
+        assertNotice(coordinator, "Work assigned to you", "/coordinator/events/" + event);
+        assertNotice(replacement, "Work handed to another coordinator", "/coordinator/events/" + event);
+        assertNotice(client, "Your coordinator changed", "/client/events/" + event);
         call(POST, "/checklists/event/" + event + "/generate", replacement, null, 409);
         call(POST, "/checklists/event/" + event + "/generate", coordinator, null, 200);
         assertThat(nodes(finalOwner.path("history"))).hasSize(3);
@@ -1041,6 +1152,9 @@ class EventLifecycleApiIntegrationTest {
 
     @Test
     void clientCalendarShowsCapacityBlackoutsAndBookingBuffersWithoutBookingDetails() throws Exception {
+        // This scenario needs exactly one eligible hall; MySQL migrations also seed
+        // larger brochure venues, which correctly keep the aggregate calendar available.
+        jdbc.update("UPDATE venues SET is_active = false WHERE id <> ?", venue.getId());
         venue.setCapacity(900);
         venues.saveAndFlush(venue);
         User admin = user("calendar-admin", Role.ADMIN);
@@ -1079,6 +1193,165 @@ class EventLifecycleApiIntegrationTest {
                 "requestedCategories", List.of("av", "security", "catering")), 201).path("id").asLong();
     }
 
+    @Test
+    void bookingAlternativesRespectSeatingFullWindowsAndExplicitDateFlexibility() throws Exception {
+        jdbc.update("UPDATE venues SET is_active = false WHERE id <> ?", venue.getId());
+        venue.setLayoutCapacities("{\"THEATRE\":300,\"CLASSROOM\":100}"); venues.saveAndFlush(venue);
+        User admin = user("options-admin", Role.ADMIN);
+        call(POST, "/venues/" + venue.getId() + "/unavailable-dates", admin,
+                Map.of("date", date.minusDays(1).toString(), "reason", "Maintenance on setup day"), 201);
+        var request = new java.util.HashMap<String,Object>();
+        request.put("date", date.toString()); request.put("attendees", 200);
+        request.put("eventType", "meeting"); request.put("tableSetup", "CLASSROOM"); request.put("flexibleDays", 3);
+        long bookingCount = bookings.count(), eventCount = events.count();
+        assertThat(call(POST, "/booking-options", client, request, 200).path("options")).isEmpty();
+        request.put("tableSetup", "THEATRE"); request.put("flexibleDays", 0);
+        assertThat(call(POST, "/booking-options", client, request, 200).path("options")).isEmpty();
+        request.put("flexibleDays", 3);
+        JsonNode result = call(POST, "/booking-options", client, request, 200);
+        assertThat(nodes(result.path("options"))).isNotEmpty().allSatisfy(option -> {
+            LocalDate start = LocalDate.parse(option.path("eventDate").asText());
+            assertThat(Math.abs(option.path("daysShift").asInt())).isBetween(1, 3);
+            assertThat(option.path("bookedFrom").asText()).isEqualTo(start.minusDays(1).toString());
+            assertThat(option.path("bookedThrough").asText()).isEqualTo(start.plusDays(1).toString());
+        });
+        request.put("eventType", "exhibition"); request.put("date", date.plusDays(10).toString()); request.put("flexibleDays", 0);
+        JsonNode exhibition = call(POST, "/booking-options", coordinator, request, 200).path("options").get(0);
+        assertThat(java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(exhibition.path("bookedFrom").asText()),
+                LocalDate.parse(exhibition.path("bookedThrough").asText())) + 1).isGreaterThanOrEqualTo(7);
+        assertThat(bookings.count()).isEqualTo(bookingCount); assertThat(events.count()).isEqualTo(eventCount);
+        request.put("flexibleDays", 15); call(POST, "/booking-options", client, request, 400);
+        request.put("flexibleDays", 0); request.put("inquiryId", submittedInquiry());
+        call(POST, "/booking-options", client, request, 403);
+    }
+
+    @Test
+    void waitingListDetectsReleasedDatesNotifiesBothPartiesOnceAndCreatesNoBooking() throws Exception {
+        jdbc.update("UPDATE venues SET is_active = false WHERE id <> ?", venue.getId());
+        long inquiry = proposedInquiry();
+        User admin = user("watch-admin", Role.ADMIN);
+        JsonNode block = call(POST, "/venues/" + venue.getId() + "/unavailable-dates", admin,
+                Map.of("date", date.toString(), "reason", "Unavailable for this request"), 201);
+        String path = "/inquiries/" + inquiry + "/availability-watch";
+        call(POST, path, coordinator, null, 403);
+        call(POST, path, user("other-watcher", Role.CLIENT), null, 404);
+        assertThat(call(POST, path, client, null, 200).path("status").asText()).isEqualTo("WAITING");
+        call(POST, path, client, null, 200);
+        var watch = watchRecords.findByInquiryId(inquiry).orElseThrow();
+        availabilityWatches.process(watch.getId(), java.time.Instant.now());
+        assertThat(call(GET, path, client, null, 200).path("status").asText()).isEqualTo("WAITING");
+        call(org.springframework.http.HttpMethod.DELETE, "/venues/" + venue.getId() + "/unavailable-dates/" + block.path("id").asLong(), admin, null, 204);
+        long bookingCount = bookings.count();
+        var parallelChecks = Executors.newFixedThreadPool(2);
+        CountDownLatch startChecks = new CountDownLatch(1);
+        try {
+            var first = parallelChecks.submit(() -> { startChecks.await(); availabilityWatches.process(watch.getId(), java.time.Instant.now()); return true; });
+            var second = parallelChecks.submit(() -> { startChecks.await(); availabilityWatches.process(watch.getId(), java.time.Instant.now()); return true; });
+            startChecks.countDown(); first.get(15, TimeUnit.SECONDS); second.get(15, TimeUnit.SECONDS);
+        } finally { parallelChecks.shutdownNow(); }
+        availabilityWatches.process(watch.getId(), java.time.Instant.now().plusSeconds(60));
+        assertThat(call(GET, path, client, null, 200).path("status").asText()).isEqualTo("NOTIFIED");
+        assertNotice(client, "A suitable venue became available", "/client/inquiries/" + inquiry);
+        assertNotice(coordinator, "A waiting-list inquiry has a venue option", "/coordinator/inquiries/" + inquiry);
+        assertThat(nodes(call(GET, "/notifications", client, null, 200).path("items")))
+                .filteredOn(item -> item.path("title").asText().equals("A suitable venue became available")).hasSize(1);
+        assertThat(bookings.count()).isEqualTo(bookingCount);
+        assertThat(events.findByInquiryId(inquiry)).isEmpty();
+        assertThat(inquiries.findById(inquiry).orElseThrow().getStatus()).isEqualTo(EventStatus.PROPOSAL_SENT);
+    }
+
+    @Test
+    void waitingListStopsOnOptOutAndRecognizesAnExpiredHold() throws Exception {
+        jdbc.update("UPDATE venues SET is_active = false WHERE id <> ?", venue.getId());
+        User admin = user("watch-hold-admin", Role.ADMIN);
+        long inquiry = submittedInquiry();
+        String path = "/inquiries/" + inquiry + "/availability-watch";
+        call(POST, path, client, null, 400); // No reason to wait while a room fits now.
+        call(POST, "/venues/" + venue.getId() + "/hold", coordinator,
+                Map.of("startDate", date.minusDays(1).toString(), "days", 4), 201);
+        call(POST, path, client, null, 200);
+        long watch = watchRecords.findByInquiryId(inquiry).orElseThrow().getId();
+        call(org.springframework.http.HttpMethod.DELETE, path, client, null, 200);
+        availabilityWatches.process(watch, java.time.Instant.now());
+        assertThat(call(GET, path, client, null, 200).path("status").asText()).isEqualTo("CANCELLED");
+        call(POST, path, client, null, 200);
+        var holds = bookings.findByVenueId(venue.getId());
+        holds.forEach(row -> row.setExpiresAt(java.time.LocalDateTime.now().minusSeconds(1))); bookings.saveAllAndFlush(holds);
+        availabilityWatches.process(watch, java.time.Instant.now());
+        assertThat(call(GET, path, client, null, 200).path("status").asText()).isEqualTo("NOTIFIED");
+    }
+
+    @Test
+    void passwordResetIsPrivateSingleUseAndEndsExistingSessions() throws Exception {
+        String oldJwt = jwt.generateJwtToken(client.getUsername(), "CLIENT");
+        JsonNode unknown = publicPost("/api/auth/forgot-password", Map.of("email", "missing-" + run + "@example.test"), 202);
+        JsonNode known = publicPost("/api/auth/forgot-password", Map.of("email", client.getEmail()), 202);
+        assertThat(known).isEqualTo(unknown);
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000)).sendWorkflowNotification(
+                org.mockito.ArgumentMatchers.argThat(notice -> notice.recipient().equals(client.getEmail()) && notice.title().equals("Reset your AICC password")));
+        var captured = org.mockito.ArgumentCaptor.forClass(com.aicc.eventmanagement.services.NotificationService.EmailRequested.class);
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000).atLeastOnce()).sendWorkflowNotification(captured.capture());
+        String link = captured.getAllValues().stream().filter(notice -> notice.recipient().equals(client.getEmail())
+                && notice.title().equals("Reset your AICC password")).findFirst().orElseThrow().path();
+        String token = link.substring(link.indexOf("#token=") + 7);
+        assertThat(recoveryRecords.findById(client.getId()).orElseThrow().getTokenHash()).isNotEqualTo(token).hasSize(64);
+        String newPassword = "New demo password 2027!";
+        publicPost("/api/auth/reset-password", Map.of("token", token, "password", newPassword), 200);
+        publicPost("/api/auth/reset-password", Map.of("token", token, "password", newPassword), 400);
+        assertThat(recoveryRecords.findById(client.getId())).isEmpty();
+        http.perform(MockMvcRequestBuilders.get("/api/v1/users/me").header("Authorization", "Bearer " + oldJwt)).andExpect(status().isForbidden());
+        JsonNode login = publicPost("/api/auth/login", Map.of("username", client.getUsername(), "password", newPassword), 200);
+        http.perform(MockMvcRequestBuilders.get("/api/v1/users/me").header("Authorization", "Bearer " + login.path("accessToken").asText())).andExpect(status().isOk());
+        assertThat(passwordEncoder.matches(newPassword, users.findById(client.getId()).orElseThrow().getPasswordHash())).isTrue();
+    }
+
+    @Test
+    void expiredPasswordResetLinksCannotChangeTheAccount() throws Exception {
+        publicPost("/api/auth/forgot-password", Map.of("email", client.getEmail()), 202);
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000)).sendWorkflowNotification(
+                org.mockito.ArgumentMatchers.argThat(notice -> notice.recipient().equals(client.getEmail()) && notice.title().equals("Reset your AICC password")));
+        var captured = org.mockito.ArgumentCaptor.forClass(com.aicc.eventmanagement.services.NotificationService.EmailRequested.class);
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000).atLeastOnce()).sendWorkflowNotification(captured.capture());
+        String link = captured.getAllValues().stream().filter(notice -> notice.recipient().equals(client.getEmail())
+                && notice.title().equals("Reset your AICC password")).findFirst().orElseThrow().path();
+        var recovery = recoveryRecords.findById(client.getId()).orElseThrow();
+        recovery.setExpiresAt(java.time.Instant.now().minusSeconds(1)); recoveryRecords.saveAndFlush(recovery);
+        String before = users.findById(client.getId()).orElseThrow().getPasswordHash();
+        publicPost("/api/auth/reset-password", Map.of("token", link.substring(link.indexOf("#token=")+7), "password", "Another demo password!"), 400);
+        assertThat(users.findById(client.getId()).orElseThrow().getPasswordHash()).isEqualTo(before);
+    }
+
+    private JsonNode publicPost(String path, Object body, int expected) throws Exception {
+        MvcResult result = http.perform(MockMvcRequestBuilders.post(path).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsBytes(body))).andExpect(status().is(expected)).andReturn();
+        return json.readTree(result.getResponse().getContentAsString());
+    }
+
+    @Test
+    void simultaneousPasswordResetsConsumeTheLinkOnlyOnce() throws Exception {
+        publicPost("/api/auth/forgot-password", Map.of("email", client.getEmail()), 202);
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000)).sendWorkflowNotification(
+                org.mockito.ArgumentMatchers.argThat(notice -> notice.recipient().equals(client.getEmail()) && notice.title().equals("Reset your AICC password")));
+        var captured = org.mockito.ArgumentCaptor.forClass(com.aicc.eventmanagement.services.NotificationService.EmailRequested.class);
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.atLeastOnce()).sendWorkflowNotification(captured.capture());
+        String link = captured.getAllValues().stream().filter(notice -> notice.recipient().equals(client.getEmail())
+                && notice.title().equals("Reset your AICC password")).findFirst().orElseThrow().path();
+        String token = link.substring(link.indexOf("#token=") + 7);
+        var executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            java.util.concurrent.Callable<Integer> reset = () -> {
+                start.await(10, TimeUnit.SECONDS);
+                return http.perform(MockMvcRequestBuilders.post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsBytes(Map.of("token", token, "password", "A new concurrent password!"))))
+                        .andReturn().getResponse().getStatus();
+            };
+            var first = executor.submit(reset); var second = executor.submit(reset); start.countDown();
+            assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS))).containsExactlyInAnyOrder(200, 400);
+            assertThat(users.findById(client.getId()).orElseThrow().getTokenVersion()).isEqualTo(1);
+        } finally { executor.shutdownNow(); }
+    }
+
     private long proposedInquiry() throws Exception {
         long inquiry = submittedInquiry();
         JsonNode submittedTimeline = call(GET, "/inquiries/" + inquiry + "/timeline", client, null, 200);
@@ -1109,6 +1382,7 @@ class EventLifecycleApiIntegrationTest {
 
     private JsonNode convert(long inquiry, int expectedStatus) throws Exception {
         String receipt = signAndUpload(inquiry);
+        assertNotice(coordinator, "Client signed the booking contract", "/coordinator/inquiries/" + inquiry);
         return call(POST, agreementPath(inquiry) + "/receipt/verify", coordinator,
                 Map.of("receiptUploadedAt", receipt), expectedStatus);
     }
@@ -1221,6 +1495,70 @@ class EventLifecycleApiIntegrationTest {
                         && item.path("path").asText().equals("/client/events/" + event));
         call(PATCH, "/notifications/read-all", client, null, 204);
         assertThat(call(GET, "/notifications", client, null, 200).path("unreadCount").asLong()).isZero();
+    }
+
+    @Test
+    void coordinatorFirstSignatureNotifiesTheClientAndRepeatedSignaturesDoNotSendAgain() throws Exception {
+        long inquiry = acceptedInquiry();
+        String path = agreementPath(inquiry);
+        String revision = call(GET, path, coordinator, null, 200).path("revision").asText();
+        var signature = Map.of("name", "Coordinator", "revision", revision, "consent", true);
+        call(POST, path + "/signature", coordinator, signature, 200);
+        call(POST, path + "/signature", coordinator, signature, 200);
+        assertNotice(client, "AICC signed your booking contract", "/client/inquiries/" + inquiry);
+        assertThat(nodes(call(GET, "/notifications", client, null, 200).path("items")))
+                .filteredOn(item -> item.path("title").asText().equals("AICC signed your booking contract")).hasSize(1);
+        var clientSignature = Map.of("name", "Client", "revision", revision, "consent", true);
+        call(POST, path + "/signature", client, clientSignature, 200);
+        call(POST, path + "/signature", client, clientSignature, 200);
+        assertNotice(coordinator, "Client signed the booking contract", "/coordinator/inquiries/" + inquiry);
+        assertNotice(client, "Contract signed", "/client/inquiries/" + inquiry);
+        assertThat(nodes(call(GET, "/notifications", coordinator, null, 200).path("items")))
+                .filteredOn(item -> item.path("title").asText().equals("Client signed the booking contract")).hasSize(1);
+    }
+
+    @Test
+    void expiredContractHoldNotifiesBothPartiesOnceEvenWhenRemindersWerePaused() throws Exception {
+        long inquiry = acceptedInquiry();
+        signAndUpload(inquiry);
+        call(PATCH, "/booking-followups/" + inquiry + "/pause", coordinator, Map.of("paused", true), 200);
+        var agreement = agreements.findById(inquiry).orElseThrow();
+        var deadline = (agreement.getClientSignedAt().isAfter(agreement.getCoordinatorSignedAt())
+                ? agreement.getClientSignedAt() : agreement.getCoordinatorSignedAt()).plus(java.time.Duration.ofDays(7));
+        followups.process(inquiry, deadline.minusSeconds(1));
+        assertThat(nodes(call(GET, "/notifications", client, null, 200).path("items")))
+                .noneMatch(item -> item.path("title").asText().equals("Your venue hold expired"));
+        followups.process(inquiry, deadline.plusSeconds(1));
+        followups.process(inquiry, deadline.plusSeconds(120));
+        assertNotice(client, "Your venue hold expired", "/client/inquiries/" + inquiry);
+        assertNotice(coordinator, "A venue hold expired", "/coordinator/inquiries/" + inquiry);
+        assertThat(nodes(call(GET, "/notifications", client, null, 200).path("items")))
+                .filteredOn(item -> item.path("title").asText().equals("Your venue hold expired")).hasSize(1);
+        assertThat(followupStates.findById(inquiry).orElseThrow().getSentCount()).isEqualTo(1);
+        assertThat(inquiries.findById(inquiry).orElseThrow().getStatus()).isEqualTo(EventStatus.PROPOSAL_ACCEPTED);
+        assertThat(events.findByInquiryId(inquiry)).isEmpty();
+    }
+
+    @Test
+    void rolledBackActionsNeitherSaveNotificationsNorSendEmail() throws Exception {
+        String title = "Rolled back notice " + run;
+        new org.springframework.transaction.support.TransactionTemplate(assistanceTransactions).executeWithoutResult(tx -> {
+            notifications.notifyUser(client.getId(), com.aicc.eventmanagement.entities.AppNotification.Destination.CLIENT_EVENT,
+                    999L, title, "This action must roll back.");
+            tx.setRollbackOnly();
+        });
+        assertThat(nodes(call(GET, "/notifications", client, null, 200).path("items")))
+                .noneMatch(item -> item.path("title").asText().equals(title));
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.after(300).never())
+                .sendWorkflowNotification(org.mockito.ArgumentMatchers.argThat(notice -> notice.title().equals(title)));
+    }
+
+    private void assertNotice(User recipient, String title, String path) throws Exception {
+        assertThat(nodes(call(GET, "/notifications", recipient, null, 200).path("items")))
+                .anyMatch(item -> item.path("title").asText().equals(title) && item.path("path").asText().equals(path));
+        org.mockito.Mockito.verify(workflowEmail, org.mockito.Mockito.timeout(5000).atLeastOnce())
+                .sendWorkflowNotification(org.mockito.ArgumentMatchers.argThat(notice ->
+                        notice.recipient().equals(recipient.getEmail()) && notice.title().equals(title) && notice.path().equals(path)));
     }
 
     @Test

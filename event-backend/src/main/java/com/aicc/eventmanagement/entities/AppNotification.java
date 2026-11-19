@@ -13,13 +13,13 @@ public class AppNotification {
     public enum Destination {
         CLIENT_INQUIRY("/client/inquiries/"), COORDINATOR_INQUIRY("/coordinator/inquiries/"),
         VENDOR_ASSIGNMENT("/vendor/assignments/"), CLIENT_EVENT("/client/events/"),
-        COORDINATOR_EVENT("/coordinator/events/");
+        COORDINATOR_EVENT("/coordinator/events/"), ADMIN_OVERVIEW("/admin/dashboard");
 
         private final String prefix;
 
         Destination(String prefix) { this.prefix = prefix; }
 
-        public String path(Long id) { return prefix + id; }
+        public String path(Long id) { return this == ADMIN_OVERVIEW ? prefix : prefix + id; }
     }
 
     @Id

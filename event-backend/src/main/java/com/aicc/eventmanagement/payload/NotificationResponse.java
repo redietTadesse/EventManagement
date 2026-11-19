@@ -36,6 +36,7 @@ public record NotificationResponse(
             case "VENDOR_ASSIGNMENT", "VENDOR_ASSIGNMENT_OFFERED" -> Destination.VENDOR_ASSIGNMENT;
             case "COORDINATOR_EVENT", "VENDOR_ACCEPTED", "VENDOR_DECLINED" -> Destination.COORDINATOR_EVENT;
             case "CLIENT_EVENT" -> Destination.CLIENT_EVENT;
+            case "ADMIN_OVERVIEW" -> Destination.ADMIN_OVERVIEW;
             default -> null;
         };
         return destination == null ? null : destination.path(notification.getReferenceId());

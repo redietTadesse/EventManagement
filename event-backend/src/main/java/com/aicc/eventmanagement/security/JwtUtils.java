@@ -25,9 +25,14 @@ public class JwtUtils {
     }
 
     public String generateJwtToken(String username, String role) {
+        return generateJwtToken(username, role, 0);
+    }
+
+    public String generateJwtToken(String username, String role, long tokenVersion) {
         return Jwts.builder()
                 .subject(username)
                 .claim("role", role)
+                .claim("ver", tokenVersion)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
                 .signWith(getSigningKey())
@@ -53,5 +58,13 @@ public class JwtUtils {
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
+    }
+
+    public boolean matchesTokenVersion(String token, long currentVersion) {
+        try {
+            Number version = Jwts.parser().verifyWith(getSigningKey()).build()
+                    .parseSignedClaims(token).getPayload().get("ver", Number.class);
+            return (version == null ? 0 : version.longValue()) == currentVersion;
+        } catch (RuntimeException ex) { return false; }
     }
 }

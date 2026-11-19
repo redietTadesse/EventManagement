@@ -237,6 +237,10 @@ public class VenueService {
         LocalDate blockStart = window.from();
         LocalDate blockEnd = window.through();
 
+        boolean held = venueBookingRepository.findBlockingRowsInRange(blockStart, blockEnd, LocalDateTime.now()).stream()
+                .anyMatch(row -> row.getVenue().getId().equals(venue.getId()) && row.getStatus() == VenueBooking.BookingStatus.HELD);
+        if (held) return false;
+
         if (unavailableDateRepository.existsByVenueIdAndUnavailableDateBetween(
                 venue.getId(), blockStart, blockEnd)) {
             return false;
@@ -354,6 +358,10 @@ public class VenueService {
         LocalDate blockedThrough = window.through();
         List<String> explanation = new ArrayList<>();
         List<String> blockers = new ArrayList<>();
+
+        boolean activeHold = venueBookingRepository.findBlockingRowsInRange(blockedFrom, blockedThrough, LocalDateTime.now()).stream()
+                .anyMatch(row -> row.getVenue().getId().equals(venue.getId()) && row.getStatus() == VenueBooking.BookingStatus.HELD);
+        if (activeHold) blockers.add("A live venue hold protects dates within the required booking window.");
 
         if (venue.isActive()) {
             explanation.add("Venue is active.");

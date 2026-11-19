@@ -3,14 +3,11 @@ package com.aicc.eventmanagement.services;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.enums.EventStatus;
 import com.aicc.eventmanagement.enums.Role;
-import com.aicc.eventmanagement.events.WorkflowTransitionEvent;
 import com.aicc.eventmanagement.repositories.EventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -21,8 +18,7 @@ import java.util.List;
 public class WorkflowScheduler {
 
     private final EventRepository eventRepository;
-    private final WorkflowEngine workflowEngine;
-    private final ApplicationEventPublisher eventPublisher;
+    private final EventService eventService;
     private final VendorService vendorService;
 
     /**
@@ -42,7 +38,6 @@ public class WorkflowScheduler {
     }
 
     @Scheduled(cron = "0 0 0 * * *")
-    @Transactional
     public void autoCompletePastEvents() {
         log.info("Scheduler: auto-completing past events");
         LocalDate today = LocalDate.now();
@@ -50,12 +45,9 @@ public class WorkflowScheduler {
 
         for (Event event : pastEvents) {
             try {
-                EventStatus old = event.getStatus();
-                workflowEngine.transition(event, EventStatus.COMPLETED, Role.ADMIN);
-                eventRepository.save(event);
-
-                eventPublisher.publishEvent(new WorkflowTransitionEvent(this, old, EventStatus.COMPLETED,
-                        "EVENT-" + event.getId(), Role.ADMIN));
+                // Use the same transaction and assignment cascade as manual completion.
+                // Each event commits separately, so one failure cannot undo the others.
+                eventService.updateEventStatus(event.getId(), EventStatus.COMPLETED, Role.ADMIN);
 
                 log.info("Auto-completed event {}", event.getId());
             } catch (Exception e) {
