@@ -1,12 +1,9 @@
-import WorkspaceIntro from '../components/WorkspaceIntro';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import Skeleton from '../components/Skeleton';
-import StatCard from '../components/StatCard';
-import EmptyState from '../components/EmptyState';
-import { ArrowRightIcon, ClockIcon, CalendarDaysIcon, CheckCircleIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
 import { useApp } from '../context/AppContext';
 
 const formatDate = (value) => {
@@ -29,6 +26,9 @@ export default function VendorDashboard() {
   const { state, fetchMyVendorProfile, fetchMyAssignments } = useApp();
   const { currentUser } = state;
 
+  const [folder, setFolder] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [limit, setLimit] = useState(8);
   const [profile, setProfile] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,9 +86,6 @@ export default function VendorDashboard() {
 
   const pending = assignments.filter(a => a.status === 'PENDING');
   const accepted = assignments.filter(a => a.status === 'ACCEPTED');
-  const declined = assignments.filter(a => a.status === 'DECLINED');
-  const completed = assignments.filter(a => a.status === 'COMPLETED');
-  const closed = assignments.filter(a => a.status === 'EXPIRED' || a.status === 'CANCELLED');
   const insuranceExpiryDate = profile?.insuranceExpiryDate?.slice(0, 10);
   const insuranceExpired = insuranceExpiryDate && insuranceExpiryDate < getLocalDate();
   const isFlagged = Boolean(profile?.flaggedForDeactivation);
@@ -96,56 +93,37 @@ export default function VendorDashboard() {
   const upcoming = accepted.filter(item => item.eventDate >= getLocalDate())
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
   const responseQueue = [...pending].sort((a, b) => (a.expiresAt || '9999').localeCompare(b.expiresAt || '9999'));
-  const metrics = [
-    ['Awaiting response', pending.length, <ClockIcon />, 'amber', 'PENDING'],
-    ['Accepted assignments', accepted.length, <CalendarDaysIcon />, 'navy', 'ACCEPTED'],
-    ['Completed', completed.length, <CheckCircleIcon />, 'green', 'COMPLETED'],
-    ['Closed offers', closed.length + declined.length, <ArchiveBoxIcon />, 'navy', 'ALL'],
-  ];
-
+  const view = folder || (responseQueue.length ? 'offers' : 'upcoming');
+  const rows = view === 'offers' ? responseQueue : upcoming;
+  const selected = rows.find(item => item.id === selectedId) || rows[0];
   return <Layout title="Vendor overview"><div className="space-y-6">
-    <WorkspaceIntro label="Vendor workspace" title={profile?.companyName || currentUser?.fullName || 'Your next commitment starts here.'}
-      description="A clear view of your offers, deadlines and upcoming work with AICC."
-      focusLabel="Next response" focusTitle={assignmentsError ? 'Offers could not be loaded' : responseQueue[0]?.eventName || 'You are up to date'}
-      focusNote={responseQueue[0]?.expiresAt ? `Respond by ${new Date(responseQueue[0].expiresAt).toLocaleString(undefined, {dateStyle:'medium',timeStyle:'short'})}. Review the service details before accepting.` : 'Review new offers here, then follow the assignments you have accepted.'}
-      href={responseQueue[0] ? `/vendor/assignments/${responseQueue[0].id}` : '/vendor/assignments'} action={responseQueue[0] ? 'Review this offer' : 'View my assignments'}>
-      <Link to="/vendor/open" className="btn-outline">Explore open requests<ArrowRightIcon className="h-4 w-4"/></Link>
-    </WorkspaceIntro>
+    <header className="desk-mast"><div><p>Vendor workspace</p><h1>Offers & commitments</h1><span>{profile?.companyName || currentUser?.fullName}</span></div>
+      <div className="mast-actions"><Link className="btn-primary" to="/vendor/open">Find open requests <ArrowRightIcon/></Link></div></header>
     {isFlagged && <div className="rounded-xl border border-rose-300 bg-rose-50 p-5" role="alert"><h2 className="font-semibold text-rose-900">Your vendor account needs review</h2><p className="mt-2 text-sm text-rose-800">Your account has confirmed reports of missed events. AICC will review these before deciding on any account changes. Contact AICC with supporting information if a report is incorrect.</p></div>}
     {(profileError || assignmentsError) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
       {profileError || assignmentsError}
       <button type="button" onClick={() => { setLoading(true); setReloadKey(key => key + 1); }} className="ml-3 font-semibold underline">Try again</button>
     </div>}
-    <div className="metric-strip">
-      {metrics.map(([label, value, icon, color, status]) => <Link key={label} to={`/vendor/assignments?status=${status}`} className="rounded-2xl focus-visible:outline-offset-4">
-        <StatCard label={label} value={assignmentsError ? '—' : value} icon={icon} color={color} />
-      </Link>)}
-    </div>
     {insuranceExpiryDate && <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm ${insuranceExpired ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-600'}`}>
       <span>Insurance {insuranceExpired ? 'expired' : 'valid through'} <strong>{formatDate(insuranceExpiryDate)}</strong></span>
       {insuranceExpired && <span>Contact AICC to update your record.</span>}
     </div>}
-    <div className="grid items-start gap-6 xl:grid-cols-2">
-      {[{ title: 'Needs your response', note: 'Service offers, ordered by response deadline.', rows: responseQueue, status: 'PENDING', empty: 'You are up to date', detail: 'New service offers will appear here.' },
-        { title: 'Upcoming commitments', note: 'Accepted work to prepare for.', rows: upcoming, status: 'ACCEPTED', empty: 'No upcoming commitments', detail: 'Your accepted assignments will appear here.' }].map(section =>
-        <section className="surface overflow-hidden" key={section.title}>
-          <div className="section-heading"><div><h2>{section.title}</h2><p>{section.note}</p></div>
-            <Link className="text-sm font-medium text-indigo-700" to={`/vendor/assignments?status=${section.status}`}>View all</Link></div>
-          {assignmentsError ? <p className="p-6 text-sm text-rose-700">Assignments could not be loaded.</p>
-            : !section.rows.length ? <EmptyState title={section.empty} description={section.detail} size="small" />
-            : <ul className="divide-y divide-slate-100">{section.rows.slice(0, 5).map(assignment =>
-              <li key={assignment.id}><Link className="block px-5 py-5 hover:bg-slate-50 sm:px-6" to={`/vendor/assignments/${assignment.id}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="font-semibold text-slate-800">{assignment.eventName}</p><ArrowRightIcon className="mt-1 h-4 w-4 shrink-0 text-indigo-600" />
-                </div>
-                <p className="mt-1 text-sm capitalize text-slate-600">{assignment.serviceCategory?.replaceAll('_', ' ')} · {formatDate(assignment.eventDate)}</p>
-                <p className="mt-1 text-xs text-slate-500">{assignment.eventVenue || 'Venue pending'} · {assignment.coordinator?.name || 'Coordinator to be assigned'}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <StatusBadge status={assignment.status} />
-                  {assignment.status === 'PENDING' && assignment.expiresAt && <span className="text-xs text-amber-800">Respond by {new Date(assignment.expiresAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>}
-                </div>
-              </Link></li>)}</ul>}
-        </section>)}
-    </div>
+    <section className="desk-sheet">
+      <header className="desk-heading"><div><h2>Assignment inbox</h2><p>Offers are ordered by response deadline. Accepted work is ordered by event date.</p></div><Link className="btn-outline" to="/vendor/assignments">All assignments</Link></header>
+      {assignmentsError ? <p className="desk-notice">Your assignment list is unavailable.</p> : <div className="plan-library">
+        <div className="plan-shelf"><div className="desk-switch">{[['offers','Offers',responseQueue.length],['upcoming','Upcoming',upcoming.length]].map(([key,label,count]) =>
+          <button key={key} aria-pressed={view === key} onClick={() => { setFolder(key); setLimit(8); }}>{label} <span>{count}</span></button>)}</div>
+          <ul>{rows.slice(0,limit).map(item => <li key={item.id}><button className="shelf-item" aria-pressed={item.id === selected?.id} onClick={() => setSelectedId(item.id)}>
+            <span>{item.serviceCategory?.replaceAll('_',' ')}</span><strong>{item.eventName}</strong><small><CalendarDaysIcon/>{formatDate(item.eventDate)}</small>
+          </button></li>)}</ul>{rows.length > limit && <button className="lane-more" onClick={() => setLimit(limit + 8)}>Show more assignments</button>}</div>
+        {selected ? <article className="plan-brief"><header><StatusBadge status={selected.status}/><h2>{selected.eventName}</h2><p>{formatDate(selected.eventDate)} · {selected.eventVenue || 'Venue pending'}</p></header>
+          <div className="plan-next"><h3>{selected.serviceCategory?.replaceAll('_',' ')} service</h3>
+            <p>{view === 'offers' ? 'Review the service details and respond to AICC.' : 'You have accepted this assignment. Open it for details or to report an issue.'}</p>
+            {view === 'offers' && selected.expiresAt && <p className="payment-line">Response deadline · {new Date(selected.expiresAt).toLocaleString()}</p>}
+            <Link className="btn-primary" to={'/vendor/assignments/' + selected.id}>{view === 'offers' ? 'Review and respond' : 'Open assignment'}<ArrowRightIcon/></Link></div>
+          <footer><span>Coordinator <strong>{selected.coordinator?.name || 'Awaiting assignment'}</strong></span></footer></article>
+          : <div className="plan-blank"><h3>{view === 'offers' ? 'No offers awaiting your response' : 'No upcoming commitments'}</h3><Link to="/vendor/open" className="btn-outline">Explore open requests</Link></div>}
+      </div>}
+    </section>
   </div></Layout>;
 }

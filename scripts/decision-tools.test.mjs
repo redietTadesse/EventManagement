@@ -8,7 +8,7 @@ import { JSDOM } from 'jsdom';
 
 // Real components, a DOM and a fake HTTP transport. No test writes to AICC's server.
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:5174', pretendToBeVisual: true });
-for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'HTMLIFrameElement', 'HTMLButtonElement', 'HTMLFieldSetElement', 'HTMLLegendElement', 'HTMLInputElement', 'SVGElement', 'Element', 'Node', 'NodeFilter', 'MutationObserver', 'getComputedStyle', 'localStorage', 'sessionStorage']) {
+for (const key of ['window', 'document', 'navigator', 'FormData', 'HTMLElement', 'HTMLIFrameElement', 'HTMLButtonElement', 'HTMLFieldSetElement', 'HTMLLegendElement', 'HTMLInputElement', 'SVGElement', 'Element', 'Node', 'NodeFilter', 'MutationObserver', 'getComputedStyle', 'localStorage', 'sessionStorage']) {
   Object.defineProperty(globalThis, key, { configurable: true, value: key === 'getComputedStyle' ? dom.window.getComputedStyle.bind(dom.window) : dom.window[key] });
 }
 globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
@@ -32,12 +32,13 @@ const result = await build({ stdin: { contents: `
  export { default as ClientVenues } from './src/client/ClientVenues.jsx';
  export { default as InquiryDetail } from './src/coordinator/InquiryDetail.jsx';
  export { default as BookingChecks } from './src/components/ConversionPreviewModal.jsx';
+ export { default as App } from './src/App.jsx';
  export { AppProvider } from './src/context/AppContext.jsx';
  export { ToastProvider } from './src/context/ToastContext.jsx';
- export { default as api } from './src/api/axios.js';
+ export { default as api, authApi } from './src/api/axios.js';
 `, resolveDir: process.cwd() }, bundle: true, write: false, format: 'esm', platform: 'node', packages: 'external', jsx: 'automatic', define: { 'import.meta.env': '{}' } });
 await writeFile(bundle, result.outputFiles[0].text);
-const { Composer, Recovery, ClientVenues, InquiryDetail, BookingChecks, AppProvider, ToastProvider, api } = await import(pathToFileURL(bundle));
+const { Composer, Recovery, ClientVenues, InquiryDetail, BookingChecks, AppProvider, ToastProvider, App, api, authApi } = await import(pathToFileURL(bundle));
 const { BrowserRouter, MemoryRouter, Routes, Route, useLocation } = await import('react-router-dom');
 const h = React.createElement;
 const nextYear = new Date().getFullYear() + 1;
@@ -66,7 +67,8 @@ api.defaults.adapter = async config => {
   return { data, status: 200, statusText: 'OK', headers: {}, config };
 };
 const mountComposer = () => render(h(BrowserRouter, null, h(ToastProvider, null, h(AppProvider, null, h(Composer, { inquiry, editMode: true, onCancel() {}, onSuccess() {} })))));
-afterEach(() => { cleanup(); sent = []; failAvailability = false; });
+const componentAdapter = api.defaults.adapter;
+afterEach(() => { cleanup(); sent = []; failAvailability = false; api.defaults.adapter = componentAdapter; localStorage.clear(); });
 test.after(async () => { await rm(bundle, { force: true }); dom.window.close(); });
 
 test('proposal builder compares actual seating capacities and sends the reviewed, intentionally empty package', async () => {
@@ -105,6 +107,127 @@ test('editing attendance invalidates the old room selection and blocks sending a
   await screen.findByText('Check venue availability before sending.');
   assert.equal(screen.getByRole('button', { name: 'Send revised proposal' }).disabled, true);
   assert.equal(sent.length, 0);
+});
+
+test('a visitor carries venue search criteria through client sign-in', async () => {
+  const user = userEvent.setup();
+  const oldAuth = authApi.defaults.adapter;
+  authApi.defaults.adapter = async config => ({ status:200, headers:{}, config,
+    data:config.url === '/auth/login' ? {accessToken:'local-ui-fixture', role:'CLIENT'} : {} });
+  api.defaults.adapter = async config => ({status:200, headers:{}, config,
+    data:config.url === '/users/me' ? {id:4, role:'CLIENT'} : config.url === '/notifications' ? {items:[], unreadCount:0} : [] });
+  try {
+    window.history.replaceState({}, '', '/');
+    render(h(App));
+    await user.type(screen.getByLabelText('Expected attendees'), '140');
+    await user.selectOptions(screen.getByLabelText('Seating setup'), 'CLASSROOM');
+    await user.click(screen.getByRole('button', {name:'Find venues'}));
+    assert.equal(window.location.pathname, '/login/client');
+    await user.type(await screen.findByLabelText('Username'), 'democlient');
+    await user.type(screen.getByLabelText('Password'), 'fixture-only');
+    await user.click(screen.getByRole('button', {name:/^sign in$/i}));
+    await waitFor(() => assert.equal(window.location.pathname, '/client/venues'));
+    const query = new URLSearchParams(window.location.search);
+    assert.equal(query.get('attendees'), '140');
+    assert.equal(query.get('tableSetup'), 'CLASSROOM');
+  } finally { authApi.defaults.adapter = oldAuth; }
+});
+
+function openWorkspace(role, data, path = '/' + role.toLowerCase() + '/dashboard') {
+  const currentUser = { id: 4, role, fullName: 'Demo user' };
+  const fixtures = { '/users/me': currentUser, '/notifications': { items: [], unreadCount: 0 }, ...data };
+  api.defaults.adapter = async config => {
+    assert.equal(config.method, 'get');
+    const result = fixtures[config.url];
+    return { data: result ?? [], status: 200, statusText: 'OK', headers: {}, config };
+  };
+  localStorage.setItem('token', 'local-ui-fixture');
+  window.history.replaceState({}, '', path);
+  render(h(App));
+}
+
+test('the coordinator follows two overlapping proposals to their room and sees the actual hold on the shared day', async () => {
+  const user = userEvent.setup();
+  const later = nextYear + '-06-17';
+  const shared = nextYear + '-06-16';
+  const requests = [
+    { ...inquiry, eventName: 'Forum', proposal: { venueId: 12 }, status: 'PROPOSAL_SENT' },
+    { ...inquiry, id: 18, eventName: 'Assembly', proposal: { venueId: 12 }, eventDate: later, status: 'PROPOSAL_ACCEPTED' },
+  ];
+  openWorkspace('COORDINATOR', { '/inquiries': requests, '/venues': venues.map(v => ({ ...v, active: true })),
+    '/venues/12/bookings': [{ bookingDate: shared, status: 'HELD', expiresAt: nextYear + '-12-30T00:00:00Z' }] });
+  assert.ok(await screen.findByRole('link', { name: /Forum/ }));
+  await user.click(screen.getByRole('tab', { name: 'Competing proposals' }));
+  await user.click(await screen.findByRole('link', { name: /Check schedule/ }));
+  const comparison = await screen.findByRole('region', { name: 'Proposals being compared' });
+  assert.ok(within(comparison).getByRole('link', { name:'Assembly' }));
+  await user.click(await screen.findByRole('button', { name:'Room A, ' + shared + ', Held, two proposals' }));
+  assert.equal(screen.getByLabelText('Start date').value, shared);
+  assert.equal(screen.queryByRole('link', {name:'Room B'}), null);
+});
+
+test('the client sees the receipt decision, opens the agreement, and finds the converted event once in history', async () => {
+  const user = userEvent.setup();
+  openWorkspace('CLIENT', {
+    '/inquiries/client/4': [
+      { ...inquiry, clientId:4, status:'PROPOSAL_ACCEPTED' },
+      { id:18, clientId:4, status:'EVENT_CREATED', event:{ id:41, name:'Assembly', status:'COMPLETED' } },
+    ],
+    '/events': [{ id:41, inquiryId:18, name:'Assembly', status:'COMPLETED', eventDate:date }],
+    '/inquiries/17': { ...inquiry, clientId:4, status:'PROPOSAL_ACCEPTED' },
+    '/inquiries/17/booking-agreement': { state:'AWAITING_REVIEW', client:true, clientSignature:'Demo client', coordinatorSignature:'Demo coordinator',
+      terms:{proposalNumber:'P-17', eventName:'Forum', totalEtb:6000, eventDate:date, endDate:date, venue:'Room A', services:['av']} },
+    '/inquiries/17/timeline': {inquirySubmitted:true, proposalSent:true, venueHeld:false},
+  });
+  assert.ok(await screen.findByText('Your receipt is with AICC'));
+  await user.click(screen.getByRole('button', { name: 'Past 1' }));
+  assert.ok(screen.getByRole('heading', {name: 'Your event is complete'}));
+  assert.equal(screen.getByRole('link', {name:'Open event'}).getAttribute('href'), '/client/events/41');
+  await user.click(screen.getByRole('button', {name:'Active 1'}));
+  await user.click(screen.getByRole('link', {name:'Open agreement'}));
+  await waitFor(() => assert.equal(document.activeElement.id, 'client-agreement'));
+  let printed = '';
+  const originalPrint = window.print;
+  window.print = () => {
+    printed = document.querySelector('body > .aicc-contract-copy').textContent;
+    window.dispatchEvent(new window.Event('afterprint'));
+  };
+  try { await user.click(await screen.findByRole('button', {name:'Print agreement'})); }
+  finally { window.print = originalPrint; }
+  assert.match(printed, /P-17/);
+  assert.match(printed, /ETB 6,000/);
+  assert.match(printed, /Demo client/);
+  assert.match(printed, /Demo coordinator/);
+  assert.equal(document.querySelector('.aicc-contract-copy'), null);
+});
+
+test('the vendor can switch from the earliest offer to a booked commitment and open its assignment', async () => {
+  const user = userEvent.setup();
+  const assignment = { id:77, eventName:'Service day', status:'ACCEPTED', eventDate:date, serviceCategory:'security' };
+  openWorkspace('VENDOR', { '/vendors/me': {companyName:'Test services'},
+    '/assignments/me': [assignment, {id:78, eventName:'Late deadline', status:'PENDING', expiresAt:nextYear+'-04-02'},
+      {id:79, eventName:'First deadline', status:'PENDING', expiresAt:nextYear+'-04-01'}],
+    '/assignments/me/77': assignment });
+  assert.ok(await screen.findByRole('heading',{name:'First deadline'}));
+  await user.click(screen.getByRole('button',{name:'Upcoming 1'}));
+  await user.click(screen.getByRole('link',{name:'Open assignment'}));
+  assert.ok(await screen.findByRole('heading',{name:'Service day'}));
+  assert.equal(window.location.pathname, '/vendor/assignments/77');
+});
+
+test('a manager can change the revenue period and keep the same figures in the detailed report', async () => {
+  const user = userEvent.setup();
+  function report(months) {
+    const monthly = Array.from({length:months}, (_,i) => ({month:'2026-' + String(i+1).padStart(2,'0'),totalEtb:1000,contracts:1}));
+    return { monthly, fromMonth:monthly[0].month, throughMonth:monthly.at(-1).month, verified:{ totalEtb:months*1000, contracts:months },
+      awaitingReceipt:{totalEtb:450,contracts:1}, awaitingReview:{totalEtb:600,contracts:1}, byVenue:[], byEventType:[] };
+  }
+  openWorkspace('ADMIN', { '/admin/dashboard/revenue?months=3':report(3), '/admin/dashboard/revenue?months=12':report(12) });
+  await user.selectOptions(await screen.findByRole('combobox',{name:'Reporting period'}), '12');
+  await screen.findByText(/12 verified contracts/);
+  await user.click(screen.getByRole('button',{name:/View payment breakdown/}));
+  assert.equal((await screen.findByLabelText('Revenue period')).value, '12');
+  assert.ok(await screen.findByText(/12 contracts ·/));
 });
 
 test('vendor recovery requires an explicit choice and review, then addresses the chosen vendor', async () => {

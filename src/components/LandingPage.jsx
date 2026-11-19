@@ -35,7 +35,7 @@ const amenities = [
 
 const questions = [
   ['Can I check dates before submitting an inquiry?', 'Yes. Sign in to the client workspace to see active venues that fit your dates, event type, and expected attendance.'],
-  ['When is my venue reserved?', 'Your coordinator verifies payment and reserves the venue. Until then, the space remains open to other bookings.'],
+  ['When is my venue reserved?', 'Acceptance marks the proposal as tentative. Both signatures start a seven-day payment hold. Your coordinator checks the receipt to book the room.'],
   ['Can I change the proposal?', 'You can request revisions from your inquiry page while reviewing a proposal. Your coordinator can update it for another review.'],
 ];
 
@@ -79,7 +79,7 @@ export default function LandingPage() {
           alt="Aerial view of the Addis International Convention Center at dusk"
           className="absolute inset-0 -z-20 h-full w-full object-cover object-[60%_55%]" />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-[#0b2224] via-[#0b2224]/85 to-[#0b2224]/35 sm:to-[#0b2224]/15" />
-        <div className={`${shell} flex min-h-[26rem] flex-col items-start justify-center py-12 sm:min-h-[30rem]`}>
+        <div className={`${shell} arrival-grid`}>
           <div className="min-w-0">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f5d898]">
             <MapPinIcon className="h-4 w-4" aria-hidden="true" /> Addis Ababa, Ethiopia
@@ -90,15 +90,20 @@ export default function LandingPage() {
           <p className="mt-6 max-w-lg text-base leading-relaxed text-slate-100 sm:text-lg">
             Check venue availability, submit an inquiry, and follow your event from the first proposal through venue confirmation.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href="#plan" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#efd392] px-5 py-3 text-sm font-bold text-[#142f32] hover:bg-[#ffe5ad]">
-              Plan your event <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
-            </a>
-            <a href="#booking" className="inline-flex min-h-11 items-center rounded-lg border border-white/55 bg-[#142f32]/45 px-5 py-3 text-sm font-semibold text-white hover:bg-[#142f32]">
-              See how booking works
-            </a>
+          <a href="#booking" className="arrival-link">How booking works <ArrowRightIcon aria-hidden="true"/></a>
           </div>
-          </div>
+          <section id="plan" aria-labelledby="plan-title" className="arrival-planner">
+            <h2 id="plan-title">Find your venue</h2>
+          {canPlan ? <EventPlanForm plan={{ eventType: 'conference' }}
+            onSearch={query => navigate(`/client/venues?${query}`)}
+            className="arrival-form">
+            <p className="self-center text-xs leading-relaxed text-slate-600">{currentUser ? 'Your search uses current venue records.' : 'A client account is required to see search results.'}</p>
+            <button type="submit" disabled={loading} className="btn-primary sm:justify-self-end">Find venues <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></button>
+          </EventPlanForm> : <div className="py-4">
+            <p className="mb-4 text-sm text-slate-700">Venue searches and inquiries are available in the client workspace.</p>
+            <Link className="btn-outline" to={dashboard || '/login'}>Open my workspace <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>
+          </div>}
+          </section>
         </div>
         <div className={`${shell} flex justify-end pb-3`}>
           <a href={photoSource} className="rounded bg-[#0b2224]/85 px-2 py-1 text-xs text-white underline underline-offset-2">Photo by Ethiopian News Agency</a>
@@ -151,27 +156,6 @@ export default function LandingPage() {
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <a href={venueProfile} className="text-xs text-slate-600 underline underline-offset-2">AICC venue profile on ICCA</a>
           {canPlan && <Link to="/client/venues" className={subtleLink}>Browse the venue directory <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>}
-        </div>
-      </section>
-
-      <section id="plan" aria-labelledby="plan-title" className="scroll-mt-5 bg-[#142f32] py-14 text-white sm:py-18">
-        <div className={`${shell} grid items-center gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-14`}>
-          <div>
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[#efd392]">Venue finder</p>
-            <h2 id="plan-title" className="font-serif text-4xl leading-tight tracking-tight sm:text-5xl">Find a space for your event</h2>
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-200 sm:text-base">
-              Start with a guest count. Add your dates to check availability, then carry those details into your inquiry.
-            </p>
-          </div>
-          {canPlan ? <EventPlanForm plan={{ eventType: 'conference' }}
-            onSearch={query => navigate(`/client/venues?${query}`)}
-            className="grid gap-4 rounded-2xl bg-[#faf9f5] p-5 text-[#182c30] sm:grid-cols-2 sm:p-7">
-            <p className="self-center text-xs leading-relaxed text-slate-600">{currentUser ? 'Your search uses current venue records.' : 'A client account is required to see search results.'}</p>
-            <button type="submit" disabled={loading} className="btn-primary sm:justify-self-end">Find venues <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></button>
-          </EventPlanForm> : <div className="rounded-2xl border border-white/20 p-6">
-            <p className="mb-4 text-sm text-slate-100">Venue searches and inquiries are available in the client workspace.</p>
-            <Link className="btn-outline" to={dashboard || '/login'}>Open my workspace <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>
-          </div>}
         </div>
       </section>
 

@@ -9,7 +9,7 @@ import api from '../api/axios';
 
 const navigation = {
   CLIENT: [
-    ['My workspace', [['/client/dashboard', 'Overview', Squares2X2Icon], ['/client/inquiries', 'My event plans', InboxStackIcon], ['/client/events', 'My events', CalendarDaysIcon]]],
+    ['My workspace', [['/client/dashboard', 'My event plans', Squares2X2Icon], ['/client/inquiries', 'My inquiries', InboxStackIcon], ['/client/events', 'My events', CalendarDaysIcon]]],
     ['Plan with AICC', [['/client/venues', 'Explore venues', BuildingOffice2Icon]]],
   ],
   COORDINATOR: [

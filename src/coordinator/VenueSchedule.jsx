@@ -1,12 +1,14 @@
 
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import api from '../api/axios';
 import { calendarDateKey } from '../hooks/useVenueAvailabilityCalendar';
 import { scheduleDays, shiftDay, venueDay } from './venueScheduleModel';
+import { proposalOverlaps } from './proposalOverlapModel';
+import { formatEventRange } from './eventDetailModel';
 
 const colors = {
   free: 'bg-white text-slate-400 hover:bg-emerald-50',
@@ -26,7 +28,18 @@ export default function VenueSchedule() {
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState(null);
-  const [inquiryId, setInquiryId] = useState('');
+  const [params, setParams] = useSearchParams();
+  const inquiryId = params.get('inquiry') || '';
+  const comparisonId = params.get('compare');
+  function setInquiryId(value) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete('compare');
+      if (value) next.set('inquiry', value);
+      else next.delete('inquiry');
+      return next;
+    });
+  }
   const [fit, setFit] = useState(null);
   const [fitError, setFitError] = useState('');
   const [fitLoading, setFitLoading] = useState(false);
@@ -52,23 +65,30 @@ export default function VenueSchedule() {
   }, [revision]);
 
   const inquiry = data?.inquiries.find(item => String(item.id) === inquiryId);
+  const today = calendarDateKey(new Date());
+  const comparison = useMemo(() => {
+    if (!comparisonId || !data) return null;
+    const requests = data.inquiries.filter(item => [inquiryId, comparisonId].includes(String(item.id)));
+    return proposalOverlaps(requests, data.rows.map(row => row.venue), today).pairs[0] || null;
+  }, [comparisonId, inquiryId, data, today]);
   useEffect(() => {
     const controller = new AbortController();
     setFit(null);
     setFitError('');
     setFitLoading(false);
     if (!inquiry) return () => controller.abort();
-    setStart(inquiry.eventDate);
+    setSelected(null);
+    setStart(comparison?.from || inquiry.eventDate);
     setFitLoading(true);
     const query = new URLSearchParams({ date: inquiry.eventDate, endDate: inquiry.endDate || inquiry.eventDate,
-      attendees: inquiry.expectedAttendees, eventType: inquiry.eventType });
+      attendees: inquiry.expectedAttendees, eventType: inquiry.eventType, tableSetup: inquiry.tableSetup || 'UNDECIDED' });
     api.get('/venues/availability/reasons?' + query, { signal: controller.signal }).then(result => {
       if (!controller.signal.aborted) setFit(result.data);
     }).catch(() => {
       if (!controller.signal.aborted) setFitError('Inquiry availability could not be verified. Try selecting the inquiry again.');
     }).finally(() => { if (!controller.signal.aborted) setFitLoading(false); });
     return () => controller.abort();
-  }, [inquiry]);
+  }, [inquiry, comparison]);
 
   const rows = data?.rows || [];
   const active = rows.filter(row => row.venue.active);
@@ -112,6 +132,15 @@ export default function VenueSchedule() {
       {!data && !error && <p role="status">Loading venue commitments…</p>}
       {fitLoading && <p role="status">Checking full booking windows and capacity…</p>}
       {fitError && <p role="alert" className="text-rose-800">{fitError}</p>}
+      {data && comparisonId && <section className="schedule-comparison" aria-label="Proposals being compared">
+        <header><h2>{comparison ? 'Shared dates at ' + comparison.first.room.name : 'This pair no longer overlaps'}</h2>
+          <Link to="/coordinator/dashboard?view=overlaps">Back to competing proposals</Link></header>
+        {comparison && <><p>Both proposals request {formatEventRange(comparison.from, comparison.through)}. The schedule below shows any recorded hold or booking.</p>
+          <ul>{[comparison.first, comparison.second].map(row => <li key={row.inquiry.id}>
+            <Link to={'/coordinator/inquiries/' + row.inquiry.id}>{row.inquiry.eventName || row.inquiry.clientName}</Link>
+            <span>{row.inquiry.coordinator?.name || 'Unclaimed'} · {formatEventRange(row.from, row.through)}</span>
+          </li>)}</ul></>}
+      </section>}
       {inquiry && <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
         Checking {inquiry.eventType} for {inquiry.expectedAttendees} attendees, {dateLabel(inquiry.eventDate)}{inquiry.endDate && ' – ' + dateLabel(inquiry.endDate)}.
         {' '}<Link className="font-semibold underline" to={'/coordinator/inquiries/' + inquiry.id}>Open inquiry</Link>
@@ -121,7 +150,7 @@ export default function VenueSchedule() {
           <caption className="sr-only">Venue commitments from {start} to {days.at(-1)}. Select a date to inspect its details.</caption>
           <thead><tr><th className="sticky left-0 z-20 w-60 bg-slate-900 p-4 text-sm text-white">Space · {dateLabel(start)} – {dateLabel(days.at(-1))}</th>
             {days.map(day => <th key={day} className="bg-slate-900 px-1 py-3 text-center text-xs text-white"><span className="block text-slate-400">{new Date(day + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })}</span>{dateLabel(day)}</th>)}</tr></thead>
-          <tbody>{rows.map(row => {
+          <tbody>{rows.filter(row => !comparison || row.venue.id === comparison.first.room.id).map(row => {
             const availability = fit?.find(item => item.venueId === row.venue.id);
             return <tr key={row.venue.id}>
               <th scope="row" className="sticky left-0 z-10 border-b border-slate-200 bg-white p-4">
@@ -132,11 +161,13 @@ export default function VenueSchedule() {
               {days.map(day => {
                 const cell = row.failed ? { kind: 'inactive', label: 'Unknown' } : venueDay(row.venue, day, row.bookings, row.blocked, data.events);
                 const chosen = selected?.venue.id === row.venue.id && selected?.date === day;
+                const shared = comparison && day >= comparison.from && day <= comparison.through;
                 return <td key={day} className="border-b border-slate-200 p-0.5"><button type="button" disabled={row.failed}
-                  aria-label={row.venue.name + ', ' + day + ', ' + cell.label} aria-pressed={chosen}
+                  aria-label={row.venue.name + ', ' + day + ', ' + cell.label + (shared ? ', two proposals' : '')} aria-pressed={chosen}
                   className={'h-24 w-full overflow-hidden rounded-md px-1 text-center text-xs transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ' + colors[cell.kind] + (chosen ? ' ring-2 ring-amber-500' : '')}
                   onClick={() => setSelected({ ...cell, venue: row.venue, date: day })}>
                   <span className="block font-semibold">{cell.label}</span>
+                  {shared && <span className="schedule-demand">2 proposals</span>}
                   <span className="mt-1 block truncate text-[10px]">{cell.booking?.eventName || cell.event?.name || ''}</span>
                 </button></td>;
               })}

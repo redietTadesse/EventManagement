@@ -94,8 +94,7 @@ function RevenueBreakdown({ byVenue, byEventType, total }) {
   );
 }
 
-export default function RevenueDashboard() {
-  const [months, setMonths] = useState(6);
+export default function RevenueDashboard({ months, setMonths }) {
   const { data, loading, error, reload } = useApiResource('/admin/dashboard/revenue?months=' + months);
   const summary = data.monthly?.length === months ? data : null;
 

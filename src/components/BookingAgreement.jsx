@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { createPortal, flushSync } from 'react-dom';
+import AgreementRecord from './AgreementRecord';
 import api from '../api/axios';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
@@ -36,13 +38,25 @@ export default function BookingAgreement({ inquiryId, onBooked, onStatusChange }
   const [contract, setContract] = useState(null);
   const [refresh, setRefresh] = useState(0);
   const [name, setName] = useState('');
-  const [consent, setConsent] = useState(false);
+  const [consentRevision, setConsentRevision] = useState(null);
+  const consent = Boolean(contract?.revision) && contract.revision === consentRevision;
+  const [printCopy, setPrintCopy] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [reviewed, setReviewed] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { onStatusChange?.(contract); }, [contract, onStatusChange]);
+  useEffect(() => {
+    const finished = () => setPrintCopy(null);
+    window.addEventListener('afterprint', finished);
+    return () => window.removeEventListener('afterprint', finished);
+  }, []);
+
+  function printAgreement() {
+    flushSync(() => setPrintCopy(contract));
+    window.print();
+  }
 
   function messageFromError(err, fallback) {
     const data = err.response?.data;
@@ -117,9 +131,10 @@ export default function BookingAgreement({ inquiryId, onBooked, onStatusChange }
     <section className="surface space-y-5 p-5 sm:p-7" aria-label="Booking contract">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><p className="eyebrow mb-1">Booking agreement</p><h2 className="text-xl font-semibold">Contract and payment</h2></div>
-        <button type="button" className="rounded border px-3 py-1" disabled={busy} onClick={() => {
+        <div className="flex flex-wrap gap-2">{terms && <button type="button" className="btn-outline" onClick={printAgreement}>Print agreement</button>}
+        <button type="button" className="btn-outline" disabled={busy} onClick={() => {
           setError(''); setReviewed(false); setRefresh(value => value + 1);
-        }}>Refresh status</button>
+        }}>Refresh status</button></div>
       </div>
       {error && <p role="alert" className="text-rose-700">{error}</p>}
       {!terms && !error && <p role="status">Loading contract…</p>}
@@ -140,21 +155,8 @@ export default function BookingAgreement({ inquiryId, onBooked, onStatusChange }
           <strong>{new Date(contract.paymentDueAt).toLocaleString()}</strong>.
           {' '}{contract.paymentHoldActive ? 'The hold covers setup, event days, and takedown.' : 'There is no active payment hold. Venue availability must be checked.'} Upload payment and allow time for receipt review before this deadline. After it ends, availability must be checked again.
         </p>}
-        <dl className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2 [&_dt]:mb-1 [&_dt]:text-xs [&_dt]:font-medium [&_dt]:text-slate-500 [&_dd]:font-medium">
-          <div><dt>Proposal</dt><dd>{terms.proposalNumber}</dd></div>
-          {terms.eventName&&<div><dt>Event</dt><dd>{terms.eventName}</dd></div>}
-          {terms.tableSetup&&<div><dt>Seating setup</dt><dd>{terms.tableSetup.replaceAll('_',' ')}</dd></div>}
-          <div><dt>Client</dt><dd>{terms.client}</dd></div>
-          <div><dt>Event dates</dt><dd>{terms.eventDate} through {terms.endDate}</dd></div>
-          <div><dt>Venue</dt><dd>{terms.venue}</dd></div>
-          <div><dt>{booked ? 'Original booking window' : 'Proposed venue reservation window'}</dt><dd>{terms.bookedFrom} through {terms.bookedThrough}</dd></div>
-          <div><dt>Expected attendance</dt><dd>{terms.attendees}</dd></div>
-          <div><dt>Agreed total</dt><dd className="font-semibold">ETB {terms.totalEtb.toLocaleString()}</dd></div>
-          <div><dt>Services</dt><dd>{terms.services.length ? terms.services.join(', ') : 'No services selected'}</dd></div>
-          {terms.proposalTerms && <div className="sm:col-span-2"><dt>Terms</dt><dd className="whitespace-pre-wrap">{terms.proposalTerms}</dd></div>}
-        </dl>
-        <p>Client signature: {contract.clientSignature || 'Pending'}{contract.clientSignedAt && ` (${new Date(contract.clientSignedAt).toLocaleString()})`}</p>
-        <p>AICC coordinator signature: {contract.coordinatorSignature || 'Pending'}{contract.coordinatorSignedAt && ` (${new Date(contract.coordinatorSignedAt).toLocaleString()})`}</p>
+        <AgreementRecord contract={contract}/>
+        {printCopy && createPortal(<div className="aicc-contract-copy"><AgreementRecord contract={printCopy}/></div>, document.body)}
         {contract.state !== 'BOOKED' && <p className="text-sm text-slate-600">
           An accepted proposal is tentative. Both signatures create a seven-day hold. The booking becomes final after the assigned coordinator verifies payment.
         </p>}
@@ -170,7 +172,7 @@ export default function BookingAgreement({ inquiryId, onBooked, onStatusChange }
           perform(() => update('/signature', { name, revision: contract.revision, consent }));
         }}>
           <label className="block">Full name to sign <input className="block rounded border p-2" required minLength={2} maxLength={120} value={name} onChange={e => setName(e.target.value)} /></label>
-          <label className="flex gap-2"><input type="checkbox" required checked={consent} onChange={e => setConsent(e.target.checked)} /> I agree to these terms and intend this typed name to be my signature.</label>
+          <label className="flex gap-2"><input type="checkbox" required checked={consent} onChange={e => setConsentRevision(e.target.checked ? contract.revision : null)} /> I agree to these terms and intend this typed name to be my signature.</label>
           <button className="btn-primary" disabled={busy || !consent}>Sign contract</button>
         </form>}
         {contract.rejectionReason && <p className="text-rose-700">Receipt returned: {contract.rejectionReason}</p>}

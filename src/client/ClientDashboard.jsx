@@ -1,106 +1,53 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import EventPlanForm from '../components/EventPlanForm';
-import WorkspaceIntro from '../components/WorkspaceIntro';
-import { ArrowRightIcon, PlusIcon, CalendarDaysIcon, DocumentTextIcon, CheckCircleIcon, ClockIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, CalendarDaysIcon, PlusIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
-import StatCard from '../components/StatCard';
-import StatusBadge from '../components/StatusBadge';
-import EmptyState from '../components/EmptyState';
+import EventPlanForm from '../components/EventPlanForm';
+import ClientPlanBrief from './ClientPlanBrief';
 import { useApp } from '../context/AppContext';
 import useApiResource from '../hooks/useApiResource';
-import { formatDate, snakeToTitleCase } from '../utils/helpers';
-import { calendarDateKey } from '../hooks/useVenueAvailabilityCalendar';
+import { formatEventDate } from '../coordinator/eventDetailModel';
+import { statusLabel } from '../utils/status';
+
+const closed = ['CANCELLED','CLOSED','COMPLETED','PROPOSAL_REJECTED'];
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
   const { state: { currentUser } } = useApp();
-  const inquiries = useApiResource(currentUser?.id ? `/inquiries/client/${currentUser.id}` : null);
+  const inquiries = useApiResource(currentUser?.id ? '/inquiries/client/' + currentUser.id : null);
   const events = useApiResource('/events');
-  const mine = inquiries.data.filter(item => String(item.clientId) === String(currentUser?.id));
-  const decisions = mine.filter(item => ['PROPOSAL_SENT', 'PROPOSAL_ACCEPTED'].includes(item.status));
-  const upcoming = events.data.filter(event => !['CANCELLED', 'CLOSED', 'COMPLETED'].includes(event.status)
-    && (event.endDate || event.eventDate) >= calendarDateKey(new Date()))
-    .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
-  const recent = [...mine].sort((a, b) => b.id - a.id).slice(0, 5);
-  const metric = (resource, count) => resource.loading || resource.error ? '—' : count;
-  const firstName = (currentUser?.fullName || currentUser?.username || '').split(' ')[0];
-
-  return <Layout title="Your overview"><div className="space-y-6">
-    <WorkspaceIntro label="Your AICC workspace" title={firstName ? `Welcome back, ${firstName}.` : 'Your event starts here.'}
-      description="Everything you need to plan your event, agree on the details and stay in touch with your coordinator."
-      focusLabel="Your next step" focusTitle={inquiries.loading ? 'Finding your plans…' : inquiries.error ? 'Your plans could not be loaded' : decisions[0] ? (decisions[0].eventName || 'Your proposal is ready to follow up') : 'What are you planning?'}
-      focusNote={decisions[0]?.status === 'PROPOSAL_ACCEPTED' ? 'Open your agreement to check signatures, payment and the venue hold.' : decisions[0] ? 'Review the proposal, ask for changes, or accept when you are ready.' : 'Explore the venues or share your dates and requirements with AICC.'}
-      href={decisions[0] ? `/client/inquiries/${decisions[0].id}` : '/client/venues'} action={decisions[0] ? 'Continue your booking' : 'Explore venues'}>
-      <Link to="/client/new-inquiry" className="btn-primary"><PlusIcon className="h-4 w-4"/>Plan an event</Link><Link to="/client/inquiries" className="intro-secondary">See all my plans →</Link>
-    </WorkspaceIntro>
-    <details className="disclosure-row" open={!inquiries.loading && !inquiries.error && mine.length === 0}>
-      <summary><span>Planning an event? Check available venues</span><ChevronDownIcon aria-hidden="true" /></summary>
-      <EventPlanForm plan={{ eventType: 'meeting', date: '', endDate: '', attendees: '', tableSetup: 'UNDECIDED' }} dateRequired
-        className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3 sm:p-6"
-        onSearch={params => navigate('/client/venues?' + params)}>
-        <button type="submit" className="btn-primary self-end">Check venues <ArrowRightIcon className="h-4 w-4" /></button>
-      </EventPlanForm>
-    </details>
-    <div className="metric-strip">
-      <StatCard label="Your inquiries" value={metric(inquiries, mine.length)} icon={<DocumentTextIcon />} detail="All event requests" />
-      <StatCard label="Booking steps" value={metric(inquiries, decisions.length)} icon={<ClockIcon />} color="amber" detail="Proposals and accepted bookings" />
-      <StatCard label="Upcoming events" value={metric(events, upcoming.length)} icon={<CalendarDaysIcon />} detail="Scheduled and in preparation" />
-      <StatCard label="Completed events" value={metric(events, events.data.filter(item => item.status === 'COMPLETED').length)} icon={<CheckCircleIcon />} color="green" detail="Your past events" />
-    </div>
-    {(inquiries.error || events.error) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-      {inquiries.error || events.error} <button type="button" onClick={() => { inquiries.reload(); events.reload(); }} className="ml-2 font-semibold underline">Try again</button>
-    </div>}
-    {!inquiries.loading && !inquiries.error && decisions.length > 0 && <section className="surface overflow-hidden">
-      <div className="section-heading"><div><p className="eyebrow mb-1">Keep things moving</p><h2>Your next booking steps</h2></div>
-        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">{decisions.length} to follow up</span>
+  const [selection, setSelection] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [limit, setLimit] = useState(8);
+  const mine = inquiries.data.filter(i => String(i.clientId) === String(currentUser?.id));
+  const eventById = new Map(events.data.map(e => [String(e.id), e]));
+  const eventByInquiry = new Map(events.data.filter(e => e.inquiryId != null).map(e => [String(e.inquiryId), e]));
+  const plans = mine.map(inquiry => ({ key: 'i-' + inquiry.id, inquiry,
+    event: eventByInquiry.get(String(inquiry.id)) || eventById.get(String(inquiry.event?.id)) || inquiry.event }));
+  const linked = new Set(plans.filter(p => p.event).map(p => String(p.event.id)));
+  for (const event of events.data) if (!linked.has(String(event.id))) plans.push({ key: 'e-' + event.id, inquiry: {}, event });
+  const status = p => p.event?.status || p.inquiry.status;
+  const updated = p => p.event?.updatedAt || p.inquiry.updatedAt || p.event?.createdAt || p.inquiry.createdAt || '';
+  plans.sort((a,b) => updated(b).localeCompare(updated(a)) || (b.inquiry.id || b.event.id) - (a.inquiry.id || a.event.id));
+  const list = plans.filter(p => closed.includes(status(p)) === showHistory);
+  const selected = list.find(p => p.key === selection) || list[0];
+  const loading = inquiries.loading || events.loading;
+  const failed = inquiries.error || events.error;
+  const firstVisit = !loading && !failed && !plans.length;
+  return <Layout title="My event plans"><div className="space-y-6">
+    <header className="desk-mast"><div><p>Client workspace</p><h1>My event plans</h1><span>{currentUser?.fullName || currentUser?.username}</span></div>
+      <div className="mast-actions"><Link className="btn-outline" to="/client/venues">Explore venues</Link><Link className="btn-primary" to="/client/new-inquiry"><PlusIcon/>Plan an event</Link></div></header>
+    {failed && <p role="alert" className="desk-notice">Some of your plans could not be loaded. <button onClick={() => { inquiries.reload(); events.reload(); }}>Try again</button></p>}
+    {loading ? <p role="status" className="desk-notice">Loading your plans…</p> : !firstVisit && <section className="plan-library" aria-label="Your plans">
+      <div className="plan-shelf"><div className="desk-switch">{[[false,'Active'],[true,'Past']].map(([past,label]) => <button key={label} aria-pressed={showHistory === past} onClick={() => {setShowHistory(past);setLimit(8);}}>{label} <span>{plans.filter(p => closed.includes(status(p)) === past).length}</span></button>)}</div>
+        <ul>{list.slice(0, limit).map(p => <li key={p.key}><button className="shelf-item" aria-pressed={selected?.key === p.key} onClick={() => setSelection(p.key)}>
+          <span>{statusLabel(status(p))}</span><strong>{p.event?.name || p.inquiry.eventName || p.inquiry.eventType}</strong><small><CalendarDaysIcon/>{formatEventDate(p.event?.eventDate || p.inquiry.eventDate)}</small>
+        </button></li>)}</ul>{list.length > limit && <button className="lane-more" onClick={() => setLimit(limit + 8)}>Show more plans</button>}
       </div>
-      <ul className="divide-y divide-slate-100">{decisions.map(inquiry => <li key={inquiry.id}>
-        <Link to={`/client/inquiries/${inquiry.id}`} className="flex items-center gap-4 px-5 py-4 hover:bg-indigo-50/50 sm:px-6">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><DocumentTextIcon className="h-5 w-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-800">{inquiry.eventName || snakeToTitleCase(inquiry.eventType)} · {formatDate(inquiry.eventDate)}</span>
-            <span className="mt-1 block text-sm text-slate-500">{inquiry.status === 'PROPOSAL_SENT' ? 'Review your proposal and respond to the coordinator.' : 'Follow your contract signatures and payment receipt.'}</span></span>
-          <ArrowRightIcon className="h-4 w-4 shrink-0 text-indigo-600" />
-        </Link>
-      </li>)}</ul>
+      {selected ? <ClientPlanBrief key={selected.key} inquiry={selected.inquiry} event={selected.event}/> : <div className="plan-blank"><h2>{failed ? 'Your plan list is incomplete' : showHistory ? 'No past plans yet' : 'No active plans'}</h2><Link className="btn-outline" to="/client/inquiries">See my inquiries</Link></div>}
     </section>}
-    <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <section className="surface overflow-hidden">
-        <div className="section-heading"><h2>Recent inquiries</h2><Link to="/client/inquiries" className="text-sm font-medium text-indigo-700">View all</Link></div>
-        {inquiries.loading ? <p role="status" className="p-8 text-sm text-slate-500">Loading inquiries…</p>
-          : inquiries.error ? <p className="p-6 text-sm text-rose-700">Your inquiries could not be loaded.</p>
-          : recent.length === 0 ? <EmptyState title="Start with an idea" description="Tell us your dates, guest count, and the services you need." actionLink="/client/new-inquiry" actionText="Create your first inquiry" />
-          : <ul className="divide-y divide-slate-100">{recent.map(inquiry => <li key={inquiry.id}>
-            <Link to={`/client/inquiries/${inquiry.id}`} className="block px-5 py-4 hover:bg-slate-50 sm:px-6">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-slate-800">{inquiry.eventName || snakeToTitleCase(inquiry.eventType)} <span className="ml-1 text-xs font-normal text-slate-400">#{inquiry.id}</span></span>
-                <StatusBadge status={inquiry.status} />
-              </div>
-              <p className="mt-2 text-xs text-slate-500">{formatDate(inquiry.eventDate)} · {inquiry.expectedAttendees} guests</p>
-              <p className="mt-1 text-xs text-slate-500">Handled by {inquiry.coordinator?.name || 'a coordinator to be assigned'}</p>
-            </Link>
-          </li>)}</ul>}
-      </section>
-      <section className="surface overflow-hidden">
-        <div className="section-heading"><h2>Coming up</h2><Link to="/client/events" className="text-sm font-medium text-indigo-700">All events</Link></div>
-        {events.loading ? <p role="status" className="p-8 text-sm text-slate-500">Loading events…</p>
-          : events.error ? <p className="p-6 text-sm text-rose-700">Your events could not be loaded.</p>
-          : upcoming.length === 0 ? <EmptyState title="Your next event starts here" description="Your booked events will appear here as you complete the proposal and payment steps." size="small" />
-          : <ul className="divide-y divide-slate-100">{upcoming.slice(0, 4).map(event => <li key={event.id}>
-            <Link to={`/client/events/${event.id}`} className="block px-5 py-5 hover:bg-slate-50 sm:px-6">
-              <p className="mb-2 text-xs font-semibold text-indigo-700">{formatDate(event.eventDate)}</p>
-              <p className="font-semibold text-slate-800">{event.name}</p>
-              <p className="mb-3 mt-1 text-sm text-slate-500">{event.venue || 'Venue pending'}</p>
-              <StatusBadge status={event.status} />
-            </Link>
-          </li>)}</ul>}
-      </section>
-    </div>
-    <details className="disclosure-row">
-      <summary><span>How does booking an event work?</span><ChevronDownIcon aria-hidden="true" /></summary>
-      <ol className="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-4">
-        {['Share your requirements', 'Agree on the proposal', 'Sign and submit payment', 'Follow event preparation'].map((step, index) =>
-          <li key={step} className="flex items-start gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-white text-xs font-semibold text-indigo-700">{index + 1}</span>{step}</li>)}
-      </ol>
+    <details className="desk-sheet planner-disclosure" open={firstVisit || undefined}><summary>Find a venue for a new event</summary>
+      <EventPlanForm plan={{eventType:'meeting'}} dateRequired className="planner-fields" onSearch={query => navigate('/client/venues?' + query)}><button className="btn-primary" type="submit">Check venues <ArrowRightIcon/></button></EventPlanForm>
     </details>
   </div></Layout>;
 }

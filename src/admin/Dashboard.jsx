@@ -1,4 +1,3 @@
-import WorkspaceIntro from '../components/WorkspaceIntro';
 import UnmetDemand from './UnmetDemand';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -11,15 +10,24 @@ import BookingPerformance from './BookingPerformance';
 import ViewTabs from '../components/ViewTabs';
 const RevenueDashboard = lazy(() => import('./RevenueDashboard'));
 
-function RevenueSnapshot({ onDetails }) {
-  const resource = useApiResource('/admin/dashboard/revenue?months=3');
-  const report = resource.data?.verified ? resource.data : null;
-  const currency = new Intl.NumberFormat('en', { style: 'currency', currency: 'ETB', maximumFractionDigits: 0 });
-  return <section className="surface p-5 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Revenue and payments</h2><p className="mt-1 text-sm text-slate-600">{report ? report.fromMonth + ' through ' + report.throughMonth : 'Current three calendar months'}</p></div><button className="btn-outline" onClick={onDetails}>View revenue detail</button></div>
-    {resource.loading && <p role="status" className="mt-4 text-sm">Loading payments…</p>}
-    {resource.error && <p role="alert" className="mt-4 text-sm text-rose-800">{resource.error} <button className="underline" onClick={resource.reload}>Retry</button></p>}
-    {report && <><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['Verified payments', report.verified], ['Awaiting client receipt', report.awaitingReceipt], ['Awaiting staff verification', report.awaitingReview]].map(([label, amount]) => <div key={label} className="rounded-xl bg-slate-50 p-4"><p className="text-sm text-slate-600">{label}</p><p className="mt-2 text-2xl font-semibold text-slate-900">{currency.format(amount.totalEtb)}</p><p className="mt-1 text-xs text-slate-500">{amount.contracts} contracts</p></div>)}</div><p className="mt-4 text-xs leading-relaxed text-slate-500">Verified figures use receipt verification dates and full contract values. Outstanding amounts cover current signed agreements for upcoming events. Refunds and operating costs are not recorded here.</p></>}
+function RevenueSnapshot({ months, setMonths, onDetails }) {
+  const resource = useApiResource('/admin/dashboard/revenue?months=' + months);
+  const report = resource.data?.monthly?.length === months ? resource.data : null;
+  const money = amount => new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(amount);
+  const peak = Math.max(1, ...(report?.monthly || []).map(row => row.totalEtb));
+  return <section className="revenue-ledger" aria-label="Revenue and payments">
+    <header><h2>Verified payments</h2><label>Reporting period<select value={months} onChange={e => setMonths(Number(e.target.value))}>{[3,6,12].map(n => <option key={n} value={n}>Last {n} months</option>)}</select></label></header>
+    {resource.error ? <p role="alert">{resource.error} <button onClick={resource.reload}>Try again</button></p>
+      : !report ? <p role="status">Loading payments…</p> : <>
+      <div className="ledger-main"><div><div className="ledger-total"><small>ETB</small> {money(report.verified.totalEtb)}</div>
+        <p>{report.verified.contracts} verified contracts · {report.fromMonth} to {report.throughMonth}</p>
+        <button type="button" onClick={onDetails}>View payment breakdown →</button></div>
+        <div className="ledger-chart" aria-label="Monthly verified payments in ETB">{report.monthly.map(row => <div key={row.month}>
+          <i style={{height: (68 * row.totalEtb / peak) + 'px'}} aria-hidden="true"/><span>{new Intl.DateTimeFormat('en',{month:'short',timeZone:'UTC'}).format(new Date(row.month+'-01T00:00:00Z'))}</span>
+          <span className="sr-only">{row.month}, ETB {money(row.totalEtb)}</span></div>)}</div></div>
+      <dl className="ledger-outstanding">{[['Awaiting client receipt',report.awaitingReceipt],['Awaiting staff verification',report.awaitingReview]].map(([label,value]) =>
+        <div key={label}><dt>{label}</dt><dd>ETB {money(value.totalEtb)} <small>· {value.contracts} contracts</small></dd></div>)}</dl>
+      <p className="ledger-note">Verified totals use receipt review dates. Outstanding amounts cover current signed contracts for upcoming events.</p></>}
   </section>;
 }
 
@@ -56,6 +64,7 @@ function EmailDiagnostics() {
 
 export default function AdminDashboard() {
   const [params, setParams] = useSearchParams();
+  const [months, setMonths] = useState(3);
   const tab = ['business', 'revenue', 'bookings', 'demand', 'administration'].includes(params.get('view')) ? params.get('view') : 'business';
   const setTab = value => setParams(previous => { const next = new URLSearchParams(previous); next.set('view', value); return next; });
   const [stats, setStats] = useState(null);
@@ -69,18 +78,15 @@ export default function AdminDashboard() {
   }, []);
   useEffect(() => { if (tab === 'administration') load(); }, [tab, load]);
   return <Layout title="Management overview"><div className="space-y-6">
-    <WorkspaceIntro label="Management overview" title="A clear view of the business."
-      description="Follow bookings, payments and venue use. Open the figures to understand what is moving forward and where decisions are needed."
-      focusLabel="Start with a question" focusTitle="Where are bookings waiting?"
-      focusNote="Bookings & team shows which requests need attention and who is handling the next step." />
+    <header className="desk-mast"><div><p>Management workspace</p><h1>Business overview</h1><span>Payments, booking progress and demand for AICC venues</span></div></header>
     <ViewTabs id="management" label="Management views" value={tab} onChange={setTab} items={[
       ['business','Business overview'], ['revenue','Revenue'], ['bookings','Bookings & team'], ['demand','Unmet requests'], ['administration','Administration'],
     ]} />
     <section role="tabpanel" id={'management-panel-' + tab} aria-labelledby={'management-tab-' + tab} className="space-y-6">
-      {tab === 'business' && <><RevenueSnapshot onDetails={() => setTab('revenue')} /><LifecycleDashboard /><ManagementOutlook /></>}
+      {tab === 'business' && <><RevenueSnapshot months={months} setMonths={setMonths} onDetails={() => setTab('revenue')} /><LifecycleDashboard /><ManagementOutlook /></>}
       {tab === 'bookings' && <BookingPerformance />}
       {tab === 'demand' && <UnmetDemand />}
-      {tab === 'revenue' && <Suspense fallback={<p role="status">Loading revenue dashboard…</p>}><RevenueDashboard /></Suspense>}
+      {tab === 'revenue' && <Suspense fallback={<p role="status">Loading revenue dashboard…</p>}><RevenueDashboard months={months} setMonths={setMonths}/></Suspense>}
       {tab === 'administration' && <>
         <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">System administration</h2><button className="btn-outline" disabled={loading} onClick={load}>Refresh summary</button></div>
         {error && <p role="alert" className="text-rose-700">{error}</p>}

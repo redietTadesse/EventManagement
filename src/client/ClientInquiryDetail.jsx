@@ -2,7 +2,7 @@ import AvailabilityWaitingList from '../components/AvailabilityWaitingList';
 import InquiryBusinessDetails from '../components/InquiryBusinessDetails';
 import ProposalReview from '../components/ProposalReview';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import AuditTimeline from '../components/AuditTimeline';
 import StatusBadge from '../components/StatusBadge';
@@ -88,6 +88,7 @@ function VendorPreferences({ inquiry, onSaved }) {
 
 export default function ClientInquiryDetail() {
   const { id } = useParams();
+  const { hash } = useLocation();
   const navigate = useNavigate();
   const { fetchInquiryById, acceptProposal, rejectProposal } = useApp();
   const [inquiry, setInquiry] = useState(null);
@@ -118,6 +119,12 @@ export default function ClientInquiryDetail() {
   useEffect(() => {
     loadInquiry();
   }, [loadInquiry]);
+  useEffect(() => {
+    if (loading || String(inquiry?.id) !== id || !['#client-agreement', '#client-proposal'].includes(hash)) return;
+    const section = document.getElementById(hash.slice(1));
+    section?.focus({ preventScroll: true });
+    section?.scrollIntoView({ block: 'start' });
+  }, [hash, id, loading, inquiry?.id]);
 
   const decideProposal = async (decision) => {
     setSaving(true);

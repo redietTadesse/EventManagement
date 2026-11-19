@@ -12,37 +12,10 @@ import GoogleClientSignIn from './GoogleClientSignIn';
 import api from '../api/axios';
 import { ROLE_DASHBOARDS } from '../utils/roles';
 
-import {
-  BuildingOfficeIcon,
-  UserGroupIcon,
-  ClipboardDocumentListIcon,
-  ShieldCheckIcon,
-  ArrowLeftIcon,
-} from '@heroicons/react/24/outline';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import Brand from './Brand';
 
-const PORTAL_LABELS = {
-  client: {
-    label: 'Client',
-    icon: BuildingOfficeIcon,
-    color: 'from-indigo-500 to-indigo-600',
-  },
-  vendor: {
-    label: 'Vendor',
-    icon: UserGroupIcon,
-    color: 'from-emerald-500 to-emerald-600',
-  },
-  coordinator: {
-    label: 'Coordinator',
-    icon: ClipboardDocumentListIcon,
-    color: 'from-slate-600 to-slate-700',
-  },
-  admin: {
-    label: 'Administrator',
-    icon: ShieldCheckIcon,
-    color: 'from-amber-500 to-amber-600',
-  },
-};
-
+const portalLabels = { client: 'Client', coordinator: 'Coordinator', vendor: 'Vendor', admin: 'Administrator' };
 const SIGNUP_ALLOWED = ['client', undefined];
 
 export default function Login() {
@@ -66,8 +39,7 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
 
   const portalKey = portal?.toLowerCase();
-  const portalInfo = PORTAL_LABELS[portalKey];
-  const portalLabel = portalInfo?.label;
+  const portalLabel = portalLabels[portalKey];
 
   const signupAllowed = portalKey
     ? SIGNUP_ALLOWED.includes(portalKey)
@@ -167,16 +139,11 @@ export default function Login() {
     'w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 bg-white';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-slate-50 flex items-center justify-center px-4 py-8 sm:py-12">
-
-      {/* Background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
-      </div>
-
-      <div className="relative w-full max-w-md">
-
+    <main className="signin-layout">
+      <aside className="signin-place"><Brand light/><div><p>CMC · Addis Ababa</p><h2>Addis International<br/>Convention Center</h2></div>
+        <a href="https://www.ena.et/web/eng/w/eng_6075186">Photo by Ethiopian News Agency</a>
+      </aside>
+      <div className="signin-form">
         {/* Back navigation */}
         <Link
           to="/"
@@ -186,37 +153,9 @@ export default function Login() {
           Back to AICC
         </Link>
 
-        {/* Authentication card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8">
-
-          {/* Portal identity */}
-          {portalInfo && (
-            <div className="flex items-center justify-center mb-6">
-              <div
-                className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${portalInfo.color} flex items-center justify-center shadow-lg`}
-              >
-                <portalInfo.icon className="w-8 h-8 text-white" />
-              </div>
-            </div>
-          )}
-
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-2">
-            {mode === 'signin'
-              ? 'Welcome back'
-              : 'Create account'}
-          </h2>
-
-          <p className="text-center text-sm text-slate-600 mb-6">
-            {mode === 'signin'
-              ? portalLabel
-                ? `Sign in to the ${portalLabel} Portal`
-                : 'Sign in to your portal'
-              : portalLabel
-                ? `Create your ${portalLabel} Portal account`
-                : 'Create a client account'}
-          </p>
-
-          {mode === 'signin' && <p className="mb-4 text-right text-sm"><Link to="/forgot-password" className="font-semibold text-emerald-800 hover:underline">Forgot your password?</Link></p>}
+        <div>
+          <p className="signin-role">{portalLabel || 'AICC'} workspace</p>
+          <h1>{mode === 'signin' ? 'Sign in' : 'Create a client account'}</h1>
           {/* Success notice */}
           {signupAllowed && <GoogleClientSignIn onSignedIn={async token=>{
             localStorage.setItem('token',token);
@@ -319,7 +258,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                className="btn-primary w-full"
               >
                 {submitting ? (
                   <span className="flex items-center justify-center gap-2">
@@ -349,11 +288,8 @@ export default function Login() {
                 )}
               </button>
 
-              {/* Demo credentials */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <p className="text-xs font-medium text-slate-700 mb-2">
-                  Demo credentials:
-                </p>
+              <p className="text-sm"><Link to="/forgot-password" className="font-semibold text-indigo-700 hover:underline">Forgot your password?</Link></p>
+              {import.meta.env.DEV && <details className="demo-accounts"><summary>Local demonstration accounts</summary>
 
                 <div className="space-y-1 text-xs text-slate-600">
 
@@ -375,7 +311,7 @@ export default function Login() {
                   ))}
 
                 </div>
-              </div>
+              </details>}
 
               {(!portalKey || portalKey === 'vendor') && (
                 <p className="text-center text-sm text-slate-600">
@@ -526,7 +462,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                className="btn-primary w-full"
               >
                 {submitting ? (
                   <span className="flex items-center justify-center gap-2">
@@ -576,31 +512,6 @@ export default function Login() {
         </div>
       </div>
 
-      <style>{`
-        @keyframes blob {
-          0% {
-            transform: translate(0px, 0px) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-          100% {
-            transform: translate(0px, 0px) scale(1);
-          }
-        }
-
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-      `}</style>
-
-    </div>
+    </main>
   );
 }
