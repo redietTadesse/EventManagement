@@ -91,6 +91,7 @@ export default function VendorDashboard() {
   const closed = assignments.filter(a => a.status === 'EXPIRED' || a.status === 'CANCELLED');
   const insuranceExpiryDate = profile?.insuranceExpiryDate?.slice(0, 10);
   const insuranceExpired = insuranceExpiryDate && insuranceExpiryDate < getLocalDate();
+  const isFlagged = Boolean(profile?.flaggedForDeactivation);
 
   const upcoming = accepted.filter(item => item.eventDate >= getLocalDate())
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
@@ -110,6 +111,7 @@ export default function VendorDashboard() {
       href={responseQueue[0] ? `/vendor/assignments/${responseQueue[0].id}` : '/vendor/assignments'} action={responseQueue[0] ? 'Review this offer' : 'View my assignments'}>
       <Link to="/vendor/open" className="btn-outline">Explore open requests<ArrowRightIcon className="h-4 w-4"/></Link>
     </WorkspaceIntro>
+    {isFlagged && <div className="rounded-xl border border-rose-300 bg-rose-50 p-5" role="alert"><h2 className="font-semibold text-rose-900">Your vendor account needs review</h2><p className="mt-2 text-sm text-rose-800">Your account has confirmed reports of missed events. AICC will review these before deciding on any account changes. Contact AICC with supporting information if a report is incorrect.</p></div>}
     {(profileError || assignmentsError) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
       {profileError || assignmentsError}
       <button type="button" onClick={() => { setLoading(true); setReloadKey(key => key + 1); }} className="ml-3 font-semibold underline">Try again</button>

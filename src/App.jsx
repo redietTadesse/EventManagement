@@ -31,6 +31,7 @@ import VenueDetail from './coordinator/VenueDetail';
 import MasterCalendar from './components/MasterCalendar';
 import AvailabilityGrid from './coordinator/AvailabilityGrid';
 import CoordinatorVendors from './coordinator/CoordinatorVendors';
+import IncidentReviewPanel from './coordinator/IncidentReviewPanel';
 
 import VendorDashboard from './vendor/VendorDashboard';
 import MyAssignments from './vendor/MyAssignments';
@@ -79,6 +80,7 @@ function AppRoutes() {
         <Route path="/coordinator/calendar" element={<MasterCalendar />} />
         <Route path="/coordinator/availability" element={<AvailabilityGrid />} />
         <Route path="/coordinator/vendors" element={<CoordinatorVendors />} />
+        <Route path="/coordinator/incident-reviews" element={<IncidentReviewPanel />} />
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>

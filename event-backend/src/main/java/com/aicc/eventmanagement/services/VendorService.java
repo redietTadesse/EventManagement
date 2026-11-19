@@ -1,14 +1,17 @@
-
 package com.aicc.eventmanagement.services;
 
+import com.aicc.eventmanagement.entities.AppNotification;
 import com.aicc.eventmanagement.entities.AppNotification.Destination;
 import com.aicc.eventmanagement.entities.Event;
 import com.aicc.eventmanagement.entities.Inquiry;
+import com.aicc.eventmanagement.entities.PostEventReport;
 import com.aicc.eventmanagement.entities.User;
 import com.aicc.eventmanagement.entities.VendorAssignment;
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.entities.VendorBookedDate;
 import com.aicc.eventmanagement.enums.EventStatus;
+import com.aicc.eventmanagement.enums.IncidentReportStatus;
+import com.aicc.eventmanagement.enums.IncidentType;
 import com.aicc.eventmanagement.enums.Role;
 import com.aicc.eventmanagement.enums.SelectionReason;
 import com.aicc.eventmanagement.enums.VendorAssignmentStatus;
@@ -23,6 +26,7 @@ import com.aicc.eventmanagement.payload.VendorPerformanceResponse;
 import com.aicc.eventmanagement.payload.VendorReviewResponse;
 import com.aicc.eventmanagement.payload.VendorTrailResponse;
 import com.aicc.eventmanagement.repositories.EventRepository;
+import com.aicc.eventmanagement.repositories.PostEventReportRepository;
 import com.aicc.eventmanagement.repositories.UserRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorBookedDateRepository;
@@ -47,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -68,11 +73,21 @@ public class VendorService {
     private final ApplicationEventPublisher eventPublisher;
     private final WorkflowEngine workflowEngine;
     private final VendorRankingService rankingService;
+    private final NotificationService notificationService;
     private final VendorEligibilityService eligibilityService;
     private final VendorRatingService ratingService;
     private final NotificationService notifications;
     private final AutomaticAssistance assistance;
     private final PasswordEncoder passwordEncoder;
+    private final PostEventReportRepository reportRepository;
+
+    private static final List<String> NO_SHOW_KEYWORDS = List.of(
+            "no show", "no-show", "no_show",
+            "never arrived", "didn't arrive", "did not arrive",
+            "never came", "didn't come", "did not come",
+            "didn't show", "did not show", "didn't show up", "did not show up",
+            "no one came", "absent"
+    );
 
     @Transactional
     public Vendor createVendor(CreateVendorRequest req) {
@@ -925,7 +940,16 @@ public class VendorService {
         workflowEngine.transition(event, target, triggeringRole);
         eventRepository.save(event);
 
-        // Publish the rollup transition so the audit trail records it.
+        if (target == EventStatus.CONFIRMED && current != EventStatus.CONFIRMED) {
+            notificationService.notifyUser(
+                    event.getInquiry().getClientId(),
+                    AppNotification.Destination.CLIENT_EVENT,
+                    event.getId(),
+                    "Your event is confirmed",
+                    "All required vendors have accepted. Your event is now confirmed."
+            );
+        }
+
         eventPublisher.publishEvent(new WorkflowTransitionEvent(
                 this,
                 current,
@@ -983,7 +1007,7 @@ public class VendorService {
     }
 
     public List<VendorAssignment> getAssignmentsByVendor(Long vendorId) {
-        return assignmentRepository.findByVendorId(vendorId);
+        return assignmentRepository.findDetailedByVendorId(vendorId);
     }
 
     @Transactional(readOnly = true)
@@ -1042,12 +1066,20 @@ public class VendorService {
     @Transactional
     public VendorAssignment rateAssignment(Long assignmentId, Integer rating, String comment, Long clientId) {
         VendorAssignment assignment = getAssignmentById(assignmentId);
+
         if (!assignment.getEvent().getInquiry().getClientId().equals(clientId)) {
             throw new BusinessException("Not your event", "ACCESS_DENIED");
         }
         if (assignment.getStatus() != VendorAssignmentStatus.COMPLETED) {
             throw new BusinessException(
                     "Can only rate completed assignments", "INVALID_STATE");
+        }
+        if (assignment.getEvent().getStatus() != EventStatus.COMPLETED) {
+            throw new BusinessException(
+                    "Can only rate after the event is completed", "INVALID_STATE");
+        }
+        if (assignment.getVendor() == null) {
+            throw new BusinessException("No vendor assigned to rate", "INVALID_STATE");
         }
 
         assignment.setVendorRating(rating.doubleValue());
@@ -1058,7 +1090,46 @@ public class VendorService {
         double average = ratingService.calculateVendorRating(vendor);
         vendor.setRating(average);
         vendorRepository.save(vendor);
+
+        flagNoShowFromCommentIfApplicable(saved, rating, comment);
+
         return saved;
+    }
+
+    private void flagNoShowFromCommentIfApplicable(VendorAssignment assignment,
+                                                   Integer rating, String comment) {
+        if (rating == null || rating > 2) return;
+        if (comment == null || comment.isBlank()) return;
+
+        String lower = comment.toLowerCase(Locale.ROOT);
+        String matched = NO_SHOW_KEYWORDS.stream()
+                .filter(lower::contains)
+                .findFirst()
+                .orElse(null);
+        if (matched == null) return;
+
+        if (reportRepository.existsByEventIdAndVendorIdAndIncidentType(
+                assignment.getEvent().getId(),
+                assignment.getVendor().getId(),
+                IncidentType.NO_SHOW)) {
+            log.info("Skipping COMMENT_FLAG for assignment {} — a no-show report already exists",
+                    assignment.getId());
+            return;
+        }
+
+        PostEventReport report = PostEventReport.builder()
+                .event(assignment.getEvent())
+                .vendor(assignment.getVendor())
+                .incidentType(IncidentType.NO_SHOW)
+                .notes("Auto-flagged from rating comment. Matched keyword: \"" + matched
+                        + "\". Comment: " + comment)
+                .scorePenalty(20)
+                .status(IncidentReportStatus.PENDING)
+                .source("COMMENT_FLAG")
+                .build();
+        reportRepository.save(report);
+        log.info("🚩 COMMENT_FLAG no-show created for vendor {} on event {}",
+                assignment.getVendor().getCompanyName(), assignment.getEvent().getName());
     }
 
     public List<VendorAssignment> getPendingAssignmentsForVendor(Long vendorId) {
@@ -1160,13 +1231,13 @@ public class VendorService {
                         List.of(EventStatus.COMPLETED, EventStatus.CANCELLED, EventStatus.CLOSED))
                 .stream()
                 .filter(assignment -> eligibilityService.evaluate(
-                        vendor,
-                        assignment.getServiceCategory(),
-                        assignment.getEvent().getInquiry().getEventDate(),
-                        assignment.getEvent().getId(),
-                        assignment.getEvent().getInquiry().getEventType(),
-                        Set.copyOf(assignmentRepository.findTriedVendorIds(
-                                assignment.getEvent().getId(), assignment.getServiceCategory())))
+                                vendor,
+                                assignment.getServiceCategory(),
+                                assignment.getEvent().getInquiry().getEventDate(),
+                                assignment.getEvent().getId(),
+                                assignment.getEvent().getInquiry().getEventType(),
+                                Set.copyOf(assignmentRepository.findTriedVendorIds(
+                                        assignment.getEvent().getId(), assignment.getServiceCategory())))
                         .eligible())
                 .toList();
     }
