@@ -284,6 +284,12 @@ public class VendorController {
     // ADD BOOKED DATE
     // =========================================================
 
+    @GetMapping("/{id}/booked-dates")
+    @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
+    public ResponseEntity<List<LocalDate>> getBookedDates(@PathVariable Long id) {
+        return ResponseEntity.ok(vendorService.getBookedDates(id));
+    }
+
     @PostMapping("/{id}/booked-dates")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Add a booked date for a vendor")
