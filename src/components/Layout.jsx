@@ -7,7 +7,10 @@ export default function Layout({ children, title = 'Events' }) {
   const { state: { currentUser } } = useApp();
   const { pathname } = useLocation();
   useEffect(() => { document.title = `${title} · AICC`; }, [title]);
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.getElementById('workspace-content')?.focus({ preventScroll: true });
+  }, [pathname]);
 
   return (
     <div className={`app-shell ${currentUser ? 'is-authenticated' : ''}`}>

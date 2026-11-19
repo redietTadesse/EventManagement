@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
+import { statusLabel } from '../utils/status';
+import { proposalLabel } from '../utils/proposalReview';
 import Skeleton from '../components/Skeleton';
 import { TableSkeleton } from '../components/Skeleton';
 import { useApp } from '../context/AppContext';
@@ -17,7 +21,9 @@ export default function MyAssignments() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
 
-  const status = params.get('status') || 'ALL';
+  const requestedStatus = params.get('status') || 'ALL';
+  const status = FILTERS.includes(requestedStatus) ? requestedStatus : 'ALL';
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -42,9 +48,7 @@ export default function MyAssignments() {
     ? assignments
     : assignments.filter(a => a.status === status);
 
-  const categoryFiltered = categoryFilter
-    ? filtered.filter(a => a.serviceCategory === categoryFilter)
-    : filtered;
+  const categoryFiltered = filtered.filter(a => (!categoryFilter || a.serviceCategory === categoryFilter) && `${a.eventName || ''} ${a.eventVenue || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   if (loading) {
     return (
@@ -81,10 +85,14 @@ export default function MyAssignments() {
   return (
     <Layout title="My Assignments">
       <div className="space-y-4">
+        <PageHeader eyebrow="Your commitments with AICC" title="My assignments" subtitle="Review offers, check where you are needed and follow the work you have accepted." action={<button type="button" className="btn-outline" onClick={() => setReloadKey(key => key + 1)}>Refresh</button>} />
+        <label className="record-filters"><span className="record-search"><span className="sr-only">Find an event or venue</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Find an event or venue…" /></span></label>
         <div className="flex flex-wrap gap-2">
           {FILTERS.map(f => (
             <button
               key={f}
+              type="button"
+              aria-pressed={status === f}
               onClick={() => setParams(f === 'ALL' ? {} : { status: f })}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                 status === f
@@ -92,20 +100,21 @@ export default function MyAssignments() {
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
-              {f === 'ALL' ? 'All' : f}
+              {f === 'ALL' ? 'All offers' : statusLabel(f)}<span className="ml-2 opacity-75">{f === 'ALL' ? assignments.length : assignments.filter(a => a.status === f).length}</span>
             </button>
           ))}
         </div>
 
         <div className="flex flex-wrap gap-2">
           <select
+            aria-label="Filter by service"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-gray-200"
           >
-            <option value="">All Categories</option>
+            <option value="">All services</option>
             {categories.map(cat => (
-              <option key={cat} value={cat}>{cat.replace(/_/g, ' ').toUpperCase()}</option>
+              <option key={cat} value={cat}>{proposalLabel(cat)}</option>
             ))}
           </select>
           {categoryFilter && (
@@ -119,21 +128,19 @@ export default function MyAssignments() {
         </div>
 
         {categoryFiltered.length === 0 ? (
-          <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
-            No assignments in this view.
-          </div>
+          <section className="surface"><EmptyState title={assignments.length ? 'No assignments match this view' : 'Your offers will appear here'} description={assignments.length ? 'Try another stage, service or event name to find your work.' : 'AICC will send a service offer when your vendor profile is selected. You can also explore open requests.'} actionText={assignments.length ? 'Clear filters' : 'Explore open requests'} actionLink={assignments.length ? undefined : '/vendor/open'} actionOnClick={() => { setParams({}); setCategoryFilter(''); setSearch(''); }} /></section>
         ) : (
           <>
             <div className="hidden overflow-hidden rounded-xl bg-white shadow md:block">
-              <table className="w-full text-sm">
+              <table className="record-table w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Venue</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Event</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Service</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Venue</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -141,7 +148,7 @@ export default function MyAssignments() {
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-800">{a.eventName}</td>
                     <td className="px-4 py-3 text-gray-600">{a.eventDate || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{a.serviceCategory?.replace(/_/g, ' ').toUpperCase()}</td>
+                    <td className="px-4 py-3 text-gray-600">{proposalLabel(a.serviceCategory)}</td>
                     <td className="px-4 py-3 text-gray-600">{a.eventVenue || '—'}</td>
                     <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                     <td className="px-4 py-3">

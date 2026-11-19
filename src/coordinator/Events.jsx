@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
+import { MagnifyingGlassIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import StatusBadge from '../components/StatusBadge';
 import ResponsiveTable from '../components/ResponsiveTable';
 import EmptyState from '../components/EmptyState';
@@ -11,7 +13,7 @@ import { useApp } from '../context/AppContext';
 
 const EVENT_STATUS_OPTIONS = [
   { value: 'EVENT_CREATED', label: 'Event created' },
-  { value: 'AWAITING_VENDORS', label: 'Awaiting vendors' },
+  { value: 'AWAITING_VENDORS', label: 'Waiting for vendors' },
   { value: 'NEEDS_COORDINATOR', label: 'Needs coordinator' },
   { value: 'CONFIRMED', label: 'Confirmed' },
   { value: 'COMPLETED', label: 'Completed' },
@@ -36,6 +38,7 @@ const formatEventDate = (value) => {
 
 export default function Events() {
   const { state } = useApp();
+  const [search, setSearch] = useState('');
   const [ownership, setOwnership] = useState('all');
   const [pageNumber, setPageNumber] = useState(1);
   const [events, setEvents] = useState([]);
@@ -45,7 +48,7 @@ export default function Events() {
   const [dateTo, setDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const requestController = useRef(null);
-  useEffect(() => { setPageNumber(1); }, [ownership, dateFrom, dateTo, statusFilter]);
+  useEffect(() => { setPageNumber(1); }, [ownership, dateFrom, dateTo, statusFilter, search]);
 
   const loadEvents = useCallback(async () => {
     requestController.current?.abort();
@@ -75,6 +78,7 @@ export default function Events() {
   }, [loadEvents]);
 
   const filteredEvents = events.filter(event => {
+    if (!`${event.name || ''} ${event.clientName || ''} ${event.venue || ''} ${event.id}`.toLowerCase().includes(search.trim().toLowerCase())) return false;
     const eventStart = asDateOnly(event.eventDate);
     const eventEnd = asDateOnly(event.endDate) || eventStart;
 
@@ -83,7 +87,7 @@ export default function Events() {
     if (dateFrom && eventEnd < dateFrom) return false;
     if (dateTo && eventStart > dateTo) return false;
     if (statusFilter && event.status !== statusFilter) return false;
-    if (ownership === 'mine' && event.coordinator?.id !== state.currentUser?.id) return false;
+    if (ownership === 'mine' && String(event.coordinator?.id) !== String(state.currentUser?.id)) return false;
     if (ownership === 'unassigned' && event.coordinator) return false;
     return true;
   });
@@ -94,18 +98,14 @@ export default function Events() {
   return (
     <Layout title="Events">
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Events</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage all events</p>
-          </div>
-        </div>
+        <PageHeader eyebrow="From booking to event day" title="Events" subtitle="Follow venue bookings, vendor responses and preparation for each event." action={<button type="button" onClick={loadEvents} disabled={loading} className="btn-outline"><ArrowPathIcon className="h-4 w-4" />Refresh</button>} />
+        <label className="record-filters"><span className="record-search"><MagnifyingGlassIcon aria-hidden="true" /><span className="sr-only">Find an event, client or venue</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Find an event, client or venue…" /></span></label>
 
         {/* Filters */}
         <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-4">
           <div className="flex flex-wrap gap-3">
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-              Coordinator ownership
+              Handling coordinator
               <select value={ownership} onChange={(event) => setOwnership(event.target.value)}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
                 <option value="all">All events</option>
@@ -137,14 +137,14 @@ export default function Events() {
               aria-label="Filter by status"
               className="self-end px-3 py-2 border border-slate-200 rounded-lg text-sm"
             >
-              <option value="">All Statuses</option>
+              <option value="">All stages</option>
               {EVENT_STATUS_OPTIONS.map(({ value, label }) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
             <button
               type="button"
-              onClick={() => { setDateFrom(''); setDateTo(''); setStatusFilter(''); setOwnership('all'); }}
+              onClick={() => { setDateFrom(''); setDateTo(''); setStatusFilter(''); setOwnership('all'); setSearch(''); }}
               className="self-end px-3 py-2 text-sm text-slate-500 hover:text-slate-700"
             >
               Clear
@@ -175,7 +175,7 @@ export default function Events() {
             <EmptyState
               icon="📅"
               title="No events yet"
-              description="Events created from accepted proposals will appear here."
+              description="Events appear here after the signed contract and payment receipt have been checked."
               size="small"
             />
           ) : filteredEvents.length === 0 ? (
@@ -189,7 +189,7 @@ export default function Events() {
             <ResponsiveTable
               columns={[
                 { key: 'name', label: 'Event', render: (event) => (
-                  <span className="text-sm text-slate-600 font-medium">{event.name || 'Untitled event'}</span>
+                  <Link to={`/coordinator/events/${event.id}`} className="inquiry-record-name">{event.name || 'Untitled event'}</Link>
                 )},
                 { key: 'client', label: 'Client', render: (event) => event.clientName || 'Client unavailable' },
                 { key: 'coordinator', label: 'Handled by', render: (event) => event.coordinator?.name || 'Unassigned' },

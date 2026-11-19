@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
+import { Link } from 'react-router-dom';
 import api from '../api/axios';
 
 const INCIDENT_LABELS = {
@@ -38,12 +40,12 @@ export default function IncidentReviewPanel() {
   useEffect(() => { load(); }, []);
 
   const handleConfirm = async (report) => {
-    if (!window.confirm(`Confirm no-show for ${report.vendorName}? This will count as a strike against them.`)) return;
+    if (!window.confirm(`Confirm this report for ${report.vendorName}?${report.incidentType === "NO_SHOW" ? " This records a confirmed missed event." : " This confirms the reported incident."}`)) return;
     setSubmitting(report.id);
     setFeedback(null);
     try {
       await api.post(`/incidents/${report.id}/confirm`);
-      setFeedback({ type: 'success', message: `Confirmed. ${report.vendorName} received a strike.` });
+      setFeedback({ type: 'success', message: `Report confirmed for ${report.vendorName}.` });
       await load();
     } catch (err) {
       setFeedback({ type: 'error', message: err.response?.data?.message || 'Failed to confirm report' });
@@ -71,13 +73,7 @@ export default function IncidentReviewPanel() {
   return (
     <Layout title="Incident Reviews">
       <div className="mx-auto max-w-5xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-900">Incident Reviews</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Client-filed no-show reports await your confirmation. A report only
-            counts against a vendor after you confirm it — this prevents false reports.
-          </p>
-        </header>
+        <PageHeader eyebrow="After the event" title="Incident reviews" subtitle="Check the facts behind client reports. Confirmed reports become part of the vendor’s performance record." />
 
         {feedback && (
           <div role={feedback.type === 'error' ? 'alert' : 'status'}
@@ -131,12 +127,12 @@ export default function IncidentReviewPanel() {
                       </h2>
                       <span className="text-xs text-slate-500">
                         · Event: <span className="font-medium text-slate-700">
-                          {report.eventName || `#${report.eventId}`}
+                          <Link className="underline underline-offset-4" to={`/coordinator/events/${report.eventId}`}>{report.eventName || `#${report.eventId}`}</Link>
                         </span>
                       </span>
                       {isCommentFlag && (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                          ⚠ Auto-flagged from comment
+                          ⚠ Suggested by review text
                         </span>
                       )}
                     </div>
@@ -151,8 +147,8 @@ export default function IncidentReviewPanel() {
                     )}
                     {isCommentFlag && (
                       <p className="mt-1 text-xs italic text-amber-700">
-                        This report was auto-generated from a low-rated review comment.
-                        Confirm only if you've verified the vendor genuinely did not attend.
+                        The client’s review text suggested a missed event.
+                        Check the facts with the client and vendor before confirming.
                       </p>
                     )}
                   </div>
@@ -163,7 +159,7 @@ export default function IncidentReviewPanel() {
                       disabled={busy || isRejecting}
                       className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                     >
-                      {busy && !isRejecting ? 'Saving…' : 'Confirm no-show'}
+                      {busy && !isRejecting ? 'Saving…' : 'Confirm report'}
                     </button>
                     <button
                       type="button"
@@ -181,10 +177,11 @@ export default function IncidentReviewPanel() {
 
                 {isRejecting && (
                   <div className="mt-3 space-y-2 rounded-lg border border-rose-200 bg-rose-50/40 p-3">
-                    <label className="block text-xs font-medium text-slate-700">
+                    <label htmlFor={`reject-reason-${report.id}`} className="block text-xs font-medium text-slate-700">
                       Reason for rejection (optional)
                     </label>
                     <textarea
+                      id={`reject-reason-${report.id}`}
                       rows={2}
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}

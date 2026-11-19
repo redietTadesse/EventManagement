@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
@@ -7,44 +8,44 @@ import RootRedirect from './components/RootRedirect';
 import LandingPage from './components/LandingPage';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
-import PasswordRecovery from './components/PasswordRecovery';
-import VendorApplication from './components/VendorApplication';
+const PasswordRecovery = lazy(() => import('./components/PasswordRecovery'));
+const VendorApplication = lazy(() => import('./components/VendorApplication'));
 
-import ClientDashboard from './client/ClientDashboard';
-import NewInquiry from './client/NewInquiry';
-import ClientInquiries from './client/ClientInquiries';
-import ClientInquiryDetail from './client/ClientInquiryDetail';
-import ClientEventHistory from './client/ClientEventHistory';
-import ClientEventDetail from './client/ClientEventDetail';
-import ClientVenues from './client/ClientVenues';
+const ClientDashboard = lazy(() => import('./client/ClientDashboard'));
+const NewInquiry = lazy(() => import('./client/NewInquiry'));
+const ClientInquiries = lazy(() => import('./client/ClientInquiries'));
+const ClientInquiryDetail = lazy(() => import('./client/ClientInquiryDetail'));
+const ClientEventHistory = lazy(() => import('./client/ClientEventHistory'));
+const ClientEventDetail = lazy(() => import('./client/ClientEventDetail'));
+const ClientVenues = lazy(() => import('./client/ClientVenues'));
 
-import CoordinatorDashboard from './coordinator/Dashboard';
-import AllInquiries from './coordinator/AllInquiries';
-import InquiryDetail from './coordinator/InquiryDetail';
-import Events from './coordinator/Events';
-import EventDetail from './coordinator/EventDetail';
-import Venues from './coordinator/Venues';
-import VenueSchedule from './coordinator/VenueSchedule';
-import BookingFollowups from './coordinator/BookingFollowups';
-import AutomaticAssistance from './coordinator/AutomaticAssistance';
-import VenueDetail from './coordinator/VenueDetail';
-import MasterCalendar from './components/MasterCalendar';
-import AvailabilityGrid from './coordinator/AvailabilityGrid';
-import CoordinatorVendors from './coordinator/CoordinatorVendors';
-import IncidentReviewPanel from './coordinator/IncidentReviewPanel';
+const CoordinatorDashboard = lazy(() => import('./coordinator/Dashboard'));
+const AllInquiries = lazy(() => import('./coordinator/AllInquiries'));
+const InquiryDetail = lazy(() => import('./coordinator/InquiryDetail'));
+const Events = lazy(() => import('./coordinator/Events'));
+const EventDetail = lazy(() => import('./coordinator/EventDetail'));
+const Venues = lazy(() => import('./coordinator/Venues'));
+const VenueSchedule = lazy(() => import('./coordinator/VenueSchedule'));
+const BookingFollowups = lazy(() => import('./coordinator/BookingFollowups'));
+const AutomaticAssistance = lazy(() => import('./coordinator/AutomaticAssistance'));
+const VenueDetail = lazy(() => import('./coordinator/VenueDetail'));
+const MasterCalendar = lazy(() => import('./components/MasterCalendar'));
+const AvailabilityGrid = lazy(() => import('./coordinator/AvailabilityGrid'));
+const CoordinatorVendors = lazy(() => import('./coordinator/CoordinatorVendors'));
+const IncidentReviewPanel = lazy(() => import('./coordinator/IncidentReviewPanel'));
 
-import VendorDashboard from './vendor/VendorDashboard';
-import MyAssignments from './vendor/MyAssignments';
-import AssignmentDetail from './vendor/AssignmentDetail';
-import OpenAssignments from './vendor/OpenAssignments';
+const VendorDashboard = lazy(() => import('./vendor/VendorDashboard'));
+const MyAssignments = lazy(() => import('./vendor/MyAssignments'));
+const AssignmentDetail = lazy(() => import('./vendor/AssignmentDetail'));
+const OpenAssignments = lazy(() => import('./vendor/OpenAssignments'));
 
-import AdminDashboard from './admin/Dashboard';
-import AdminCoordinators from './admin/Coordinators';
-import VendorManagement from './admin/VendorManagement';
-import VendorApplications from './admin/VendorApplications';
-import VendorForm from './admin/VendorForm';
-import VendorDetail from './admin/VendorDetail';
-import AdminVenues from './admin/Venues';
+const AdminDashboard = lazy(() => import('./admin/Dashboard'));
+const AdminCoordinators = lazy(() => import('./admin/Coordinators'));
+const VendorManagement = lazy(() => import('./admin/VendorManagement'));
+const VendorApplications = lazy(() => import('./admin/VendorApplications'));
+const VendorForm = lazy(() => import('./admin/VendorForm'));
+const VendorDetail = lazy(() => import('./admin/VendorDetail'));
+const AdminVenues = lazy(() => import('./admin/Venues'));
 
 function AppRoutes() {
   return (
@@ -111,7 +112,7 @@ function App() {
     <ToastProvider>
       <AppProvider>
         <BrowserRouter>
-          <PageErrorBoundary><AppRoutes /></PageErrorBoundary>
+          <PageErrorBoundary><Suspense fallback={<div role="status" aria-live="polite" className="page-loading"><span className="page-loading-mark" aria-hidden="true">AICC</span><p>Opening your workspace…</p></div>}><AppRoutes /></Suspense></PageErrorBoundary>
         </BrowserRouter>
       </AppProvider>
     </ToastProvider>

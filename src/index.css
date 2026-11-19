@@ -562,3 +562,15 @@
  .queue-row { padding:18px 14px; }
  .queue-search,.queue-search input[type=search] { width:100%; }
 }
+
+/* Readable secondary text across the workspace, including smaller screens. */
+.workspace-footer,.dashboard-meta,.account-name small,.record-table thead,.inquiry-record-subtitle,.inquiry-stage-filters>button>span,.inquiry-field-grid label small,.inquiry-section-heading p,.inquiry-summary dt,.inquiry-summary>p:not(.eyebrow),.inquiry-submit p { color:#62715a; }
+.workspace-content input,.workspace-content select,.workspace-content textarea { scroll-margin-top:100px; }
+.view-tabs>button:focus-visible,.nav-item:focus-visible,.mobile-dock>a:focus-visible,.mobile-dock>button:focus-visible { outline:2px solid #7e9b5d; outline-offset:3px; }
+.workspace-sidebar { scrollbar-width:thin; scrollbar-color:#577363 #172f29; }
+.mobile-record-list .inquiry-record-name { overflow-wrap:anywhere; }
+
+.page-loading { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; background:#f3f4f0; color:#53684d; font-size:14px; }
+.page-loading-mark { border:1px solid #cbd8bf; border-radius:14px; background:#e8eddf; padding:20px; font-family:Georgia,serif; font-size:24px; color:#315d3c; letter-spacing:.08em; }
+.nav-item { font-size:14px; }
+.record-table td { font-size:14px; }
