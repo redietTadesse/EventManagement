@@ -26,6 +26,8 @@ export default function BookingJourneyBoard({ inquiries, currentUserId, loaded, 
           <span className="mt-3 block text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{item.rows.length}</span>
           <span className="mt-1 block text-sm font-semibold text-slate-800">{item.label}</span>
           <span className="mt-2 block text-xs leading-relaxed text-slate-500">{item.waiting}</span>
+          <span className="journey-bar" aria-hidden="true"><span className={item.dot} style={{width:`${report.total ? item.rows.length/report.total*100 : 0}%`}}/></span>
+          <span className="mt-2 block text-[10px] text-slate-500">{report.total ? Math.round(item.rows.length/report.total*100) : 0}% of requests</span>
         </button>)}
       </div>
       <div id="journey-records" className="grid lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,2fr)]">

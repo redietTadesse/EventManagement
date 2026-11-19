@@ -30,8 +30,8 @@ export default function ResponsiveTable({
     <>
       {/* Desktop Table View */}
       <div className="hidden md:block overflow-x-auto">
-        <table className={`w-full text-sm ${className}`}>
-          <thead className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <table className={`record-table w-full text-sm ${className}`}>
+          <thead>
             <tr>
               {columns.map((col) => (
                 <th
@@ -65,7 +65,7 @@ export default function ResponsiveTable({
       </div>
 
       {/* Mobile Card View */}
-      <div className="md:hidden space-y-3 p-3">
+      <div className="mobile-record-list md:hidden space-y-3 p-3">
         {data.map((item, index) => (
           <div
             key={item.id || index}
@@ -75,7 +75,7 @@ export default function ResponsiveTable({
               <div className="space-y-2">
                 {columns.map((col) => (
                   <div key={col.key} className="flex justify-between items-start">
-                    <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">
+                    <span className="text-xs text-slate-500 font-medium">
                       {col.label}
                     </span>
                     <div className="min-w-0 break-words text-right ml-4">

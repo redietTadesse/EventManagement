@@ -93,7 +93,7 @@ export function getEventStatusReason(status, rows) {
 
 export function nextEventAction({ status, rows, vendorsKnown, venueNeedsAttention, venueKnown, tasksRemaining, tasksKnown }) {
   if (terminalStatuses.has(status)) return {
-    kind: 'closed', title: 'This event is closed to operational changes',
+    kind: 'closed', title: 'This event has ended',
     description: getEventStatusReason(status, rows), target: 'history', action: 'View history',
   };
   if (!vendorsKnown) return {

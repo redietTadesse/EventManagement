@@ -1,3 +1,4 @@
+import AlternativeBookingPlans from './AlternativeBookingPlans';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import VendorSuggestions from './VendorSuggestions';
@@ -205,6 +206,9 @@ const RichProposalForm = ({ inquiry, onSuccess, onSubmit, onCancel, editMode = f
             <label className="text-sm">End date<input type="date" className="mt-1 w-full rounded-lg border p-2" value={formData.endDate} onChange={e=>setFormData({...formData,endDate:e.target.value})}/></label>
             <label className="text-sm">Seating setup<select className="mt-1 w-full rounded-lg border p-2" value={formData.tableSetup} onChange={e=>setFormData({...formData,tableSetup:e.target.value,venueId:''})}>{['THEATRE','CLASSROOM','BANQUET','CABARET','BOARDROOM','U_SHAPE','UNDECIDED'].map(value=><option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}</select></label>
           </div>
+          <details className="mb-5 rounded-xl border border-emerald-200 p-4"><summary className="mb-3 cursor-pointer text-sm font-semibold text-emerald-900">Find another venue or nearby dates</summary><AlternativeBookingPlans inquiryId={editMode ? inquiry.id : undefined}
+            plan={{ date: formData.eventDate, endDate: formData.endDate, attendees: formData.expectedAttendees, eventType: inquiry.eventType, tableSetup: formData.tableSetup }}
+            onChoose={option => setFormData(previous => ({ ...previous, eventDate: option.eventDate, endDate: option.endDate, venueId: String(option.venueId) }))} /></details>
           {editMode&&<p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm">Sending a revised proposal saves the previous version. Any existing acceptance, signatures and payment hold will be replaced. The client must accept and sign the new terms.</p>}
           <h3 className="font-semibold text-lg mb-4">Step 1: Venue &amp; Pricing</h3>
           <div className="space-y-4">

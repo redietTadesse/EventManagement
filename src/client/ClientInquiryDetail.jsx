@@ -1,4 +1,6 @@
+import AvailabilityWaitingList from '../components/AvailabilityWaitingList';
 import InquiryBusinessDetails from '../components/InquiryBusinessDetails';
+import ProposalReview from '../components/ProposalReview';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
@@ -170,34 +172,13 @@ export default function ClientInquiryDetail() {
     ? ['Proposal details unavailable', 'Ask the coordinator to review this proposal before you respond.']
     : requestProgress[status] || ['Request status', 'Check the details below for the latest information.'];
 
-  // Parse the enriched shortlist - handle both new array format and old map format
-  let shortlist = [];
-  if (parsedProposal?.vendorShortlist) {
-    if (Array.isArray(parsedProposal.vendorShortlist)) {
-      // New enriched format: Array of category objects
-      shortlist = parsedProposal.vendorShortlist;
-    } else if (typeof parsedProposal.vendorShortlist === 'object') {
-      // Old format: Map of category -> array of vendor names
-      // Convert to new format for display
-      shortlist = Object.entries(parsedProposal.vendorShortlist).map(([category, vendors]) => ({
-        category,
-        vendors: (Array.isArray(vendors) ? vendors : []).map((v, i) => ({
-          id: i, // placeholder ID
-          companyName: v,
-          rating: null,
-          description: 'No description available'
-        }))
-      }));
-    }
-  }
-
   return (
     <Layout title="Inquiry Details">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <Link to="/client/inquiries" className="text-sm text-indigo-600 hover:text-indigo-700">← My inquiries</Link>
-            <h1 className="mt-2 text-2xl font-bold text-gray-800">{inquiry.eventType}</h1>
+            <h1 className="mt-2 text-2xl font-semibold text-gray-800">{inquiry.eventName || 'Your event request'}</h1>
           </div>
           <StatusBadge status={status} />
         </div>
@@ -230,92 +211,27 @@ export default function ClientInquiryDetail() {
         {hasAgreement && <div id="client-agreement" tabIndex={-1} className="scroll-mt-24">
           <BookingAgreement key={`booking-${inquiry.id}`} inquiryId={inquiry.id} />
         </div>}
-        {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
-          <VendorPreferences key={`preferences-${inquiry.id}`} inquiry={inquiry} onSaved={setInquiry} />
-        )}
-
-        <section className="space-y-4 rounded-xl bg-white p-6 shadow">
-          <h2 className="font-semibold text-gray-800">Inquiry details</h2>
-          <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
-            <div><p className="text-gray-500">Event date</p><p className="font-medium">{inquiry.eventDate || '—'}</p></div>
-            <div><p className="text-gray-500">Attendees</p><p className="font-medium">{inquiry.expectedAttendees ?? '—'}</p></div>
-            <div><p className="text-gray-500">Handled by</p><p className="font-medium">{inquiry.coordinator?.name || 'Coordinator assignment pending'}</p></div>
-            <div><p className="text-gray-500">Requested services</p><p className="font-medium">{inquiry.requestedCategories?.join(', ') || '—'}</p></div>
-          </div>
-          <InquiryBusinessDetails inquiry={inquiry} client />
-          {inquiry.tableSetup && <p className="text-sm"><strong>Table and seating setup:</strong> {inquiry.tableSetup.replaceAll('_', ' ').toLowerCase()}</p>}
-          {inquiry.requirements && <div className="text-sm"><p className="text-gray-500">Requirements</p><p className="mt-1 text-gray-800">{inquiry.requirements}</p></div>}
-        </section>
-
         {parsedProposal ? (
-          <section id="client-proposal" tabIndex={-1} className="surface scroll-mt-24 space-y-5 p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-800">Your proposal</h2>
-                {parsedProposal.sentDate && <p className="mt-1 text-sm text-gray-500">Sent {new Date(parsedProposal.sentDate).toLocaleDateString()}</p>}
-              </div>
-              {parsedProposal.pricingTier && <span className="rounded-md bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">{parsedProposal.pricingTier}</span>}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div><p className="text-gray-500">Venue</p><p className="font-medium text-gray-900">{parsedProposal.venue || '—'}</p></div>
-              <div><p className="text-gray-500">Price</p><p className="font-medium text-gray-900">{parsedProposal.price != null ? `ETB ${Number(parsedProposal.price).toLocaleString()}` : '—'}</p></div>
-            </div>
-            {parsedProposal.terms && <div className="text-sm"><p className="text-gray-500">Terms</p><p className="mt-1 whitespace-pre-wrap text-gray-800">{parsedProposal.terms}</p></div>}
-            {parsedProposal.categories?.length > 0 && <div className="text-sm"><p className="text-gray-500">Included services</p><p className="mt-1 text-gray-800">{parsedProposal.categories.join(', ')}</p></div>}
-
-            {/* Vendor Shortlist — enriched with details */}
-            {shortlist.length > 0 && (
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <p className="text-sm font-medium text-gray-800 mb-3">Suggested Vendors</p>
-                <div className="space-y-3">
-                  {shortlist.map((cat) => (
-                    <div key={cat.category} className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                        {cat.category.replace('_', ' ')}
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {cat.vendors.map(v => (
-                          <div key={v.id} className="bg-white rounded-lg p-3 border border-gray-100 flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">{v.companyName}</p>
-                              <p className="text-xs text-gray-500 line-clamp-1">{v.description || 'No description'}</p>
-                            </div>
-                            <div className="text-right flex-shrink-0 ml-3">
-                              <p className="text-sm font-bold text-amber-600">
-                                {v.rating ? `★ ${v.rating.toFixed(1)}` : '★ N/A'}
-                              </p>
-                              <p className="text-[10px] text-gray-500 uppercase">Rating</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 mt-3">
-                  These vendors are suggestions. Vendor offers are sent after the coordinator creates the event.
-                </p>
-              </div>
-            )}
+          <section id="client-proposal" tabIndex={-1} className="scroll-mt-24">
+            <ProposalReview key={`${inquiry.id}-${inquiry.proposalVersion}`} inquiry={inquiry} client>
             {canRespond ? (
-              <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 mt-4">
+              <div className="flex flex-col gap-3">
                 {!changeMode ? (
                   <>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row">
                       <button
                         onClick={() => decideProposal('accept')}
                         disabled={saving}
-                        className="flex-1 bg-emerald-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-emerald-700 disabled:opacity-50 transition"
+                        className="btn-primary flex-1"
                       >
-                        {saving ? 'Saving...' : 'Accept Proposal'}
+                        {saving ? 'Saving…' : 'Accept this proposal'}
                       </button>
                       <button
                         onClick={() => setChangeMode(true)}
                         disabled={saving}
-                        className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50 transition"
+                        className="btn-outline flex-1"
                       >
-                        Request Change
+                        Request changes
                       </button>
                     </div>
                     <button
@@ -323,7 +239,7 @@ export default function ClientInquiryDetail() {
                       disabled={saving}
                       className="text-sm text-gray-500 hover:text-gray-700 underline"
                     >
-                      Reject entire proposal
+                      Decline this proposal
                     </button>
                   </>
                 ) : (
@@ -361,8 +277,27 @@ export default function ClientInquiryDetail() {
                 )}
               </div>
             ) : null}
+            </ProposalReview>
           </section>
         ) : null}
+        {['INQUIRY_SUBMITTED', 'PROPOSAL_SENT'].includes(status) && (
+          <VendorPreferences key={`preferences-${inquiry.id}`} inquiry={inquiry} onSaved={setInquiry} />
+        )}
+        <details open={!parsedProposal} className="surface p-5 sm:p-6">
+          <summary className="cursor-pointer text-sm font-semibold text-gray-800">Request details <span className="ml-2 font-normal text-slate-500">Dates, requirements and your coordinator</span></summary>
+          <div className="mt-5 space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
+              <div><p className="text-gray-500">Event date</p><p className="font-medium">{inquiry.eventDate || '—'}</p></div>
+              <div><p className="text-gray-500">Attendees</p><p className="font-medium">{inquiry.expectedAttendees ?? '—'}</p></div>
+              <div><p className="text-gray-500">Handled by</p><p className="font-medium">{inquiry.coordinator?.name || 'Coordinator assignment pending'}</p></div>
+              <div><p className="text-gray-500">Requested services</p><p className="font-medium">{inquiry.requestedCategories?.join(', ') || '—'}</p></div>
+            </div>
+            <InquiryBusinessDetails inquiry={inquiry} client />
+            {inquiry.tableSetup && <p className="text-sm"><strong>Table and seating setup:</strong> {inquiry.tableSetup.replaceAll('_', ' ').toLowerCase()}</p>}
+            {inquiry.requirements && <div className="text-sm"><p className="text-gray-500">Requirements</p><p className="mt-1 whitespace-pre-wrap text-gray-800">{inquiry.requirements}</p></div>}
+          </div>
+        </details>
+        {!inquiry.event && !['EVENT_CREATED', 'PROPOSAL_REJECTED', 'COMPLETED', 'CANCELLED', 'CLOSED'].includes(inquiry.status) && <AvailabilityWaitingList key={`waiting-${inquiry.id}`} inquiry={inquiry} />}
         <AuditTimeline key={`history-${inquiry.id}`} referenceType="INQUIRY" referenceId={inquiry.id}
           refreshKey={inquiry.updatedAt || inquiry.status} title="Inquiry history" expandedByDefault={false} />
       </div>

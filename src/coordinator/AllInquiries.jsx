@@ -1,133 +1,66 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowPathIcon, ArrowUpRightIcon, MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
+import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import ResponsiveTable from '../components/ResponsiveTable';
 import EmptyState from '../components/EmptyState';
+import EventPageControls from '../components/EventPageControls';
 import useApiResource from '../hooks/useApiResource';
 import { useApp } from '../context/AppContext';
+import { eventPage } from '../utils/eventPages';
+import { statusLabel } from '../utils/status';
+import { formatEventDate } from './eventDetailModel';
 
 export default function AllInquiries() {
   const { state } = useApp();
-  const [ownership, setOwnership] = useState('all');
   const { data: inquiries, loading, error, reload } = useApiResource('/inquiries');
+  const [ownership, setOwnership] = useState('all');
   const [filter, setFilter] = useState('All');
-  const [clientName, setClientName] = useState('');
+  const [search, setSearch] = useState('');
   const [eventType, setEventType] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [attendance, setAttendance] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pageNumber, setPageNumber] = useState(1);
+  useEffect(() => setPageNumber(1), [ownership, filter, search, eventType, eventDate, attendance]);
+  const statuses = ['All', ...new Set(inquiries.map(inquiry => inquiry.status).filter(Boolean))];
+  const eventTypes = [...new Set(inquiries.map(inquiry => inquiry.eventType).filter(Boolean))].sort();
+  const owned = inquiries.filter(inquiry => (ownership !== 'mine' || String(inquiry.coordinator?.id) === String(state.currentUser?.id)) && (ownership !== 'unassigned' || !inquiry.coordinator));
+  const filtered = owned.filter(inquiry => (filter === 'All' || inquiry.status === filter)
+    && `${inquiry.eventName || ''} ${inquiry.clientName || ''} ${inquiry.id}`.toLowerCase().includes(search.trim().toLowerCase())
+    && (!eventType || inquiry.eventType === eventType) && (!eventDate || inquiry.eventDate === eventDate)
+    && (!attendance || inquiry.expectedAttendees === Number(attendance)));
+  const page = eventPage(filtered, pageNumber);
+  const extraFilters = [eventType, eventDate, attendance].filter(Boolean).length;
+  function clear() { setSearch(''); setEventType(''); setEventDate(''); setAttendance(''); setFilter('All'); setOwnership('all'); }
 
-  const statuses = ['All', ...new Set(inquiries.map((i) => i.status).filter(Boolean))];
-  const eventTypes = [...new Set(inquiries.map((inquiry) => inquiry.eventType).filter(Boolean))].sort();
-  const filtered = inquiries.filter((inquiry) =>
-    (filter === 'All' || inquiry.status === filter)
-    && (ownership !== 'mine' || inquiry.coordinator?.id === state.currentUser?.id)
-    && (ownership !== 'unassigned' || !inquiry.coordinator)
-    && (inquiry.clientName ?? '').toLowerCase().includes(clientName.trim().toLowerCase())
-    && (!eventType || inquiry.eventType === eventType)
-    && (!eventDate || inquiry.eventDate === eventDate)
-    && (!attendance || inquiry.expectedAttendees === Number(attendance))
-  );
-
-  if (loading) {
-    return (
-      <Layout title="All Inquiries">
-        <div className="text-center py-10">Loading...</div>
-      </Layout>
-    );
-  }
-
-  return (
-    <Layout title="All Inquiries">
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-900">All Inquiries</h1>
-        <label className="block text-sm font-medium">
-          Coordinator ownership
-          <select value={ownership} onChange={(event) => setOwnership(event.target.value)}
-            className="ml-3 rounded-lg border border-slate-300 px-3 py-2">
-            <option value="all">All inquiries</option>
-            <option value="mine">My inquiries</option>
-            <option value="unassigned">Unassigned inquiries</option>
-          </select>
-        </label>
-        {error && <div role="alert" className="rounded-lg bg-rose-50 p-4 text-rose-700">{error} <button onClick={reload} className="underline">Retry</button></div>}
-        <div className="flex flex-wrap gap-2">
-          {statuses.map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                filter === s
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {s === 'All' ? 'All' : s.replace(/_/g, ' ')}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="grid gap-1 text-sm font-medium">
-            Client name
-            <input className="rounded-lg border border-slate-300 px-3 py-2" value={clientName} onChange={(event) => setClientName(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            Event type
-            <select className="rounded-lg border border-slate-300 px-3 py-2" value={eventType} onChange={(event) => setEventType(event.target.value)}>
-              <option value="">All event types</option>
-              {eventTypes.map((type) => <option key={type} value={type}>{type.replace(/_/g, ' ')}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            Event date
-            <input className="rounded-lg border border-slate-300 px-3 py-2" type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            Estimated attendees
-            <input className="rounded-lg border border-slate-300 px-3 py-2" type="number" min="1" value={attendance} onChange={(event) => setAttendance(event.target.value)} />
-          </label>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 overflow-hidden p-4 md:p-0">
-          {error ? <p className="p-6 text-slate-500">Inquiries are temporarily unavailable.</p> : filtered.length === 0 ? (
-            <EmptyState
-              icon="📋"
-              title="No inquiries found"
-              description="Try changing or clearing your filters."
-              size="small"
-            />
-          ) : (
-            <>
-              <ResponsiveTable
-                columns={[
-                  { key: 'client', label: 'Client', render: (inq) => (
-                    <span className="text-sm text-slate-600 font-medium">{inq.clientName}</span>
-                  )},
-                  { key: 'eventType', label: 'Event Type', render: (inq) => (
-                    <span className="text-sm text-slate-600 capitalize">{inq.eventType}</span>
-                  )},
-                  { key: 'coordinator', label: 'Handled by', render: (inq) => inq.coordinator?.name || 'Unassigned' },
-                  { key: 'eventDate', label: 'Date', render: (inq) => inq.eventDate },
-                  { key: 'expectedAttendees', label: 'Attendees', render: (inq) => inq.expectedAttendees },
-                  { key: 'status', label: 'Status', render: (inq) => (
-                    <StatusBadge status={inq.status} />
-                  )},
-                  { key: 'action', label: 'Action', render: (inq) => (
-                    <Link to={`/coordinator/inquiries/${inq.id}`} className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
-                      View
-                    </Link>
-                  )},
-                ]}
-                data={filtered}
-              />
-              <div className="hidden md:block px-6 py-4 bg-slate-50/80 text-xs text-slate-500 border-t border-slate-200">
-                Total: {filtered.length} inquiries
-              </div>
-            </>
-          )}
-        </div>
+  return <Layout title="Client inquiries"><div className="space-y-5">
+    <PageHeader eyebrow="From first interest to booking" title="Client inquiries" subtitle="Find a request, check who is handling it, and open the next booking step."
+      action={<button type="button" onClick={reload} disabled={loading} className="btn-outline"><ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>} />
+    <div>
+      <div className="record-filters"><label className="record-search"><MagnifyingGlassIcon aria-hidden="true" /><span className="sr-only">Search event name, client or inquiry number</span><input type="search" placeholder="Find an event, client or request number…" value={search} onChange={event => setSearch(event.target.value)} /></label>
+        <div className="ownership-control" aria-label="Whose inquiries to show">{[['all', 'All work'], ['mine', 'Mine'], ['unassigned', 'Unclaimed']].map(([key, label]) => <button type="button" key={key} aria-pressed={ownership === key} onClick={() => setOwnership(key)}>{label}</button>)}</div>
+        <button type="button" className="record-filter-trigger" aria-expanded={filtersOpen} aria-controls="inquiry-more-filters" onClick={() => setFiltersOpen(value => !value)}><AdjustmentsHorizontalIcon aria-hidden="true" />Filters{extraFilters ? ` · ${extraFilters}` : ''}</button>
       </div>
-    </Layout>
-  );
+      {filtersOpen && <div id="inquiry-more-filters" className="inquiry-additional-filters">
+        <label>Event type<select value={eventType} onChange={event => setEventType(event.target.value)}><option value="">All event types</option>{eventTypes.map(type => <option key={type} value={type}>{type.replaceAll('_', ' ')}</option>)}</select></label>
+        <label>Event date<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} /></label>
+        <label>Estimated attendees<input type="number" min="1" value={attendance} onChange={event => setAttendance(event.target.value)} /></label>
+      </div>}
+    </div>
+    <div className="inquiry-stage-filters" aria-label="Filter by inquiry stage">{statuses.map(status => <button type="button" key={status} aria-pressed={filter === status} onClick={() => setFilter(status)}>{status === 'All' ? 'All stages' : statusLabel(status)}<span>{status === 'All' ? owned.length : owned.filter(row => row.status === status).length}</span></button>)}{(extraFilters > 0 || search || filter !== 'All' || ownership !== 'all') && <button type="button" onClick={clear} className="underline">Clear filters</button>}</div>
+    {error && <div role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{error} <button type="button" onClick={reload} className="ml-2 underline">Try again</button></div>}
+    <section className="surface overflow-hidden" aria-label="Client inquiry results" aria-busy={loading}>
+      {loading ? <p role="status" className="p-10 text-center text-sm text-slate-500">Loading client inquiries…</p> : error ? <EmptyState title="Inquiries could not be loaded" description="Try refreshing to retrieve the latest records." actionText="Try again" actionOnClick={reload} /> : page.rows.length ? <ResponsiveTable columns={[
+        { key: 'event', label: 'Event / client', render: inquiry => <Link to={`/coordinator/inquiries/${inquiry.id}`}><span><span className="inquiry-record-name">{inquiry.eventName || `${inquiry.eventType || 'Event'} request`}</span><span className="inquiry-record-subtitle">#{inquiry.id} · {inquiry.clientName}</span></span></Link> },
+        { key: 'date', label: 'Event date', render: inquiry => <span>{formatEventDate(inquiry.eventDate)}<small className="inquiry-record-subtitle mt-1">{inquiry.expectedAttendees} guests · {inquiry.eventType?.replaceAll('_', ' ')}</small></span> },
+        { key: 'coordinator', label: 'Handling coordinator', render: inquiry => inquiry.coordinator?.name || <span className="text-amber-700">Available to claim</span> },
+        { key: 'status', label: 'Current stage', render: inquiry => <StatusBadge status={inquiry.status} /> },
+        { key: 'action', label: '', render: inquiry => <Link aria-label={`Open ${inquiry.eventName || `inquiry ${inquiry.id}`}`} to={`/coordinator/inquiries/${inquiry.id}`} className="gap-1.5">Open<ArrowUpRightIcon className="h-4 w-4" aria-hidden="true" /></Link> },
+      ]} data={page.rows} /> : <EmptyState title={inquiries.length ? 'No matching inquiries' : 'New inquiries will appear here'} description={inquiries.length ? 'Try another name, stage or date. You can also clear the filters.' : 'Client requests will be ready for a coordinator to claim and review.'} actionText={inquiries.length ? 'Clear filters' : undefined} actionOnClick={clear} />}
+    </section>
+    {!loading && !error && <EventPageControls page={page} onChange={setPageNumber} noun="inquiries" />}
+  </div></Layout>;
 }

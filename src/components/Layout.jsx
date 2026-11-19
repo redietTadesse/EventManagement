@@ -10,15 +10,15 @@ export default function Layout({ children, title = 'Events' }) {
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-[#f5f6f4] text-slate-900 antialiased">
+    <div className={`app-shell ${currentUser ? 'is-authenticated' : ''}`}>
       <a href="#workspace-content" className="skip-link">Skip to content</a>
       {currentUser && <Navbar title={title} />}
-      <div className={currentUser ? 'lg:ml-60' : ''}>
-        <main id="workspace-content" tabIndex={-1} className="workspace-content mx-auto w-full max-w-[1500px] px-4 py-6 outline-none sm:px-7 lg:px-9 lg:py-8">
+      <div className={currentUser ? 'app-body' : ''}>
+        <main id="workspace-content" tabIndex={-1} className="workspace-content">
           {children}
         </main>
-        <footer className="mx-auto flex max-w-[1500px] flex-wrap justify-between gap-2 px-4 pb-6 pt-4 text-[11px] text-slate-500 sm:px-7 lg:px-9">
-          <span>AICC · Event management</span><span>Addis Ababa, Ethiopia</span>
+        <footer className="workspace-footer">
+          <span>Addis International Convention Center</span><span>Addis Ababa · Ethiopia</span>
         </footer>
       </div>
     </div>

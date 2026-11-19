@@ -7,6 +7,7 @@ import VendorDecisionHistory from '../components/VendorTrailDrawer';
 import ManualAssignModal from '../components/ManualAssignModal';
 import EventReadinessWidget from '../components/EventReadinessWidget';
 import EventOperationsPanel from '../components/EventOperationsPanel';
+import ServiceCommitmentBoard from '../components/ServiceCommitmentBoard';
 import ChangeDateModal from '../components/ChangeDateModal';
 import EventIssues from '../components/EventIssues';
 import CoordinatorOwnership from '../components/CoordinatorOwnership';
@@ -246,6 +247,8 @@ useEffect(() => {
           requiredCategories: categoryResult.status === 'fulfilled' ? categoryResult.value.data : eventRecord.requiredCategories || [],
           clientName: eventRecord.clientName || inquiry.clientName || currentAssignments[0]?.eventClientName,
           expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees,
+          coordinator: eventRecord.coordinator || inquiry.coordinator,
+          tableSetup: inquiry.tableSetup,
         };
         setEvent(nextEvent);
         void loadVenueOptions(nextEvent);
@@ -380,6 +383,8 @@ useEffect(() => {
       requiredCategories: categoryResult.status === 'fulfilled' ? categoryResult.value.data : event?.requiredCategories || eventRecord.requiredCategories || [],
       clientName: eventRecord.clientName || inquiry.clientName || currentAssignments[0]?.eventClientName || event?.clientName,
       expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees || event?.expectedAttendees,
+      coordinator: eventRecord.coordinator || inquiry.coordinator || event?.coordinator,
+      tableSetup: inquiry.tableSetup || event?.tableSetup,
     };
     setEvent(nextEvent);
     setError('');
@@ -612,19 +617,19 @@ useEffect(() => {
   ];
 
   return (
-    <Layout title="Event Detail">
+    <Layout title="Event workspace">
       <div className="space-y-6">
-        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-          <button type="button" onClick={() => navigate('/coordinator/events')} className="mb-3 text-sm text-indigo-700 hover:underline">← Events</button>
+        <header className="booking-case-header event-case-header">
+          <button type="button" onClick={() => navigate('/coordinator/events')} className="mb-3 block text-sm text-emerald-100 hover:underline">← Events</button>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{event.name}</h1>
+                <p className="case-eyebrow">Event workspace · Event #{event.id}</p><h1>{event.name}</h1>
               </div>
-              <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-                <div><dt className="text-xs text-slate-500">Event dates</dt><dd className="mt-1 font-medium text-slate-800">{formatEventRange(event.date, event.endDate)}</dd></div>
-                <div><dt className="text-xs text-slate-500">Venue</dt><dd className="mt-1 font-medium text-slate-800">{event.venue || 'Not assigned'}</dd></div>
-                <div><dt className="text-xs text-slate-500">Client</dt><dd className="mt-1 font-medium text-slate-800">{event.clientName || 'Client unavailable'}</dd></div>
+              <p className="case-subtitle">Handled by {event.coordinator?.name || 'a coordinator to be assigned'}{event.expectedAttendees ? ` · ${event.expectedAttendees} guests` : ''}{event.tableSetup ? ` · ${serviceLabel(event.tableSetup)} seating` : ''}</p><dl className="case-facts">
+                <div><dt className="text-xs">Event dates</dt><dd className="mt-1 font-medium text-slate-800">{formatEventRange(event.date, event.endDate)}</dd></div>
+                <div><dt className="text-xs">Venue</dt><dd className="mt-1 font-medium text-slate-800">{event.venue || 'Not assigned'}</dd></div>
+                <div><dt className="text-xs">Client</dt><dd className="mt-1 font-medium text-slate-800">{event.clientName || 'Client unavailable'}</dd></div>
               </dl>
             </div>
             <div className="max-w-md space-y-2">
@@ -646,7 +651,6 @@ useEffect(() => {
         </p>}
         <EventOperationsPanel status={event.status} summary={operationsSummary}
           onTrack={track => selectTab(track === 'venue' ? 'overview' : track === 'tasks' ? 'tasks' : 'vendors')}
-          handoff={handoff && { ...handoff, onHistory: () => selectTab('history', handoff.category) }}
           decision={{
             ...nextAction,
             title: nextAction.kind === 'waiting' && handoff?.current.status === 'PENDING'
@@ -676,7 +680,9 @@ useEffect(() => {
             <CoordinatorOwnership key={event.inquiryId} inquiryId={event.inquiryId}
               closed={['COMPLETED', 'CANCELLED', 'CLOSED'].includes(event.status)}
               onChanged={(coordinator) => setEvent((previous) => ({ ...previous, coordinator }))} />
-            <EventReadinessWidget eventId={id} refreshKey={readinessRefresh} />
+            <ServiceCommitmentBoard rows={services} known={vendorsKnown} status={event.status}
+              onReview={category => selectTab('vendors', category)} onHistory={category => selectTab('history', category)} onRefresh={handleRefreshOperations} />
+            <details className="surface p-4"><summary className="cursor-pointer text-sm font-semibold text-emerald-800">View the calculated readiness score</summary><div className="mt-4"><EventReadinessWidget eventId={id} refreshKey={readinessRefresh} /></div></details>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div><h2 className="font-semibold text-slate-900">Venue reservation</h2><p className="mt-1 text-sm text-slate-600">{event.venue || 'No venue assigned'} · {formatEventRange(event.date, event.endDate)}</p></div>

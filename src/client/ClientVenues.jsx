@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import EventPlanForm from '../components/EventPlanForm';
 import { VenueAvailabilityReasons } from '../components/VenueAvailabilityReasons';
+import AlternativeBookingPlans from '../components/AlternativeBookingPlans';
 import useApiResource from '../hooks/useApiResource';
 import { formatDate } from '../utils/helpers';
 import { readEventPlan } from '../utils/eventPlan';
@@ -58,8 +59,12 @@ function VenueResults({ query, plan }) {
     </ul> : <p className="surface p-6 text-sm text-slate-600">
       {plan.date ? 'No active venue matches this selection. Keep your requirements and ask AICC about alternatives.'
         : 'No active venues match this search. Try adjusting your guest count.'}
-      <Link to={'/client/new-inquiry?' + query} className="mt-3 block font-semibold text-indigo-700 underline">Keep these requirements and ask AICC for alternatives</Link>
+      <Link className="mt-3 block font-semibold text-emerald-800 underline" to={`/client/new-inquiry?${query}`}>Keep these requirements and ask AICC for alternatives</Link>
     </p>}
+    <details open={!venues.length} className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-emerald-900">Find alternative venues or nearby dates</summary>
+      <div className="mt-4"><AlternativeBookingPlans plan={plan} /></div>
+    </details>
   </section>;
 }
 

@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import EventPlanForm from '../components/EventPlanForm';
-import { ArrowRightIcon, PlusIcon, CalendarDaysIcon, DocumentTextIcon, CheckCircleIcon, ClockIcon } from '@heroicons/react/24/outline';
+import WorkspaceIntro from '../components/WorkspaceIntro';
+import { ArrowRightIcon, PlusIcon, CalendarDaysIcon, DocumentTextIcon, CheckCircleIcon, ClockIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
-import PageHeader from '../components/PageHeader';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
@@ -26,18 +26,22 @@ export default function ClientDashboard() {
   const firstName = (currentUser?.fullName || currentUser?.username || '').split(' ')[0];
 
   return <Layout title="Your overview"><div className="space-y-6">
-    <PageHeader eyebrow="Your event journey" title={firstName ? `Welcome, ${firstName}` : 'Your event overview'}
-      subtitle="Keep your plans moving, from the first inquiry to the day of your event."
-      action={<Link to="/client/new-inquiry" className="btn-primary"><PlusIcon className="h-4 w-4" />Plan an event</Link>} />
-    <section className="surface overflow-hidden" aria-labelledby="venue-search-title">
-      <div className="section-heading"><div><p className="eyebrow">Plan your event</p><h2 id="venue-search-title">Find a suitable venue</h2><p>Check the event type, seating and full date range together. Your choices carry into the inquiry.</p></div></div>
+    <WorkspaceIntro label="Your AICC workspace" title={firstName ? `Welcome back, ${firstName}.` : 'Your event starts here.'}
+      description="Everything you need to plan your event, agree on the details and stay in touch with your coordinator."
+      focusLabel="Your next step" focusTitle={inquiries.loading ? 'Finding your plans…' : inquiries.error ? 'Your plans could not be loaded' : decisions[0] ? (decisions[0].eventName || 'Your proposal is ready to follow up') : 'What are you planning?'}
+      focusNote={decisions[0]?.status === 'PROPOSAL_ACCEPTED' ? 'Open your agreement to check signatures, payment and the venue hold.' : decisions[0] ? 'Review the proposal, ask for changes, or accept when you are ready.' : 'Explore the venues or share your dates and requirements with AICC.'}
+      href={decisions[0] ? `/client/inquiries/${decisions[0].id}` : '/client/venues'} action={decisions[0] ? 'Continue your booking' : 'Explore venues'}>
+      <Link to="/client/new-inquiry" className="btn-primary"><PlusIcon className="h-4 w-4"/>Plan an event</Link><Link to="/client/inquiries" className="intro-secondary">See all my plans →</Link>
+    </WorkspaceIntro>
+    <details className="disclosure-row" open={!inquiries.loading && !inquiries.error && mine.length === 0}>
+      <summary><span>Planning an event? Check available venues</span><ChevronDownIcon aria-hidden="true" /></summary>
       <EventPlanForm plan={{ eventType: 'meeting', date: '', endDate: '', attendees: '', tableSetup: 'UNDECIDED' }} dateRequired
         className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3 sm:p-6"
         onSearch={params => navigate('/client/venues?' + params)}>
         <button type="submit" className="btn-primary self-end">Check venues <ArrowRightIcon className="h-4 w-4" /></button>
       </EventPlanForm>
-    </section>
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+    </details>
+    <div className="metric-strip">
       <StatCard label="Your inquiries" value={metric(inquiries, mine.length)} icon={<DocumentTextIcon />} detail="All event requests" />
       <StatCard label="Booking steps" value={metric(inquiries, decisions.length)} icon={<ClockIcon />} color="amber" detail="Proposals and accepted bookings" />
       <StatCard label="Upcoming events" value={metric(events, upcoming.length)} icon={<CalendarDaysIcon />} detail="Scheduled and in preparation" />
@@ -53,7 +57,7 @@ export default function ClientDashboard() {
       <ul className="divide-y divide-slate-100">{decisions.map(inquiry => <li key={inquiry.id}>
         <Link to={`/client/inquiries/${inquiry.id}`} className="flex items-center gap-4 px-5 py-4 hover:bg-indigo-50/50 sm:px-6">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><DocumentTextIcon className="h-5 w-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-800">{snakeToTitleCase(inquiry.eventType)} · {formatDate(inquiry.eventDate)}</span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-800">{inquiry.eventName || snakeToTitleCase(inquiry.eventType)} · {formatDate(inquiry.eventDate)}</span>
             <span className="mt-1 block text-sm text-slate-500">{inquiry.status === 'PROPOSAL_SENT' ? 'Review your proposal and respond to the coordinator.' : 'Follow your contract signatures and payment receipt.'}</span></span>
           <ArrowRightIcon className="h-4 w-4 shrink-0 text-indigo-600" />
         </Link>
@@ -68,7 +72,7 @@ export default function ClientDashboard() {
           : <ul className="divide-y divide-slate-100">{recent.map(inquiry => <li key={inquiry.id}>
             <Link to={`/client/inquiries/${inquiry.id}`} className="block px-5 py-4 hover:bg-slate-50 sm:px-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-slate-800">{snakeToTitleCase(inquiry.eventType)} <span className="ml-1 text-xs font-normal text-slate-400">#{inquiry.id}</span></span>
+                <span className="text-sm font-semibold text-slate-800">{inquiry.eventName || snakeToTitleCase(inquiry.eventType)} <span className="ml-1 text-xs font-normal text-slate-400">#{inquiry.id}</span></span>
                 <StatusBadge status={inquiry.status} />
               </div>
               <p className="mt-2 text-xs text-slate-500">{formatDate(inquiry.eventDate)} · {inquiry.expectedAttendees} guests</p>
@@ -91,12 +95,12 @@ export default function ClientDashboard() {
           </li>)}</ul>}
       </section>
     </div>
-    <section className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 sm:p-6">
-      <h2 className="text-sm font-semibold text-indigo-900">From an inquiry to a confirmed event</h2>
+    <details className="disclosure-row">
+      <summary><span>How does booking an event work?</span><ChevronDownIcon aria-hidden="true" /></summary>
       <ol className="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-4">
         {['Share your requirements', 'Agree on the proposal', 'Sign and submit payment', 'Follow event preparation'].map((step, index) =>
           <li key={step} className="flex items-start gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-white text-xs font-semibold text-indigo-700">{index + 1}</span>{step}</li>)}
       </ol>
-    </section>
+    </details>
   </div></Layout>;
 }

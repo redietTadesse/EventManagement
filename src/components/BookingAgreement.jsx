@@ -31,7 +31,7 @@ function nextBookingStep(contract, canSign) {
   }
 }
 
-export default function BookingAgreement({ inquiryId, onBooked }) {
+export default function BookingAgreement({ inquiryId, onBooked, onStatusChange }) {
   const path = `/inquiries/${inquiryId}/booking-agreement`;
   const [contract, setContract] = useState(null);
   const [refresh, setRefresh] = useState(0);
@@ -42,6 +42,7 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => { onStatusChange?.(contract); }, [contract, onStatusChange]);
 
   function messageFromError(err, fallback) {
     const data = err.response?.data;
@@ -149,7 +150,7 @@ export default function BookingAgreement({ inquiryId, onBooked }) {
           <div><dt>{booked ? 'Original booking window' : 'Proposed venue reservation window'}</dt><dd>{terms.bookedFrom} through {terms.bookedThrough}</dd></div>
           <div><dt>Expected attendance</dt><dd>{terms.attendees}</dd></div>
           <div><dt>Agreed total</dt><dd className="font-semibold">ETB {terms.totalEtb.toLocaleString()}</dd></div>
-          <div><dt>Services</dt><dd>{terms.services.join(', ')}</dd></div>
+          <div><dt>Services</dt><dd>{terms.services.length ? terms.services.join(', ') : 'No services selected'}</dd></div>
           {terms.proposalTerms && <div className="sm:col-span-2"><dt>Terms</dt><dd className="whitespace-pre-wrap">{terms.proposalTerms}</dd></div>}
         </dl>
         <p>Client signature: {contract.clientSignature || 'Pending'}{contract.clientSignedAt && ` (${new Date(contract.clientSignedAt).toLocaleString()})`}</p>

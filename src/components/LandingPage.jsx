@@ -75,7 +75,7 @@ export default function LandingPage() {
 
     <main id="main-content" tabIndex={-1}>
       <section aria-labelledby="landing-title" className="relative isolate overflow-hidden bg-[#142f32] text-white">
-        <img src={import.meta.env.BASE_URL + 'aicc-venue.jpg'} width="1200" height="674" fetchPriority="high"
+        <img src={import.meta.env.BASE_URL + 'aicc-venue.jpg'} width="1200" height="674" fetchpriority="high"
           alt="Aerial view of the Addis International Convention Center at dusk"
           className="absolute inset-0 -z-20 h-full w-full object-cover object-[60%_55%]" />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-[#0b2224] via-[#0b2224]/85 to-[#0b2224]/35 sm:to-[#0b2224]/15" />

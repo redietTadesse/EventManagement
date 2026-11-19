@@ -7,6 +7,7 @@ import RootRedirect from './components/RootRedirect';
 import LandingPage from './components/LandingPage';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
+import PasswordRecovery from './components/PasswordRecovery';
 import VendorApplication from './components/VendorApplication';
 
 import ClientDashboard from './client/ClientDashboard';
@@ -49,6 +50,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<PasswordRecovery />} />
+      <Route path="/reset-password" element={<PasswordRecovery reset />} />
       <Route path="/login/:portal?" element={<Login />} />
       <Route path="/vendor-application" element={<VendorApplication />} />
 

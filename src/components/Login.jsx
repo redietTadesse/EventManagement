@@ -216,6 +216,7 @@ export default function Login() {
                 : 'Create a client account'}
           </p>
 
+          {mode === 'signin' && <p className="mb-4 text-right text-sm"><Link to="/forgot-password" className="font-semibold text-emerald-800 hover:underline">Forgot your password?</Link></p>}
           {/* Success notice */}
           {signupAllowed && <GoogleClientSignIn onSignedIn={async token=>{
             localStorage.setItem('token',token);

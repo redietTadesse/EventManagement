@@ -1,12 +1,14 @@
+import WorkspaceIntro from '../components/WorkspaceIntro';
 import UnmetDemand from './UnmetDemand';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import api from '../api/axios';
 import useApiResource from '../hooks/useApiResource';
 import LifecycleDashboard from './LifecycleDashboard';
 import ManagementOutlook from './ManagementOutlook';
 import BookingPerformance from './BookingPerformance';
+import ViewTabs from '../components/ViewTabs';
 const RevenueDashboard = lazy(() => import('./RevenueDashboard'));
 
 function RevenueSnapshot({ onDetails }) {
@@ -53,7 +55,9 @@ function EmailDiagnostics() {
 
 
 export default function AdminDashboard() {
-  const [tab, setTab] = useState('business');
+  const [params, setParams] = useSearchParams();
+  const tab = ['business', 'revenue', 'bookings', 'demand', 'administration'].includes(params.get('view')) ? params.get('view') : 'business';
+  const setTab = value => setParams(previous => { const next = new URLSearchParams(previous); next.set('view', value); return next; });
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -65,12 +69,17 @@ export default function AdminDashboard() {
   }, []);
   useEffect(() => { if (tab === 'administration') load(); }, [tab, load]);
   return <Layout title="Management overview"><div className="space-y-6">
-    <div><p className="eyebrow">AICC management</p><h1 className="mt-2 text-3xl font-semibold text-slate-900">Business and booking performance</h1><p className="mt-2 text-sm text-slate-600">Review business demand, paid bookings, venue use, and the work requiring follow-up.</p></div>
-    <div role="tablist" aria-label="Management views" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2">
-      {[['business','Business overview'],['revenue','Revenue'],['administration','Administration']].map(([key,label]) => <button key={key} role="tab" id={'management-tab-' + key} aria-controls={'management-panel-' + key} aria-selected={tab === key} className={'rounded-lg px-4 py-2 text-sm font-semibold ' + (tab === key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50')} onClick={() => setTab(key)}>{label}</button>)}
-    </div>
+    <WorkspaceIntro label="Management overview" title="A clear view of the business."
+      description="Follow bookings, payments and venue use. Open the figures to understand what is moving forward and where decisions are needed."
+      focusLabel="Start with a question" focusTitle="Where are bookings waiting?"
+      focusNote="Bookings & team shows which requests need attention and who is handling the next step." />
+    <ViewTabs id="management" label="Management views" value={tab} onChange={setTab} items={[
+      ['business','Business overview'], ['revenue','Revenue'], ['bookings','Bookings & team'], ['demand','Unmet requests'], ['administration','Administration'],
+    ]} />
     <section role="tabpanel" id={'management-panel-' + tab} aria-labelledby={'management-tab-' + tab} className="space-y-6">
-      {tab === 'business' && <><RevenueSnapshot onDetails={() => setTab('revenue')} /><BookingPerformance /><UnmetDemand /><LifecycleDashboard /><ManagementOutlook /></>}
+      {tab === 'business' && <><RevenueSnapshot onDetails={() => setTab('revenue')} /><LifecycleDashboard /><ManagementOutlook /></>}
+      {tab === 'bookings' && <BookingPerformance />}
+      {tab === 'demand' && <UnmetDemand />}
       {tab === 'revenue' && <Suspense fallback={<p role="status">Loading revenue dashboard…</p>}><RevenueDashboard /></Suspense>}
       {tab === 'administration' && <>
         <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">System administration</h2><button className="btn-outline" disabled={loading} onClick={load}>Refresh summary</button></div>

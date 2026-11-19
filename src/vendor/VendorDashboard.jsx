@@ -1,9 +1,9 @@
+import WorkspaceIntro from '../components/WorkspaceIntro';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import Skeleton from '../components/Skeleton';
-import PageHeader from '../components/PageHeader';
 import StatCard from '../components/StatCard';
 import EmptyState from '../components/EmptyState';
 import { ArrowRightIcon, ClockIcon, CalendarDaysIcon, CheckCircleIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
@@ -103,14 +103,18 @@ export default function VendorDashboard() {
   ];
 
   return <Layout title="Vendor overview"><div className="space-y-6">
-    <PageHeader eyebrow="Vendor workspace" title={profile?.companyName || currentUser?.fullName || 'Your assignments'}
-      subtitle="Respond to service offers and prepare for your upcoming commitments."
-      action={<Link to="/vendor/open" className="btn-primary">Explore open requests<ArrowRightIcon className="h-4 w-4" /></Link>} />
+    <WorkspaceIntro label="Vendor workspace" title={profile?.companyName || currentUser?.fullName || 'Your next commitment starts here.'}
+      description="A clear view of your offers, deadlines and upcoming work with AICC."
+      focusLabel="Next response" focusTitle={assignmentsError ? 'Offers could not be loaded' : responseQueue[0]?.eventName || 'You are up to date'}
+      focusNote={responseQueue[0]?.expiresAt ? `Respond by ${new Date(responseQueue[0].expiresAt).toLocaleString(undefined, {dateStyle:'medium',timeStyle:'short'})}. Review the service details before accepting.` : 'Review new offers here, then follow the assignments you have accepted.'}
+      href={responseQueue[0] ? `/vendor/assignments/${responseQueue[0].id}` : '/vendor/assignments'} action={responseQueue[0] ? 'Review this offer' : 'View my assignments'}>
+      <Link to="/vendor/open" className="btn-outline">Explore open requests<ArrowRightIcon className="h-4 w-4"/></Link>
+    </WorkspaceIntro>
     {(profileError || assignmentsError) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
       {profileError || assignmentsError}
       <button type="button" onClick={() => { setLoading(true); setReloadKey(key => key + 1); }} className="ml-3 font-semibold underline">Try again</button>
     </div>}
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+    <div className="metric-strip">
       {metrics.map(([label, value, icon, color, status]) => <Link key={label} to={`/vendor/assignments?status=${status}`} className="rounded-2xl focus-visible:outline-offset-4">
         <StatCard label={label} value={assignmentsError ? '—' : value} icon={icon} color={color} />
       </Link>)}

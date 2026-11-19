@@ -62,7 +62,7 @@ export default function VendorApplications() {
         setError('');
         try {
             const res = await api.post(
-                `/vendor-applications/${application.id}/${review.action}`,
+                `/vendor-applications/${application.id}/${review.action === 'approve' ? 'approve' : 'reject'}`,
                 { note: note.trim() || null }
             );
             setToast(
