@@ -20,6 +20,8 @@ public class VendorAssignmentResponse {
     private CoordinatorAssignmentPayload.Person coordinator;
     private String eventName;
     private LocalDate eventDate;
+    private LocalDate eventEndDate;
+    private String tableSetup;
     private String eventVenue;
     private String eventClientName;
     private Integer expectedAttendees;
@@ -70,6 +72,8 @@ public class VendorAssignmentResponse {
                                 ? event.getId()
                                 : null
                 )
+                .eventEndDate(inquiry != null ? inquiry.getEndDate() : null)
+                .tableSetup(inquiry != null ? inquiry.getTableSetup() : null)
                 .eventVenue(event != null ? event.getVenue() : null)
                 .eventStatus(event != null ? event.getStatus() : null)
                 .eventClientName(inquiry != null ? inquiry.getClientName() : null)

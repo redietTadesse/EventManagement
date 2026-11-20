@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Dialog } from '@headlessui/react';
+import AppearanceChoice from '../components/Appearance';
+import usePlanningAppearance from '../hooks/usePlanningAppearance';
 import {
   ArrowPathIcon,
   CalendarDaysIcon,
@@ -652,6 +655,7 @@ function StageContent({ step, onStart, onReplay }) {
 }
 
 export default function LiveSimulationModal({ isOpen, onClose }) {
+  const { appearance } = usePlanningAppearance();
   const [step, setStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [stageVisible, setStageVisible] = useState(false);
@@ -685,31 +689,9 @@ export default function LiveSimulationModal({ isOpen, onClose }) {
     return () => window.cancelAnimationFrame(frame);
   }, [isOpen, step]);
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const handleKeyDown = event => {
-      if (event.key === 'Escape') onClose();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
-
   const startSimulation = () => {
     setStep(1);
-    setIsPlaying(true);
+    setIsPlaying(!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   };
 
   const nextStage = () => {
@@ -726,13 +708,10 @@ export default function LiveSimulationModal({ isOpen, onClose }) {
   const progress = step === 0 ? 0 : (step / 5) * 100;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] overflow-y-auto bg-slate-950/95 p-3 backdrop-blur-sm sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="live-simulation-title"
+    <Dialog open={isOpen} onClose={onClose} data-appearance={appearance}
+      className="automation-replay fixed inset-0 z-[60] overflow-y-auto bg-slate-950/95 p-3 backdrop-blur-sm sm:p-6"
     >
-      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50 sm:min-h-[calc(100vh-3rem)]">
+      <Dialog.Panel className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50 sm:min-h-[calc(100vh-3rem)]">
         <header className="border-b border-slate-800 bg-slate-900/95 px-5 py-4 sm:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -741,10 +720,11 @@ export default function LiveSimulationModal({ isOpen, onClose }) {
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300">Live automation replay</p>
-                <h1 id="live-simulation-title" className="mt-1 text-lg font-bold text-white sm:text-xl">Event vendor orchestration</h1>
+                <Dialog.Title as="h1" className="mt-1 text-lg font-bold text-white sm:text-xl">How vendors are selected</Dialog.Title>
               </div>
             </div>
 
+            <AppearanceChoice />
             <button
               type="button"
               onClick={onClose}
@@ -810,11 +790,11 @@ export default function LiveSimulationModal({ isOpen, onClose }) {
             </div>
           ) : (
             <p className="text-center text-xs text-slate-500">
-              {step === 0 ? 'A deterministic frontend-only replay of the vendor coordination lifecycle.' : 'Lifecycle complete · zero manual intervention'}
+              {step === 0 ? 'Explore a sample event from the first offer through vendor confirmation.' : 'All required vendors accepted in this example.'}
             </p>
           )}
         </footer>
-      </div>
-    </div>
+      </Dialog.Panel>
+    </Dialog>
   );
 }

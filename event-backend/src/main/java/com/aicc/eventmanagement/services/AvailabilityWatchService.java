@@ -75,7 +75,7 @@ public class AvailabilityWatchService {
 
     private List<BookingOptionsService.Option> matches(Inquiry inquiry) {
         return options.search(new BookingOptionsService.Request(inquiry.getEventDate(), inquiry.getEndDate(),
-                inquiry.getExpectedAttendees(), inquiry.getEventType(), inquiry.getTableSetup() == null ? "UNDECIDED" : inquiry.getTableSetup(), 0, null)).options();
+                inquiry.getExpectedAttendees(), inquiry.getEventType(), inquiry.getTableSetup() == null ? "UNDECIDED" : inquiry.getTableSetup(), 0, null, null)).options();
     }
     private boolean closed(Inquiry inquiry) {
         return inquiry.getEvent() != null || !inquiry.getEventDate().isAfter(LocalDate.now())

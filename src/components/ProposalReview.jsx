@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { ArrowsRightLeftIcon, ArrowRightIcon, CalendarDaysIcon, CheckIcon, ChevronDownIcon, DocumentTextIcon, MapPinIcon, UsersIcon } from '@heroicons/react/24/outline';
+import { PreferenceSummary } from './InquiryPreferences';
 import useApiResource from '../hooks/useApiResource';
 import { compareProposals, proposalDateRange, proposalLabel, proposalMoney, proposalVendors, readProposal, savedProposalVersions } from '../utils/proposalReview';
 
@@ -59,6 +60,7 @@ export function ProposalReviewCard({ inquiry, client = false, revisions = [], lo
         <div className="proposal-quoted-total"><p>Quoted total</p><strong>{proposalMoney(proposal.price)}</strong><span>For the services and terms in this proposal</span></div>
       </div>
 
+      {client && <PreferenceSummary inquiry={inquiry} proposal={proposal} />}
       {loading && <p role="status" className="proposal-load-note">Checking for earlier proposals…</p>}
       {error && <p role="alert" className="proposal-load-note is-warning">Earlier proposals could not be loaded. {onRetry && <button type="button" onClick={onRetry}>Try again</button>}</p>}
       {!loading && !error && versions.length > 0 && <div className="proposal-change-notice">

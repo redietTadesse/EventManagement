@@ -69,8 +69,17 @@ public class Inquiry {
     @Column(columnDefinition = "TEXT")
     private String requirements;
 
+    @Column(columnDefinition = "TEXT")
+    private String preferredVendorNames;
+    private Long preferredVenueId;
+    @Column(length = 255)
+    private String preferredVenueName;
+
     @Column(name = "table_setup", length = 30)
     private String tableSetup;
+    private Integer requestedGuestsPerTable;
+    @Column(length = 30)
+    private String requestedTableLayout;
     @Column(name = "event_name", length = 200)
     private String eventName;
     @Column(name = "unmet_needs", columnDefinition = "TEXT")

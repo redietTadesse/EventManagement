@@ -133,18 +133,70 @@ test('a visitor carries venue search criteria through client sign-in', async () 
   } finally { authApi.defaults.adapter = oldAuth; }
 });
 
-function openWorkspace(role, data, path = '/' + role.toLowerCase() + '/dashboard') {
+test('the sign-in page shows all four portals and loads Google only on the client portal', async () => {
+  const oldAuth = authApi.defaults.adapter;
+  const requests = [];
+  authApi.defaults.adapter = async config => {
+    requests.push(config.url);
+    return { status:200, headers:{}, config, data:{ clientId:'' } };
+  };
+  try {
+    window.history.replaceState({}, '', '/login/vendor');
+    render(h(App));
+    const portals = screen.getByRole('navigation', { name:'Sign-in portals' });
+    assert.equal(within(portals).getAllByRole('link').length, 4);
+    assert.equal(within(portals).getByRole('link', {name:'Vendor'}).getAttribute('aria-current'), 'page');
+    assert.equal(requests.length, 0);
+    const clientRoute = within(portals).getByRole('link', {name:'Client'}).getAttribute('href');
+    const adminRoute = within(portals).getByRole('link', {name:'Administrator'}).getAttribute('href');
+    cleanup();
+    window.history.replaceState({}, '', clientRoute);
+    render(h(App));
+    await screen.findByText(/Google sign-in is unavailable/);
+    assert.deepEqual(requests, ['/auth/google/config']);
+    cleanup();
+    window.history.replaceState({}, '', adminRoute);
+    render(h(App));
+    assert.equal(screen.queryByLabelText('Google sign-in'), null);
+  } finally { authApi.defaults.adapter = oldAuth; }
+});
+
+function openWorkspace(role, data, path = '/' + role.toLowerCase() + '/dashboard', onWrite) {
   const currentUser = { id: 4, role, fullName: 'Demo user' };
   const fixtures = { '/users/me': currentUser, '/notifications': { items: [], unreadCount: 0 }, ...data };
   api.defaults.adapter = async config => {
-    assert.equal(config.method, 'get');
+    if (config.method !== 'get') {
+      assert.ok(onWrite, 'unexpected write');
+      return { data: onWrite(config), status:200, headers:{}, config };
+    }
     const result = fixtures[config.url];
-    return { data: result ?? [], status: 200, statusText: 'OK', headers: {}, config };
+    return { data: structuredClone(result ?? []), status: 200, statusText: 'OK', headers: {}, config };
   };
   localStorage.setItem('token', 'local-ui-fixture');
   window.history.replaceState({}, '', path);
   render(h(App));
 }
+
+test('vendor Fayda callback consumes the matching browser attempt once', async () => {
+  sessionStorage.setItem('aicc.fayda.sandbox', JSON.stringify({state:'matched', ticket:'signed-ticket'}));
+  const writes = [];
+  openWorkspace('VENDOR', {}, '/vendor/fayda/callback?state=matched&code=example-code', config => {
+    writes.push([config.url, JSON.parse(config.data)]);
+    return { verifiedAt:'2026-11-19T13:00:00Z' };
+  });
+  await screen.findByText('Your sandbox check is recorded.');
+  assert.deepEqual(writes, [['/vendors/me/fayda/complete', {state:'matched',ticket:'signed-ticket',code:'example-code'}]]);
+  assert.equal(sessionStorage.getItem('aicc.fayda.sandbox'), null);
+  assert.equal(window.location.search, '');
+});
+
+test('vendor Fayda callback rejects a mismatched state with no provider exchange', async () => {
+  sessionStorage.setItem('aicc.fayda.sandbox', JSON.stringify({state:'expected', ticket:'signed-ticket'}));
+  let writes = 0;
+  openWorkspace('VENDOR', {}, '/vendor/fayda/callback?state=wrong&code=example-code', () => { writes++; return {}; });
+  await screen.findByText(/The check did not finish/);
+  assert.equal(writes, 0);
+});
 
 test('the coordinator follows two overlapping proposals to their room and sees the actual hold on the shared day', async () => {
   const user = userEvent.setup();
@@ -213,6 +265,17 @@ test('the vendor can switch from the earliest offer to a booked commitment and o
   await user.click(screen.getByRole('link',{name:'Open assignment'}));
   assert.ok(await screen.findByRole('heading',{name:'Service day'}));
   assert.equal(window.location.pathname, '/vendor/assignments/77');
+  let printed = '';
+  const originalPrint = window.print;
+  window.print = () => {
+    printed = document.querySelector('body > .crew-print').textContent;
+    window.dispatchEvent(new window.Event('afterprint'));
+  };
+  try { await user.click(screen.getByRole('button', { name: 'Print crew brief' })); }
+  finally { window.print = originalPrint; }
+  assert.match(printed, /Service day/);
+  assert.match(printed, /Security/);
+  assert.equal(document.querySelector('.crew-print'), null);
 });
 
 test('a manager can change the revenue period and keep the same figures in the detailed report', async () => {
@@ -265,10 +328,113 @@ test('a client compares seating-specific capacity and carries the chosen venue a
     assert.ok(location.startsWith('/client/new-inquiry?'));
     const query = new URLSearchParams(location.split('?')[1]);
     assert.equal(query.get('preferredVenue'), 'Room B');
+    assert.equal(query.get('preferredVenueId'), '14');
     assert.equal(query.get('tableSetup'), 'CLASSROOM');
     assert.equal(query.get('date'), date);
     assert.equal(query.get('attendees'), '100');
   });
+});
+
+test('a client previews a layout, sees the preferred room conflict and sends nonbinding preferences together', async () => {
+  const user = userEvent.setup();
+  const writes = [];
+  openWorkspace('CLIENT', {
+    '/venues': venues.map(v => ({ ...v, active: true })),
+    '/venues/availability/reasons': [{ venueId:12, name:'Room A', available:false, reasons:['Room is held for another booking.'] }],
+    '/vendors/service-categories':['av'],
+    '/vendors/preference-options':[{ id:44, companyName:'Studio Light', serviceCategory:'av' }],
+    '/inquiries/42':{id:42, status:'INQUIRY_SUBMITTED', requestedCategories:['av']},
+  }, '/client/new-inquiry?preferredVenueId=12&date=' + date + '&attendees=160&eventType=meeting&tableSetup=CLASSROOM', config => {
+    writes.push([config.url, JSON.parse(config.data)]); return {id:42};
+  });
+  await screen.findByText(/28 fewer than requested/);
+  await screen.findByText('Room is held for another booking.', {selector:'.preference-summary p'});
+  await user.click(screen.getByRole('button',{name:'View from above'}));
+  assert.equal(screen.getByRole('button',{name:'View from above'}).getAttribute('aria-pressed'), 'true');
+  await user.click(screen.getByText('Which setups fit 160 guests?'));
+  await user.click(screen.getByRole('button',{name:'Use theatre'}));
+  assert.equal(screen.getByRole('combobox',{name:/Table and seating setup/}).value,'THEATRE');
+  assert.ok(screen.getByRole('img', { name:/Theatre seating/ }));
+  assert.ok(screen.getByText(/fits your 160 guests/));
+  await user.type(screen.getByRole('textbox',{name:'Event name'}),'Demo meeting');
+  await user.click(screen.getByText(/Choose preferred vendors/));
+  await user.click(await screen.findByRole('checkbox',{name:'Studio Light'}));
+  await user.click(screen.getByRole('button',{name:'Send event request'}));
+  await waitFor(() => assert.equal(writes.length,1));
+  assert.equal(writes[0][0], '/inquiries');
+  assert.equal(writes[0][1].preferredVenueId,12);
+  assert.deepEqual(writes[0][1].preferredVendorIds,[44]);
+  assert.equal(writes[0][1].tableSetup,'THEATRE');
+});
+
+test('client sees their preference against the offer and can clear both choices', async () => {
+  const record = { ...inquiry, status:'PROPOSAL_SENT', preferredVenueId:14, preferredVenueName:'Room B', preferredVendorIds:[44], preferredVendorNames:{44:'Studio Light'} };
+  const writes = [];
+  const user = userEvent.setup();
+  openWorkspace('CLIENT', {
+    '/inquiries/17': record, '/inquiries/17/timeline':{},
+    '/venues':venues.map(v => ({...v,active:true})),
+    '/vendors/preference-options':[{id:44, serviceCategory:'av',companyName:'Studio Light'}],
+  }, '/client/inquiries/17', config => { writes.push([config.url,JSON.parse(config.data)]); return {...record,preferredVenueId:null,preferredVendorIds:[]}; });
+  assert.ok(await screen.findByText(/The proposal offers Room A/));
+  await user.click(screen.getByText('Change venue and vendor preferences'));
+  await user.selectOptions(await screen.findByRole('combobox',{name:'Preferred venue'}), '');
+  await user.click(await screen.findByRole('checkbox',{name:'Studio Light'}));
+  await user.click(screen.getByRole('button',{name:'Save preferences'}));
+  assert.ok(await screen.findByText('Your preferences are saved.'));
+  assert.deepEqual(writes,[['/inquiries/17/preferences',{preferredVenueId:null,preferredVendorIds:[]}]]);
+});
+
+test('a client can try another date for the same room and undo it without losing their event name', async () => {
+  const user = userEvent.setup();
+  const later = nextYear + '-06-18';
+  const requests = [];
+  openWorkspace('CLIENT', {
+    '/venues':venues.map(v => ({...v,active:true})),
+    '/venues/availability/reasons':[{venueId:12,name:'Room A',available:false,reasons:['Reserved.']}],
+    '/vendors/service-categories':['av'],
+  }, '/client/new-inquiry?preferredVenueId=12&date=' + date + '&attendees=100&eventType=meeting&tableSetup=THEATRE', config => {
+    requests.push(JSON.parse(config.data));
+    return {datesChecked:7,options:[{venueId:12,venueName:'Room A',eventDate:later,endDate:later,bookedFrom:nextYear+'-06-17',bookedThrough:nextYear+'-06-19',daysShift:3,capacity:300,tableSetup:'THEATRE'}]};
+  });
+  await user.type(await screen.findByRole('textbox',{name:'Event name'}),'Training week');
+  await user.click(await screen.findByText('Find another room or nearby dates'));
+  await user.click(screen.getByRole('checkbox',{name:'Only check Room A'}));
+  await user.selectOptions(screen.getByRole('combobox',{name:/How flexible/}),'3');
+  await user.click(screen.getByRole('button',{name:'Find booking options'}));
+  await user.click(await screen.findByRole('button',{name:'Use this option in my request'}));
+  assert.equal(requests[0].venueId,12);
+  assert.equal(screen.getByLabelText('Start date').value,later);
+  await user.click(screen.getByRole('button',{name:'Undo change'}));
+  assert.equal(screen.getByLabelText('Start date').value,date);
+  assert.equal(screen.getByRole('textbox',{name:'Event name'}).value,'Training week');
+});
+
+test('the coordinator prints a setup sheet with the requested table size and verified service status', async () => {
+  const user = userEvent.setup();
+  openWorkspace('COORDINATOR', {
+    '/events/41':{id:41,name:'Forum dinner',status:'AWAITING_VENDORS',inquiryId:17,venue:'Room A',venueId:12,eventDate:date},
+    '/events/41/categories':['av','security'],
+    '/inquiries/17':{...inquiry,tableSetup:'BANQUET',requestedTableLayout:'BANQUET',requestedGuestsPerTable:8,expectedAttendees:98},
+    '/assignments/event/41':[{id:65,serviceCategory:'av',status:'ACCEPTED',vendorName:'Forum sound'},{id:66,serviceCategory:'security',status:'PENDING'}],
+    '/venues/12/bookings':[{eventId:41,status:'CONFIRMED',bookingDate:date}],
+    '/checklists/event/41':[{id:91,itemName:'Set dining tables',ownerRole:'COORDINATOR',isComplete:false}],
+  }, '/coordinator/events/41');
+  await user.click(await screen.findByRole('button',{name:'Event setup sheet'}));
+  const dialog = screen.getByRole('dialog',{name:'Event setup sheet'});
+  assert.ok(within(dialog).getByText(/6 tables of 7 and 7 tables of 8/));
+  assert.ok(within(dialog).getByText(/Forum sound · Accepted/));
+  assert.ok(within(dialog).getByText('Awaiting vendor response'));
+  let content;
+  const originalPrint = window.print;
+  window.print = () => {
+    content = document.querySelector('body > .setup-print').textContent;
+    window.dispatchEvent(new window.Event('afterprint'));
+  };
+  try { await user.click(within(dialog).getByRole('button',{name:'Print sheet'})); }
+  finally { window.print = originalPrint; }
+  assert.match(content,/Set dining tables/);
+  assert.equal(document.querySelector('.setup-print'),null);
 });
 
 test('switching between inquiry sections preserves the unsent proposal edits', async () => {
@@ -298,4 +464,51 @@ test('booking checks show conflicts and recorded rankings without promising a bo
   assert.ok(screen.getByText('85%'));
   assert.ok(screen.getByText(/This is a/));
   assert.equal(sent.length, 0);
+});
+
+test('a coordinator claims a request at the booking desk and opens its proposal editor', async () => {
+  const user = userEvent.setup();
+  const request = { ...inquiry, proposal: null, status: 'INQUIRY_SUBMITTED' };
+  const owner = { id: 4, name: 'Demo user', active: true };
+  const writes = [];
+  openWorkspace('COORDINATOR', { '/inquiries': [request], '/inquiries/17':request }, undefined, config => {
+    writes.push(config.url);
+    assert.equal(config.url, '/inquiries/17/coordinator/claim');
+    request.coordinator = owner;
+    return { coordinator: owner };
+  });
+  const selected = within(await screen.findByRole('article', { name:'Selected booking' }));
+  await user.click(selected.getByRole('button', {name:'Claim this work'}));
+  assert.deepEqual(writes, ['/inquiries/17/coordinator/claim']);
+  await user.click(await screen.findByRole('link', {name:'Prepare proposal'}));
+  await waitFor(() => assert.equal(screen.getByRole('tab', {name:'Proposal & versions'}).getAttribute('aria-selected'), 'true'));
+});
+
+test('the booking desk shows the actual receipt decision and keeps other coordinators’ work read-only', async () => {
+  const user = userEvent.setup();
+  const mine = { ...inquiry, status:'PROPOSAL_ACCEPTED', coordinator:{id:4,name:'Demo user'} };
+  const other = { ...inquiry, id:21, eventName:'Expo', status:'INQUIRY_SUBMITTED', coordinator:{id:8,name:'Other lead'} };
+  openWorkspace('COORDINATOR', { '/inquiries':[mine, other],
+    '/inquiries/17/booking-agreement':{state:'AWAITING_REVIEW', terms:{venue:'Room A', totalEtb:6000, bookedFrom:date, bookedThrough:date}} });
+  assert.ok(await screen.findByRole('heading', {name:'Payment receipt is ready for your review'}));
+  assert.equal(screen.getByRole('link', {name:'Review payment receipt'}).getAttribute('href'), '/coordinator/inquiries/17?section=agreement');
+  await user.selectOptions(screen.getByLabelText('Show work for'), 'all');
+  await user.type(screen.getByLabelText('Search all stages'), 'Expo');
+  assert.ok(await screen.findByRole('heading', {name:'Other lead is handling this request'}));
+  assert.equal(screen.queryByRole('button', {name:'Claim this work'}), null);
+});
+
+test('a competing claim refreshes the desk with the winning owner', async () => {
+  const user = userEvent.setup();
+  const request = { ...inquiry, status:'INQUIRY_SUBMITTED', proposal:null };
+  openWorkspace('COORDINATOR', { '/inquiries':[request] }, undefined, config => {
+    assert.equal(config.url, '/inquiries/17/coordinator/claim');
+    request.coordinator = {id:9, name:'Other lead'};
+    throw Object.assign(new Error('Already claimed'), {response:{status:409}});
+  });
+  await user.click(await screen.findByRole('button', {name:'Claim this work'}));
+  assert.ok(await screen.findByText(/assignment for Forum changed/));
+  await user.selectOptions(screen.getByLabelText('Show work for'), 'all');
+  assert.ok(await screen.findByRole('heading', {name:'Other lead is handling this request'}));
+  assert.equal(screen.queryByRole('button', {name:'Claim this work'}), null);
 });

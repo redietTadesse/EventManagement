@@ -12,6 +12,7 @@ import ChangeDateModal from '../components/ChangeDateModal';
 import EventIssues from '../components/EventIssues';
 import CoordinatorOwnership from '../components/CoordinatorOwnership';
 import CoordinatorReportModal from './CoordinatorReportModal';
+import EventSetupSheet from './EventSetupSheet';
 
 import { useApp } from '../context/AppContext';
 import api from '../api/axios';
@@ -251,6 +252,8 @@ useEffect(() => {
           expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees,
           coordinator: eventRecord.coordinator || inquiry.coordinator,
           tableSetup: inquiry.tableSetup,
+          requestedGuestsPerTable: inquiry.requestedGuestsPerTable,
+          requestedTableLayout: inquiry.requestedTableLayout,
         };
         setEvent(nextEvent);
         void loadVenueOptions(nextEvent);
@@ -387,6 +390,8 @@ useEffect(() => {
       expectedAttendees: inquiry.expectedAttendees || currentAssignments[0]?.expectedAttendees || event?.expectedAttendees,
       coordinator: eventRecord.coordinator || inquiry.coordinator || event?.coordinator,
       tableSetup: inquiry.tableSetup || event?.tableSetup,
+      requestedGuestsPerTable: inquiry.requestedGuestsPerTable ?? event?.requestedGuestsPerTable,
+      requestedTableLayout: inquiry.requestedTableLayout ?? event?.requestedTableLayout,
     };
     setEvent(nextEvent);
     setError('');
@@ -636,6 +641,8 @@ useEffect(() => {
             </div>
             <div className="max-w-md space-y-2">
               <div className="flex flex-wrap gap-2">
+                <EventSetupSheet key={event.id} event={event} reservation={reservation} venueKnown={venueKnown}
+                  services={services} vendorsKnown={vendorsKnown} tasks={checklist} tasksKnown={tasksKnown} />
                 <button type="button" disabled={refreshingOperations || Boolean(lifecycleSaving)} onClick={handleRefreshOperations} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">{refreshingOperations ? 'Refreshing…' : 'Refresh event data'}</button>
                 {actions.reschedule && <button type="button" disabled={Boolean(lifecycleSaving)} onClick={() => { setDateFeedback(''); setShowDateModal(true); }} className="rounded-lg border border-indigo-300 px-3 py-2 text-sm text-indigo-700 disabled:opacity-50">Change date</button>}
                 {event.status === 'COMPLETED' && (

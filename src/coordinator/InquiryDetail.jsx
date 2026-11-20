@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRightIcon, ArrowDownTrayIcon, ClockIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
 import AuditTimeline from '../components/AuditTimeline';
@@ -13,6 +13,7 @@ import ProposalReview from '../components/ProposalReview';
 import InquiryEditForm from './InquiryEditForm';
 import { useApp } from '../context/AppContext';
 import { formatEventRange, serviceLabel } from './eventDetailModel';
+import { PreferenceSummary } from '../components/InquiryPreferences';
 import { holdDeadline, inquiryNextAction, proposalTerms } from './bookingWorkspaceModel';
 
 const sections = [['request', 'Client requirements'], ['proposal', 'Proposal & versions'], ['agreement', 'Contract & payment'], ['history', 'Activity']];
@@ -20,6 +21,8 @@ const sections = [['request', 'Client requirements'], ['proposal', 'Proposal & v
 export default function InquiryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedSection = searchParams.get('section');
   const { state, fetchInquiryById, downloadInquiryQuote, previewConversion } = useApp();
   const [inquiry, setInquiry] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,7 +46,11 @@ export default function InquiryDetail() {
     finally { setLoading(false); }
   }, [id, fetchInquiryById]);
   useEffect(() => { setInquiry(null); setEditingProposal(false); setEditingRequest(false); loadInquiry(); }, [loadInquiry]);
-  useEffect(() => { setSection(inquiry?.status === 'PROPOSAL_ACCEPTED' ? 'agreement' : inquiry?.proposal ? 'proposal' : 'request'); }, [id, inquiry?.status]);
+  useEffect(() => {
+    const initial = sections.some(([value]) => value === requestedSection) ? requestedSection :
+      inquiry?.status === 'PROPOSAL_ACCEPTED' ? 'agreement' : inquiry?.proposal ? 'proposal' : 'request';
+    setSection(initial);
+  }, [id, inquiry?.status, requestedSection]);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(timer); }, []);
 
   async function downloadQuote() {
@@ -101,6 +108,7 @@ export default function InquiryDetail() {
       <section role="tabpanel" id="booking-panel-request" aria-labelledby="booking-tab-request" hidden={section !== 'request'} className="case-panel">
         <p className="eyebrow">The client’s brief</p><h2>Requirements for this event</h2>
         <dl className="case-detail-list"><div><dt>Event type</dt><dd>{serviceLabel(inquiry.eventType)}</dd></div><div><dt>Requested services</dt><dd>{inquiry.requestedCategories?.length ? inquiry.requestedCategories.map(serviceLabel).join(', ') : 'No services selected'}</dd></div><div><dt>Additional requirements</dt><dd className="whitespace-pre-wrap">{inquiry.requirements || 'No additional requirements recorded.'}</dd></div></dl>
+        <PreferenceSummary inquiry={inquiry} />
         {inquiry.unmetNeeds && <p className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-950"><strong>Follow-up needed:</strong> {inquiry.unmetNeeds}</p>}
         {canPrepare && (editingRequest ? <InquiryEditForm key={id} inquiry={inquiry} onSaved={saved => { setInquiry(saved); setEditingRequest(false); }} onCancel={() => setEditingRequest(false)} /> : <button type="button" className="btn-outline mt-5" onClick={() => setEditingRequest(true)}>Edit requirements</button>)}
       </section>

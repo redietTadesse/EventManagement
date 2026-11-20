@@ -8,6 +8,7 @@ import RootRedirect from './components/RootRedirect';
 import LandingPage from './components/LandingPage';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import Login from './components/Login';
+import { AppearanceController } from './components/Appearance';
 const PasswordRecovery = lazy(() => import('./components/PasswordRecovery'));
 const VendorApplication = lazy(() => import('./components/VendorApplication'));
 
@@ -35,6 +36,7 @@ const CoordinatorVendors = lazy(() => import('./coordinator/CoordinatorVendors')
 const IncidentReviewPanel = lazy(() => import('./coordinator/IncidentReviewPanel'));
 
 const VendorDashboard = lazy(() => import('./vendor/VendorDashboard'));
+const FaydaCallback = lazy(() => import('./vendor/FaydaVerification').then(module => ({ default: module.FaydaCallback })));
 const MyAssignments = lazy(() => import('./vendor/MyAssignments'));
 const AssignmentDetail = lazy(() => import('./vendor/AssignmentDetail'));
 const OpenAssignments = lazy(() => import('./vendor/OpenAssignments'));
@@ -86,6 +88,8 @@ function AppRoutes() {
 
       <Route element={<ProtectedRoute allowedRoles={['VENDOR']} />}>
         <Route path="/vendor/dashboard" element={<VendorDashboard />} />
+        <Route path="/vendor/fayda/callback" element={<FaydaCallback />} />
+        <Route path="/callback" element={<FaydaCallback />} />
         <Route path="/vendor/assignments" element={<MyAssignments />} />
         <Route path="/vendor/assignments/:id" element={<AssignmentDetail />} />
         <Route path="/vendor/open" element={<OpenAssignments />} />
@@ -110,6 +114,7 @@ function AppRoutes() {
 function App() {
   return (
     <ToastProvider>
+      <AppearanceController />
       <AppProvider>
         <BrowserRouter>
           <PageErrorBoundary><Suspense fallback={<div role="status" aria-live="polite" className="page-loading"><span className="page-loading-mark" aria-hidden="true">AICC</span><p>Opening your workspace…</p></div>}><AppRoutes /></Suspense></PageErrorBoundary>

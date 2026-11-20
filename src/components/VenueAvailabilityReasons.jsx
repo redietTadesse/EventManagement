@@ -43,9 +43,10 @@ export function VenueAvailabilityReasons({ venues, dateLabel }) {
   );
 }
 
-export function VenueDayExplanation({ date, attendees, eventType, onClose }) {
+export function VenueDayExplanation({ date, attendees, eventType, tableSetup, onClose }) {
   const params = new URLSearchParams({ date });
   if (attendees) params.set('attendees', attendees);
+  if (tableSetup) params.set('tableSetup', tableSetup);
   if (eventType) params.set('eventType', eventType);
   const { data, loading, error, reload } = useApiResource(`/venues/availability/reasons?${params}`);
 

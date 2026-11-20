@@ -1,15 +1,32 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { createPortal, flushSync } from 'react-dom';
+import { proposalDateRange, proposalLabel } from '../utils/proposalReview';
 import StatusBadge from '../components/StatusBadge';
 import EventIssues from '../components/EventIssues';
 import { useApp } from '../context/AppContext';
+
+function CrewBrief({ assignment }) {
+  const dates = proposalDateRange({ eventDate: assignment.eventDate, endDate: assignment.eventEndDate });
+  return <article className="crew-brief"><header><small>AICC · Vendor work order</small><h2>{assignment.eventName}</h2><p>{assignment.vendorName} · {proposalLabel(assignment.serviceCategory)}</p></header>
+    <dl>{[['Event dates', dates], ['Venue', assignment.eventVenue], ['Expected guests', assignment.expectedAttendees], ['Seating', proposalLabel(assignment.tableSetup)], ['Coordinator', assignment.coordinator?.name]].map(([label,value]) =>
+      <div key={label}><dt>{label}</dt><dd>{value ?? 'To be confirmed'}</dd></div>)}</dl>
+    <h3>Service instructions</h3><p className="whitespace-pre-wrap">{assignment.serviceOrder || 'Contact the handling coordinator for service instructions.'}</p>
+  </article>;
+}
 
 export default function AssignmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { fetchMyAssignment, respondToAssignment } = useApp();
 
+  const [printCopy, setPrintCopy] = useState(null);
+  useEffect(() => {
+    const finish = () => setPrintCopy(null);
+    window.addEventListener('afterprint', finish);
+    return () => window.removeEventListener('afterprint', finish);
+  }, []);
   const [assignment, setAssignment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,6 +103,7 @@ export default function AssignmentDetail() {
   }
 
   const isPending = assignment?.status === 'PENDING';
+  const crewReady = assignment?.status === 'ACCEPTED' && !['CANCELLED','CLOSED','COMPLETED'].includes(assignment.eventStatus);
 
   return (
     <Layout title="Assignment">
@@ -98,6 +116,13 @@ export default function AssignmentDetail() {
           <StatusBadge status={assignment.status} />
         </div>
 
+        {isPending && <section className="preference-summary"><h2>Review your offer</h2>
+          {assignment.selectionReason === 'CLIENT_PREFERRED' && <p>The client asked AICC to approach your company for this service.</p>}
+          {assignment.expiresAt && <p>Respond by <strong>{new Date(assignment.expiresAt).toLocaleString()}</strong>.</p>}
+        </section>}
+        {crewReady && <section className="crew-action"><div><h2>Prepare your crew</h2><p>Take the confirmed dates, venue and service instructions to your team.</p></div><button type="button" className="btn-outline" onClick={() => { flushSync(() => setPrintCopy(assignment)); window.print(); }}>Print crew brief</button>
+          {printCopy && createPortal(<div className="crew-print"><CrewBrief assignment={printCopy} /></div>, document.body)}
+        </section>}
         {error && <div className="bg-red-100 text-red-700 p-3 rounded-lg">{error}</div>}
         {assignment?.eventId && ['ACCEPTED', 'COMPLETED'].includes(assignment.status) && (
           <EventIssues key={assignment.id} eventId={assignment.eventId} assignmentId={assignment.id}
@@ -110,7 +135,7 @@ export default function AssignmentDetail() {
           <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div>
               <p className="text-gray-500">Date</p>
-              <p className="font-medium">{assignment?.eventDate}</p>
+              <p className="font-medium">{proposalDateRange({ eventDate: assignment.eventDate, endDate: assignment.eventEndDate })}</p>
             </div>
             <div>
               <p className="text-gray-500">Venue</p>
@@ -213,7 +238,7 @@ export default function AssignmentDetail() {
 
         {!isPending && (
           <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500 text-sm">
-            This assignment is <strong>{assignment?.status?.toLowerCase()}</strong>. No further action required.
+            This assignment is <strong>{assignment?.status?.toLowerCase()}</strong>. {crewReady ? 'Your crew brief is ready above.' : ''}
             <div className="mt-3">
               <Link to="/vendor/assignments" className="text-indigo-600 hover:underline">
                 Back to all assignments →

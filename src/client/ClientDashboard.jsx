@@ -35,7 +35,7 @@ export default function ClientDashboard() {
   const failed = inquiries.error || events.error;
   const firstVisit = !loading && !failed && !plans.length;
   return <Layout title="My event plans"><div className="space-y-6">
-    <header className="desk-mast"><div><p>Client workspace</p><h1>My event plans</h1><span>{currentUser?.fullName || currentUser?.username}</span></div>
+    <header className="desk-mast"><div><h1>My event plans</h1><span>{currentUser?.fullName || currentUser?.username}</span></div>
       <div className="mast-actions"><Link className="btn-outline" to="/client/venues">Explore venues</Link><Link className="btn-primary" to="/client/new-inquiry"><PlusIcon/>Plan an event</Link></div></header>
     {failed && <p role="alert" className="desk-notice">Some of your plans could not be loaded. <button onClick={() => { inquiries.reload(); events.reload(); }}>Try again</button></p>}
     {loading ? <p role="status" className="desk-notice">Loading your plans…</p> : !firstVisit && <section className="plan-library" aria-label="Your plans">
@@ -46,8 +46,16 @@ export default function ClientDashboard() {
       </div>
       {selected ? <ClientPlanBrief key={selected.key} inquiry={selected.inquiry} event={selected.event}/> : <div className="plan-blank"><h2>{failed ? 'Your plan list is incomplete' : showHistory ? 'No past plans yet' : 'No active plans'}</h2><Link className="btn-outline" to="/client/inquiries">See my inquiries</Link></div>}
     </section>}
-    <details className="desk-sheet planner-disclosure" open={firstVisit || undefined}><summary>Find a venue for a new event</summary>
+    {firstVisit ? <section className="client-arrival" aria-labelledby="client-arrival-title">
+      <img src={import.meta.env.BASE_URL + 'aicc-venue.jpg'} alt="Addis International Convention Center at dusk"/>
+      <div><h2 id="client-arrival-title">Start with a space.</h2>
+        <p>Use your dates, guest count and seating setup to find venues before you send an inquiry.</p>
+        <EventPlanForm plan={{eventType:'meeting'}} dateRequired className="client-arrival-form" onSearch={query => navigate('/client/venues?' + query)}>
+          <button className="btn-primary" type="submit">Check venues <ArrowRightIcon className="h-4 w-4"/></button>
+        </EventPlanForm>
+      </div>
+    </section> : <details className="desk-sheet planner-disclosure"><summary>Find a venue for a new event</summary>
       <EventPlanForm plan={{eventType:'meeting'}} dateRequired className="planner-fields" onSearch={query => navigate('/client/venues?' + query)}><button className="btn-primary" type="submit">Check venues <ArrowRightIcon/></button></EventPlanForm>
-    </details>
+    </details>}
   </div></Layout>;
 }

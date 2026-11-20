@@ -33,6 +33,11 @@ class InquiryFlowIntegrationTest {
     @Autowired
     private VenueRepository venues;
 
+    @Autowired private com.aicc.eventmanagement.repositories.VendorRepository vendors;
+    @Autowired private com.aicc.eventmanagement.repositories.VenueBookingRepository bookings;
+    @Autowired private com.aicc.eventmanagement.repositories.VendorAssignmentRepository offers;
+    @Autowired private jakarta.persistence.EntityManager entityManager;
+
     private Venue venue;
 
     private CreateInquiryRequest createRequest;
@@ -48,6 +53,51 @@ class InquiryFlowIntegrationTest {
                 .expectedAttendees(200)
                 .requirements("Projector, catering")
                 .build();
+    }
+
+    @Test
+    void preferencesPersistTogetherWithoutBookingAndCanBeCleared() {
+        var studio = vendors.save(com.aicc.eventmanagement.entities.Vendor.builder()
+                .companyName("Forum sound").serviceCategory("av").build());
+        createRequest.setPreferredVenueId(venue.getId());
+        createRequest.setTableSetup("CABARET");
+        createRequest.setRequestedGuestsPerTable(6);
+        createRequest.setRequestedCategories(List.of("av"));
+        createRequest.setPreferredVendorIds(List.of(studio.getId()));
+        long initialBookings = bookings.count();
+        long initialOffers = offers.count();
+        Long id = inquiryService.createInquiry(createRequest).getId();
+        entityManager.flush();
+        entityManager.clear();
+        var received = com.aicc.eventmanagement.payload.InquiryResponse.from(inquiryService.getInquiryById(id));
+        assertThat(received.getPreferredVenueName()).isEqualTo("Integration Hall");
+        assertThat(received.getRequestedTableLayout()).isEqualTo("CABARET");
+        assertThat(received.getRequestedGuestsPerTable()).isEqualTo(6);
+        assertThat(received.getPreferredVendorIds()).containsExactly(studio.getId());
+        assertThat(received.getPreferredVendorNames()).containsEntry(studio.getId(), "Forum sound");
+        assertThat(bookings.count()).isEqualTo(initialBookings);
+        assertThat(offers.count()).isEqualTo(initialOffers);
+        var cleared = inquiryService.updatePreferences(id, null, List.of());
+        assertThat(cleared.getPreferredVenueId()).isNull();
+        assertThat(cleared.getPreferredVendorIds()).isNull();
+    }
+
+    @Test
+    void rejectsRoundTablePreferencesForClassroomSeating() {
+        createRequest.setTableSetup("CLASSROOM");
+        createRequest.setRequestedGuestsPerTable(8);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> inquiryService.createInquiry(createRequest))
+                .hasMessageContaining("table size");
+    }
+
+    @Test
+    void rejectsPreferenceForAnUnrequestedService() {
+        var studio = vendors.save(com.aicc.eventmanagement.entities.Vendor.builder()
+                .companyName("Forum photographer").serviceCategory("photography").build());
+        createRequest.setRequestedCategories(List.of("security"));
+        createRequest.setPreferredVendorIds(List.of(studio.getId()));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> inquiryService.createInquiry(createRequest))
+                .hasMessageContaining("external services");
     }
 
     @Test
@@ -79,6 +129,8 @@ class InquiryFlowIntegrationTest {
                 withProposal.getId(), Role.CLIENT);
 
         assertThat(accepted.getStatus()).isEqualTo(EventStatus.PROPOSAL_ACCEPTED);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> inquiryService.updatePreferences(accepted.getId(), null, List.of()))
+                .hasMessageContaining("proposal decision");
     }
 
     @Test

@@ -1,3 +1,4 @@
+import AppearanceChoice from './Appearance';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Dialog, Menu } from '@headlessui/react';
@@ -60,12 +61,19 @@ export default function Navbar({ title }) {
   </>;
 
   return <>
-    <aside className="workspace-sidebar">{renderSidebar()}</aside>
-    <Dialog open={open} onClose={setOpen} className="relative z-[70] lg:hidden"><div className="fixed inset-0 bg-slate-950/50" aria-hidden="true" /><Dialog.Panel className="workspace-sidebar is-mobile"><Dialog.Title className="sr-only">Workspace navigation</Dialog.Title><button type="button" aria-label="Close navigation" onClick={() => setOpen(false)} className="nav-close"><XMarkIcon /></button>{renderSidebar()}</Dialog.Panel></Dialog>
-    <header className="workspace-topbar">
-      <div className="topbar-context"><button type="button" aria-label="Open navigation" aria-expanded={open} onClick={() => setOpen(true)} className="topbar-menu"><Bars3Icon /></button><nav aria-label="Breadcrumb" className="workspace-breadcrumb"><Link to={links[0]?.[0] || '/'}>{role}</Link><ChevronRightIcon aria-hidden="true" />{active && active[1] !== title ? <><Link to={active[0]}>{active[1]}</Link><ChevronRightIcon aria-hidden="true" /></> : null}<span aria-current="page">{title || active?.[1] || 'Workspace'}</span></nav></div>
-      <div className="topbar-account"><NotificationsBell /><span className="account-divider" /><Menu as="div" className="relative"><Menu.Button className="account-button"><span className="account-avatar">{initials}</span><span className="account-name"><strong>{name}</strong><small>{role}</small></span><ChevronDownIcon className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Account menu</span></Menu.Button><Menu.Items className="account-menu"><div className="account-menu-identity"><strong>{name}</strong><span>{role} workspace</span></div><Menu.Item>{({ active: focused }) => <button type="button" className={focused ? 'is-focused' : ''} onClick={signOut}><ArrowRightStartOnRectangleIcon />Sign out</button>}</Menu.Item></Menu.Items></Menu></div>
+    <Dialog open={open} onClose={setOpen} className="relative z-[70]"><div className="fixed inset-0 bg-slate-950/50" aria-hidden="true" /><Dialog.Panel className="workspace-sidebar is-mobile command-drawer"><Dialog.Title className="sr-only">Workspace navigation</Dialog.Title><button type="button" aria-label="Close navigation" onClick={() => setOpen(false)} className="nav-close"><XMarkIcon /></button>{renderSidebar()}</Dialog.Panel></Dialog>
+    <header className="command-header">
+      <div className="command-mast">
+      <div className="command-brand"><Brand compact light/><span>{role} workspace</span></div>
+      <div className="topbar-account"><AppearanceChoice /><NotificationsBell /><span className="account-divider" /><Menu as="div" className="relative"><Menu.Button className="account-button"><span className="account-avatar">{initials}</span><span className="account-name"><strong>{name}</strong><small>{role}</small></span><ChevronDownIcon className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Account menu</span></Menu.Button><Menu.Items className="account-menu"><div className="account-menu-identity"><strong>{name}</strong><span>{role} workspace</span></div><Menu.Item>{({ active: focused }) => <button type="button" className={focused ? 'is-focused' : ''} onClick={signOut}><ArrowRightStartOnRectangleIcon />Sign out</button>}</Menu.Item></Menu.Items></Menu></div>
+      </div>
+      <nav className="command-navigation" aria-label="Workspace pages">
+        <div>{links.slice(0, 3).map(([path, label, Icon]) => <NavLink key={path} to={path}><Icon aria-hidden="true"/>{label}</NavLink>)}
+          <button type="button" aria-expanded={open} onClick={() => setOpen(true)}><Bars3Icon aria-hidden="true"/>All pages
+            {pendingIncidents > 0 && <span className="command-count" aria-label={`${pendingIncidents} pending incident reviews`}>{pendingIncidents}</span>}
+          </button></div>
+        <span className="command-location">{active?.[1] !== title ? title : ''}</span>
+      </nav>
     </header>
-    <nav aria-label="Quick navigation" className="mobile-dock">{links.slice(0, 3).map(([path, text, Icon]) => <NavLink key={path} to={path} end={path.endsWith('/dashboard')}><Icon aria-hidden="true" /><span>{text}</span></NavLink>)}<button type="button" onClick={() => setOpen(true)} aria-expanded={open}><Bars3Icon aria-hidden="true" /><span>Menu</span></button></nav>
   </>;
 }

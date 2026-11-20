@@ -41,6 +41,10 @@ public class User {
     private String googleSubject;
 
     @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "fayda_sandbox_verified_at")
+    private java.time.Instant faydaSandboxVerifiedAt;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @Column(name = "token_version", nullable = false)
     private long tokenVersion;
 

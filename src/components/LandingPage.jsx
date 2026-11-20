@@ -1,3 +1,4 @@
+import AppearanceChoice from './Appearance';
 import { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -57,56 +58,53 @@ export default function LandingPage() {
     else window.scrollTo(0, 0);
   }, [hash]);
 
-  return <div className="min-h-screen bg-[#faf9f5] text-[#182c30]">
+  return <div className="aicc-public">
     <a className="skip-link" href="#main-content">Skip to content</a>
-    <header className="border-b border-[#e5e8e1] bg-[#faf9f5]">
-      <div className={`${shell} flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-3.5`}>
-        <Brand />
-        <nav aria-label="Explore AICC" className="order-last flex w-full flex-wrap gap-x-5 gap-y-2 border-t border-[#e5e8e1] pt-3 text-sm font-medium text-slate-700 sm:order-none sm:w-auto sm:border-0 sm:pt-0">
+    <header className="public-header">
+      <div className={`${shell} public-header-inner`}>
+        <Brand compact light />
+        <nav aria-label="Explore AICC">
           <a className="hover:text-indigo-700 hover:underline" href="#venues">Venues</a>
           <a className="hover:text-indigo-700 hover:underline" href="#booking">How to book</a>
           <a className="hover:text-indigo-700 hover:underline" href="#visit">Visit AICC</a>
         </nav>
-        {dashboard
+        <AppearanceChoice />{dashboard
           ? <Link to={dashboard} className="btn-outline">My workspace <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>
           : <Link to="/login" className="btn-outline">Sign in <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>}
       </div>
     </header>
 
     <main id="main-content" tabIndex={-1}>
-      <section aria-labelledby="landing-title" className="relative isolate overflow-hidden bg-[#142f32] text-white">
-        <img src={import.meta.env.BASE_URL + 'aicc-venue.jpg'} width="1200" height="674" fetchpriority="high"
-          alt="Aerial view of the Addis International Convention Center at dusk"
-          className="absolute inset-0 -z-20 h-full w-full object-cover object-[60%_55%]" />
-        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-[#0b2224] via-[#0b2224]/85 to-[#0b2224]/35 sm:to-[#0b2224]/15" />
-        <div className={`${shell} arrival-grid`}>
-          <div className="min-w-0">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f5d898]">
+      <section aria-labelledby="landing-title" className="public-hero">
+        <div className="public-hero-copy">
+          <p className="public-hero-location">
             <MapPinIcon className="h-4 w-4" aria-hidden="true" /> Addis Ababa, Ethiopia
           </p>
-          <h1 id="landing-title" className="mt-5 max-w-3xl font-serif text-[clamp(2.6rem,5.4vw,5rem)] leading-[0.99] tracking-tight text-white">
-            Addis International Convention Center
-          </h1>
-          <p className="mt-6 max-w-lg text-base leading-relaxed text-slate-100 sm:text-lg">
-            Check venue availability, submit an inquiry, and follow your event from the first proposal through venue confirmation.
-          </p>
-          <a href="#booking" className="arrival-link">How booking works <ArrowRightIcon aria-hidden="true"/></a>
+          <h1 id="landing-title">Addis International <em>Convention Center</em></h1>
+          <p>Find the right space for your event, request a proposal, and manage your booking with AICC.</p>
+          <div className="public-hero-actions">
+            <a href="#plan" className="btn-primary">Find a venue <ArrowRightIcon className="h-4 w-4" aria-hidden="true"/></a>
+            <a href="#booking">How booking works</a>
           </div>
-          <section id="plan" aria-labelledby="plan-title" className="arrival-planner">
-            <h2 id="plan-title">Find your venue</h2>
+        </div>
+        <figure className="public-hero-photo">
+          <img src={import.meta.env.BASE_URL + 'aicc-venue.jpg'} width="1200" height="674" fetchpriority="high"
+            alt="Aerial view of the Addis International Convention Center at dusk"/>
+          <figcaption><a href={photoSource}>Photo by Ethiopian News Agency</a></figcaption>
+        </figure>
+      </section>
+      <section id="plan" aria-labelledby="plan-title" className={`${shell} public-search`}>
+        <div className="public-search-panel">
+          <div className="public-search-heading"><h2 id="plan-title">Find your venue</h2>
+            {!currentUser && <p>Sign in to see your results.</p>}</div>
           {canPlan ? <EventPlanForm plan={{ eventType: 'conference' }}
             onSearch={query => navigate(`/client/venues?${query}`)}
-            className="arrival-form">
-            <p className="self-center text-xs leading-relaxed text-slate-600">{currentUser ? 'Your search uses current venue records.' : 'A client account is required to see search results.'}</p>
-            <button type="submit" disabled={loading} className="btn-primary sm:justify-self-end">Find venues <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></button>
+            className="public-search-form">
+            <button type="submit" disabled={loading} className="btn-primary">Find venues <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></button>
           </EventPlanForm> : <div className="py-4">
             <p className="mb-4 text-sm text-slate-700">Venue searches and inquiries are available in the client workspace.</p>
             <Link className="btn-outline" to={dashboard || '/login'}>Open my workspace <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>
           </div>}
-          </section>
-        </div>
-        <div className={`${shell} flex justify-end pb-3`}>
-          <a href={photoSource} className="rounded bg-[#0b2224]/85 px-2 py-1 text-xs text-white underline underline-offset-2">Photo by Ethiopian News Agency</a>
         </div>
       </section>
 

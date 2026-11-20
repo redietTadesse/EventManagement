@@ -14,7 +14,7 @@ import java.util.*;
 
 @Component
 public class GoogleTokenVerifier {
-    @Value("${GOOGLE_CLIENT_ID:${app.google.client-id:}}") private String clientId;
+    @Value("${GOOGLE_CLIENT_ID:988778685239-2vjoflgqmirhrtgs4obk6u7mc57j50qc.apps.googleusercontent.com}") private String clientId;
     private Map<String,PublicKey> keys=Map.of();
     private Instant cacheUntil=Instant.EPOCH;
     private Instant fetchedAt=Instant.EPOCH;

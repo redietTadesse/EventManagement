@@ -15,6 +15,13 @@ import java.util.Map;
 @AllArgsConstructor
 public class ProposalResponse {
 
+    private String proposalNumber;
+    private String eventName;
+    private String eventType;
+    private java.time.LocalDate eventDate;
+    private java.time.LocalDate endDate;
+    private Integer expectedAttendees;
+    private String tableSetup;
     private String venue;
     private Long venueId;
     private String venueDetails;

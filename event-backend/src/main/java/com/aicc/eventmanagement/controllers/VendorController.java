@@ -133,6 +133,17 @@ public class VendorController {
     // GET ACTIVE VENDORS
     // =========================================================
 
+    public record PreferenceOption(Long id, String companyName, String serviceCategory) {}
+
+    @GetMapping("/preference-options")
+    @PreAuthorize("hasAnyRole('CLIENT','COORDINATOR','ADMIN')")
+    public ResponseEntity<List<PreferenceOption>> preferenceOptions() {
+        return ResponseEntity.ok(vendorService.getActiveVendors().stream()
+                .map(v -> new PreferenceOption(v.getId(), v.getCompanyName(),
+                        com.aicc.eventmanagement.util.CategoryUtils.canonicalize(v.getServiceCategory())))
+                .toList());
+    }
+
     @GetMapping("/active")
     @PreAuthorize("hasAnyRole('COORDINATOR', 'ADMIN')")
     @Operation(summary = "Get all active vendors")

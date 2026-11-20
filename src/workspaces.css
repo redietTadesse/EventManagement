@@ -116,6 +116,10 @@
 .agreement-signatures>div {display:grid;align-content:start;border-top:1px solid #8e9c8e;padding:.65rem 0;gap:.2rem}
 .agreement-signatures h4 {font-size:.82rem;margin:0;font-weight:500;color:#54635c}
 .aicc-contract-copy {display:none}
+.signin-portals {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;margin:0 0 1.2rem}
+.signin-portals a {border:1px solid #c9d7d1;border-radius:.45rem;padding:.65rem .5rem;text-align:center;font-size:.85rem;font-weight:650;color:#34564a}
+.signin-portals a:hover {background:#eaf4ed}
+.signin-portals a[aria-current="page"] {background:#1e5546;color:#fff;border-color:#1e5546}
 @media print {
   body:has(> .aicc-contract-copy)>:not(.aicc-contract-copy) {display:none!important}
   .aicc-contract-copy {display:block}

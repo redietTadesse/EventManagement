@@ -1,6 +1,7 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.exceptions.BusinessException;
+import com.aicc.eventmanagement.entities.Venue;
 import com.aicc.eventmanagement.util.VenueBookingWindow;
 import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,7 @@ public class BookingOptionsService {
                           @NotNull @Min(1) Integer attendees,
                           @NotBlank @Pattern(regexp="conference|meeting|exhibition|trade_show|wedding|concert|gala|seminar") String eventType,
                           @NotBlank @Pattern(regexp="THEATRE|CLASSROOM|BANQUET|CABARET|BOARDROOM|U_SHAPE|UNDECIDED") String tableSetup,
-                          @Min(0) @Max(14) Integer flexibleDays, Long inquiryId) {}
+                          @Min(0) @Max(14) Integer flexibleDays, Long inquiryId, @Positive Long venueId) {}
     public record Option(Long venueId, String venueName, Integer capacity, LocalDate eventDate, LocalDate endDate,
                          LocalDate bookedFrom, LocalDate bookedThrough, int daysShift, String tableSetup) {}
     public record Result(List<Option> options, int datesChecked, String notice) {}
@@ -39,7 +40,9 @@ public class BookingOptionsService {
             if (!start.isAfter(today)) continue;
             checked++;
             venues.getAvailableForProposal(start, through, request.attendees(), request.eventType(), request.tableSetup(), request.inquiryId())
-                    .stream().sorted(Comparator.comparing(v -> LayoutCapacity.capacity(v, request.tableSetup())))
+                    .stream().filter(v -> request.venueId() == null || request.venueId().equals(v.getId()))
+                    .sorted(Comparator.comparing((Venue v) -> LayoutCapacity.capacity(v, request.tableSetup()))
+                            .thenComparing(Venue::getId))
                     .forEach(venue -> {
                         var window = VenueBookingWindow.forEvent(request.eventType(), start, through,
                                 venue.getSetupBufferDays(), venue.getTeardownBufferDays());

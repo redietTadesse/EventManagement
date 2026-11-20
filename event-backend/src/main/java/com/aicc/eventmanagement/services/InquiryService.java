@@ -120,6 +120,20 @@ public class InquiryService {
                 .categories(CategoryUtils.join(requestedCategories))
                 .build());
 
+        if (request.getRequestedGuestsPerTable() != null) {
+            var sizes = switch (String.valueOf(request.getTableSetup())) {
+                case "BANQUET" -> Set.of(6, 8, 10);
+                case "CABARET" -> Set.of(4, 5, 6);
+                default -> Set.<Integer>of();
+            };
+            if (!sizes.contains(request.getRequestedGuestsPerTable())) {
+                throw new BusinessException("Choose a table size offered for this seating arrangement.", "INVALID_TABLE_SIZE");
+            }
+            inquiry.setRequestedGuestsPerTable(request.getRequestedGuestsPerTable());
+            inquiry.setRequestedTableLayout(request.getTableSetup());
+        }
+        setPreferredVenue(inquiry, request.getPreferredVenueId());
+        setPreferredVendors(inquiry, request.getPreferredVendorIds(), requestedCategories);
         Inquiry saved = inquiryRepository.save(inquiry);
         log.info("Created inquiry with id: {} for client: {}", saved.getId(), saved.getClientName());
 
@@ -651,21 +665,61 @@ public class InquiryService {
         return "Available on your event date";
     }
 
+    private void setPreferredVenue(Inquiry inquiry, Long venueId) {
+        Venue venue = venueId == null ? null : venueService.getById(venueId);
+        if (venue != null && !venue.isActive()) {
+            throw new BusinessException("This venue is no longer active. Choose another venue or leave the preference open.", "INACTIVE_VENUE");
+        }
+        inquiry.setPreferredVenueId(venueId);
+        inquiry.setPreferredVenueName(venue == null ? null : venue.getName());
+    }
+
+    private void setPreferredVendors(Inquiry inquiry, List<Long> ids, List<String> categories) {
+        if (ids == null || ids.isEmpty()) {
+            inquiry.setPreferredVendorIds(null);
+            inquiry.setPreferredVendorNames(null);
+            return;
+        }
+        List<Long> unique = ids.stream().distinct().toList();
+        var candidates = vendorRepository.findAllById(unique);
+        var external = CategoryUtils.externalVendorCategories(inquiry.getEventType(), categories);
+        if (candidates.size() != unique.size() || candidates.stream().anyMatch(vendor ->
+                !vendor.isActive() || !external.contains(CategoryUtils.canonicalize(vendor.getServiceCategory())))) {
+            throw new BusinessException("Choose active vendors for the external services on this inquiry.", "INVALID_VENDOR_PREFERENCE");
+        }
+        try {
+            Map<Long, String> names = new LinkedHashMap<>();
+            candidates.forEach(v -> names.put(v.getId(), v.getCompanyName()));
+            inquiry.setPreferredVendorIds(objectMapper.writeValueAsString(unique));
+            inquiry.setPreferredVendorNames(objectMapper.writeValueAsString(names));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not record vendor choices", e);
+        }
+    }
+
+    public Inquiry updatePreferences(Long id, Long venueId, List<Long> vendorIds) {
+        Inquiry inquiry = inquiryForPreferences(id);
+        setPreferredVenue(inquiry, venueId);
+        setPreferredVendors(inquiry, vendorIds, resolvePreviewCategories(inquiry));
+        return inquiryRepository.save(inquiry);
+    }
+
+    private Inquiry inquiryForPreferences(Long id) {
+        Inquiry inquiry = inquiryRepository.findForCoordinatorUpdate(id)
+                .orElseThrow(() -> new EntityNotFoundException("Inquiry", id));
+        if (inquiry.getStatus() != EventStatus.PROPOSAL_SENT && inquiry.getStatus() != EventStatus.INQUIRY_SUBMITTED) {
+            throw new BusinessException("Preferences can be changed until the proposal decision.", "INVALID_STATE");
+        }
+        return inquiry;
+    }
+
     @Transactional
     public Inquiry recordVendorPreference(Long inquiryId, VendorPreferenceRequest request, Role userRole) {
-        Inquiry inquiry = getInquiryById(inquiryId);
+        Inquiry inquiry = inquiryForPreferences(inquiryId);
         if (userRole != Role.CLIENT && userRole != Role.ADMIN) {
             throw new BusinessException("Only the client can express a vendor preference", "ACCESS_DENIED");
         }
-        if (inquiry.getStatus() != EventStatus.PROPOSAL_SENT && inquiry.getStatus() != EventStatus.INQUIRY_SUBMITTED) {
-            throw new BusinessException(String.format("Cannot record preference in status: %s", inquiry.getStatus()), "INVALID_STATE");
-        }
-
-        try {
-            inquiry.setPreferredVendorIds(objectMapper.writeValueAsString(request.getVendorIds()));
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize vendor preferences", e);
-        }
+        setPreferredVendors(inquiry, request.getVendorIds(), resolvePreviewCategories(inquiry));
 
         Inquiry saved = inquiryRepository.save(inquiry);
         log.info("Client recorded preference for inquiry {}: vendors={}", inquiryId, request.getVendorIds());

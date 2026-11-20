@@ -397,6 +397,18 @@ public class InquiryController {
         return ResponseEntity.ok(inquiryService.getRecommendedVendors(id));
     }
 
+    public record Preferences(@jakarta.validation.constraints.Positive Long preferredVenueId,
+                              @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max = 100)
+                              List<@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Long> preferredVendorIds) {}
+
+    @PutMapping("/{id}/preferences")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<InquiryResponse> updatePreferences(@PathVariable Long id, @Valid @RequestBody Preferences request,
+                                                            @AuthenticationPrincipal UserDetails principal) {
+        recordAccessService.requireInquiryAccess(id, principal.getUsername());
+        return ResponseEntity.ok(InquiryResponse.from(inquiryService.updatePreferences(id, request.preferredVenueId(), request.preferredVendorIds())));
+    }
+
     @PostMapping("/{id}/vendor-preference")
     @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     @Operation(summary = "Client records their preferred vendors")

@@ -1,4 +1,5 @@
 
+import AppearanceChoice from './Appearance';
 import { useEffect, useState } from 'react';
 import {
   Link,
@@ -12,11 +13,16 @@ import GoogleClientSignIn from './GoogleClientSignIn';
 import api from '../api/axios';
 import { ROLE_DASHBOARDS } from '../utils/roles';
 
-import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ArrowRightIcon, BuildingOffice2Icon, CalendarDaysIcon, ClipboardDocumentListIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
 import Brand from './Brand';
 
 const portalLabels = { client: 'Client', coordinator: 'Coordinator', vendor: 'Vendor', admin: 'Administrator' };
-const SIGNUP_ALLOWED = ['client', undefined];
+const portalDetails = {
+  client: ['Plan an event and manage your booking', CalendarDaysIcon],
+  coordinator: ['Handle inquiries, events and vendors', ClipboardDocumentListIcon],
+  vendor: ['Review offers and event assignments', WrenchScrewdriverIcon],
+  admin: ['Manage the center and review performance', BuildingOffice2Icon],
+};
 
 export default function Login() {
   const { portal } = useParams();
@@ -38,14 +44,18 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const portalKey = portal?.toLowerCase();
+  const requestedPortal = portal?.toLowerCase();
+  const portalKey = Object.hasOwn(portalLabels, requestedPortal ?? '') ? requestedPortal : 'client';
   const portalLabel = portalLabels[portalKey];
 
-  const signupAllowed = portalKey
-    ? SIGNUP_ALLOWED.includes(portalKey)
-    : true;
+  const signupAllowed = portalKey === 'client';
 
-  useEffect(() => { window.scrollTo(0, 0); }, [portalKey]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    setMode('signin');
+    setError('');
+    setNotice('');
+  }, [portalKey]);
   const handleChange = (e) => {
     setForm((previous) => ({
       ...previous,
@@ -139,27 +149,29 @@ export default function Login() {
     'w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 bg-white';
 
   return (
-    <main className="signin-layout">
-      <aside className="signin-place"><Brand light/><div><p>CMC · Addis Ababa</p><h2>Addis International<br/>Convention Center</h2></div>
-        <a href="https://www.ena.et/web/eng/w/eng_6075186">Photo by Ethiopian News Agency</a>
-      </aside>
-      <div className="signin-form">
-        {/* Back navigation */}
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors mb-6"
-        >
-          <ArrowLeftIcon className="w-4 h-4" />
-          Back to AICC
-        </Link>
-
-        <div>
-          <p className="signin-role">{portalLabel || 'AICC'} workspace</p>
-          <h1>{mode === 'signin' ? 'Sign in' : 'Create a client account'}</h1>
+    <main className="portal-access">
+      <header className="portal-access-header"><Brand compact light/><AppearanceChoice/><Link to="/"><ArrowLeftIcon className="w-4 h-4" aria-hidden="true"/>Back to AICC</Link></header>
+      <div className="portal-access-grid">
+        <section className="portal-choice" aria-labelledby="portal-choice-title">
+          <h2 id="portal-choice-title">Choose your portal</h2>
+          <nav aria-label="Sign-in portals">
+            {Object.entries(portalLabels).map(([key, label]) => {
+              const [description, Icon] = portalDetails[key];
+              return <Link key={key} to={'/login/' + key} state={location.state} aria-label={label}
+                aria-current={portalKey === key ? 'page' : undefined}>
+                <Icon aria-hidden="true"/><span><strong>{label}</strong><small>{description}</small></span><ArrowRightIcon aria-hidden="true"/>
+              </Link>;
+            })}
+          </nav>
+        </section>
+        <div className="signin-form portal-credentials">
+          <h1>{mode === 'signin' || !signupAllowed ? portalLabel + ' sign-in' : 'Create a client account'}</h1>
           {/* Success notice */}
           {signupAllowed && <GoogleClientSignIn onSignedIn={async token=>{
             localStorage.setItem('token',token);
-            try { const {data}=await api.get('/users/me');dispatch({type:'LOGIN',payload:data});
+            try { const {data}=await api.get('/users/me');
+              if (data.role !== 'CLIENT') throw new Error('Google sign-in requires a client account.');
+              dispatch({type:'LOGIN',payload:data});
               const destination=location.state?.returnTo;
               navigate(typeof destination==='string'&&destination.startsWith('/client/')?destination:'/client/dashboard',{replace:true});
             } catch(error){localStorage.removeItem('token');throw error;}
@@ -183,7 +195,7 @@ export default function Login() {
             </div>
           )}
 
-          {mode === 'signin' ? (
+          {mode === 'signin' || !signupAllowed ? (
 
             /* Sign in */
             <form

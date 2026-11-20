@@ -25,7 +25,12 @@ public class InquiryResponse {
     private LocalDate endDate;
     private Integer expectedAttendees;
     private String requirements;
+    private Map<Long, String> preferredVendorNames;
+    private Long preferredVenueId;
+    private String preferredVenueName;
     private String tableSetup;
+    private Integer requestedGuestsPerTable;
+    private String requestedTableLayout;
     private String eventName;
     private String unmetNeeds;
     private String experience;
@@ -39,7 +44,7 @@ public class InquiryResponse {
     private ProposalResponse proposal;
     private List<Long> preferredVendorIds;
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public static InquiryResponse from(Inquiry inquiry) {
         InquiryResponse response = new InquiryResponse();
@@ -52,7 +57,11 @@ public class InquiryResponse {
         response.setEndDate(inquiry.getEndDate());
         response.setExpectedAttendees(inquiry.getExpectedAttendees());
         response.setRequirements(inquiry.getRequirements());
+        response.setPreferredVenueId(inquiry.getPreferredVenueId());
+        response.setPreferredVenueName(inquiry.getPreferredVenueName());
         response.setTableSetup(inquiry.getTableSetup());
+        response.setRequestedGuestsPerTable(inquiry.getRequestedGuestsPerTable());
+        response.setRequestedTableLayout(inquiry.getRequestedTableLayout());
         response.setEventName(inquiry.getEventName());
         response.setUnmetNeeds(inquiry.getUnmetNeeds());
         response.setExperience(inquiry.getExperience());
@@ -65,6 +74,9 @@ public class InquiryResponse {
 
         if (inquiry.getPreferredVendorIds() != null && !inquiry.getPreferredVendorIds().isBlank()) {
             try {
+                if (inquiry.getPreferredVendorNames() != null) {
+                    response.setPreferredVendorNames(objectMapper.readValue(inquiry.getPreferredVendorNames(), new TypeReference<Map<Long, String>>() {}));
+                }
                 response.setPreferredVendorIds(
                         objectMapper.readValue(inquiry.getPreferredVendorIds(), new TypeReference<List<Long>>() {})
                 );
@@ -98,6 +110,13 @@ public class InquiryResponse {
         }
 
         ProposalResponse proposal = new ProposalResponse();
+        proposal.setProposalNumber((String) proposalMap.get("proposalNumber"));
+        proposal.setEventName((String) proposalMap.get("eventName"));
+        proposal.setEventType((String) proposalMap.get("eventType"));
+        proposal.setTableSetup((String) proposalMap.get("tableSetup"));
+        proposal.setEventDate(objectMapper.convertValue(proposalMap.get("eventDate"), LocalDate.class));
+        proposal.setEndDate(objectMapper.convertValue(proposalMap.get("endDate"), LocalDate.class));
+        if (proposalMap.get("expectedAttendees") instanceof Number guests) proposal.setExpectedAttendees(guests.intValue());
         proposal.setVenue((String) proposalMap.get("venue"));
         proposal.setVenueId(proposalMap.get("venueId") != null ? ((Number) proposalMap.get("venueId")).longValue() : null);
         proposal.setVenueDetails((String) proposalMap.get("venueDetails"));

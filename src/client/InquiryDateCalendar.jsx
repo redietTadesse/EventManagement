@@ -18,7 +18,7 @@ const dayLabel = {
 };
 const dayMark = { available: '✓', unavailable: '×', unknown: '?', past: '' };
 
-export default function InquiryDateCalendar({ start, end, attendees, eventType, tableSetup, onChange, readOnly = false }) {
+export default function InquiryDateCalendar({ start, end, attendees, eventType, tableSetup, preferredVenueId, onChange, readOnly = false, children }) {
   const now = new Date();
   const today = dateKey(now);
   const tomorrow = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
@@ -86,6 +86,7 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
   }
 
   const rangeResult = range?.key === rangeKey ? range : null;
+  const preferredFit = rangeResult?.venues?.find(room => room.venueId === preferredVenueId);
   const monthLabel = month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   const offset = (month.getDay() + 6) % 7;
 
@@ -96,7 +97,7 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
       {['exhibition', 'trade_show'].includes(eventType) && <p className="text-sm text-slate-600">Exhibition venue bookings cover at least seven days, including setup and takedown.</p>}
       {eventType === 'meeting' && <p className="text-sm text-slate-600">A one-day meeting reserves three days: one setup day, the meeting day, and one takedown day.</p>}
       <p className="text-sm text-slate-600">
-        {attendance ? `Showing availability for ${attendance} attendees.` : 'Enter your expected attendance to check venue capacity.'}
+        {attendance ? `Checking all venues for ${attendance} attendees.` : 'Enter your expected attendance to check venue capacity.'}
         {' '}Availability can change before your coordinator reserves a venue.
       </p>
       {!readOnly && <div className="grid gap-3 sm:grid-cols-2">
@@ -167,7 +168,7 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
       </div>
       <p className="text-xs text-slate-600">Select a gray date to see which venues were checked and why they were excluded.</p>
       {inspectedDate && <VenueDayExplanation key={`${inspectedDate}/${attendance}`} date={inspectedDate}
-        attendees={attendance} eventType={eventType} onClose={() => setInspectedDate('')} />}
+        attendees={attendance} eventType={eventType} tableSetup={tableSetup} onClose={() => setInspectedDate('')} />}
       <div className="flex flex-wrap gap-2 text-xs">
         {['available', 'unavailable', 'unknown'].map((status) => (
           <span key={status} className={`rounded px-2 py-1 ${status === 'unavailable' ? 'bg-slate-200 text-slate-600' : dayStyle[status]}`}>
@@ -185,9 +186,14 @@ export default function InquiryDateCalendar({ start, end, attendees, eventType, 
       {validRange && !rangeResult && <p role="status" className="text-sm text-slate-600">Checking your selected dates…</p>}
       {inspectedDate&&!readOnly&&<button type="button" className="btn-outline" onClick={()=>selectDate(inspectedDate,choosingEnd)}>Use this date and ask AICC for alternatives</button>}
       {validRange && rangeResult?.venues && (
-        <div ref={rangeReasons} tabIndex={-1}><VenueAvailabilityReasons venues={rangeResult.venues}
-          dateLabel={[end && end !== start ? `${start} through ${end}` : start, attendance && `${attendance} attendees`].filter(Boolean).join(' · ')} /></div>
+        <div ref={rangeReasons} tabIndex={-1}>{preferredFit ? <>
+          <div className="preference-summary" role="status"><h3>{preferredFit.name}</h3><p>{preferredFit.available ? 'Your preferred room is available for the requested window.' : 'Your preferred room does not match this request.'}</p>
+            {!preferredFit.available && <><p>{preferredFit.reasons.join(' ')}</p><small>You can keep this preference and ask your coordinator for alternatives.</small></>}
+          </div><details><summary className="cursor-pointer font-medium">See availability across all rooms</summary><VenueAvailabilityReasons venues={rangeResult.venues} /></details>
+        </> : <VenueAvailabilityReasons venues={rangeResult.venues}
+          dateLabel={[end && end !== start ? `${start} through ${end}` : start, attendance && `${attendance} attendees`].filter(Boolean).join(' · ')} />}</div>
       )}
+      {rangeResult?.venues && (!rangeResult.available || preferredFit?.available === false) && children}
     </fieldset>
   );
 }

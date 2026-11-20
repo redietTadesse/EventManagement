@@ -7,6 +7,7 @@ export default function VendorSuggestions({
   eventId,
   excludeVendorId,
   selectedVendorIds = [],
+  clientPreferences = [],
   onSelectVendor,
   actionLabel = 'Select for shortlist',
 }) {
@@ -96,6 +97,7 @@ export default function VendorSuggestions({
               <div className="min-w-0 flex-1">
                 <div className="mb-2 flex items-center gap-2">
                   <h5 className="font-semibold text-slate-800">{suggestion.companyName || 'Unknown vendor'}</h5>
+                  {clientPreferences?.includes(vendorId) && <strong className="client-room-pick">Requested by client</strong>}
                   {index === 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Top match</span>}
                 </div>
                 <div className="mb-2 flex items-center gap-2">

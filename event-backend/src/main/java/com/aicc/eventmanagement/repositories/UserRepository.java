@@ -7,6 +7,11 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.List;
+import java.time.Instant;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -19,6 +24,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     Optional<User> findByEmailIgnoreCase(String email);
     Optional<User> findByGoogleSubject(String googleSubject);
+
+    @Modifying
+    @Transactional
+    @Query("update User u set u.faydaSandboxVerifiedAt = :verifiedAt where u.id = :id and u.isActive = true and u.role = :role")
+    int recordFaydaSandboxVerification(@Param("id") Long id, @Param("verifiedAt") Instant verifiedAt, @Param("role") Role role);
 
     boolean existsByUsername(String username);
 

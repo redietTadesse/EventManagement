@@ -93,6 +93,19 @@ class RecordOwnershipIntegrationTest {
     }
 
     @Test
+    void faydaStatusIsRestrictedToTheSignedInVendor() throws Exception {
+        userRepository.recordFaydaSandboxVerification(vendorUserA.getId(), java.time.Instant.parse("2026-11-19T13:00:00Z"), Role.VENDOR);
+        userRepository.flush();
+        // This test owns the persistence context, so refresh the fixture after the bulk update.
+        mockMvc.perform(get("/api/v1/vendors/me/fayda").header("Authorization", token(clientA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/vendors/me/fayda").header("Authorization", token(coordinator)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/vendors/me/fayda").header("Authorization", token(vendorUserB)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.verifiedAt").doesNotExist());
+    }
+
+    @Test
     void clientCannotReadMutateOrCreateRecordsForAnotherClient() throws Exception {
         String token = token(clientA);
 
@@ -108,6 +121,10 @@ class RecordOwnershipIntegrationTest {
                         .param("status", EventStatus.CLOSED.name()).header("Authorization", token))
                 .andExpect(status().isForbidden());
 
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/inquiries/{id}/preferences", inquiryB.getId())
+                        .header("Authorization", token).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"preferredVenueId\":null,\"preferredVendorIds\":[]}"))
+                .andExpect(status().isForbidden());
         long countBefore = inquiryRepository.count();
         String spoofedCreate = """
                 {"clientId":%d,"clientName":"Client B","eventType":"Conference",

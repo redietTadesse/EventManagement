@@ -5,6 +5,7 @@ import StatusBadge from '../components/StatusBadge';
 import Skeleton from '../components/Skeleton';
 import { ArrowRightIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
 import { useApp } from '../context/AppContext';
+import FaydaVerification from './FaydaVerification';
 
 const formatDate = (value) => {
   if (!value) return 'Date not set';
@@ -125,5 +126,6 @@ export default function VendorDashboard() {
           : <div className="plan-blank"><h3>{view === 'offers' ? 'No offers awaiting your response' : 'No upcoming commitments'}</h3><Link to="/vendor/open" className="btn-outline">Explore open requests</Link></div>}
       </div>}
     </section>
+    <FaydaVerification/>
   </div></Layout>;
 }

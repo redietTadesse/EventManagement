@@ -54,7 +54,7 @@ function VenueResults({ query, plan }) {
         {venue.resources && <p className="text-sm leading-relaxed text-slate-600"><strong className="text-slate-800">Resources</strong> · {venue.resources}</p>}
         <div className="venue-explore-actions">
           <label><input type="checkbox" checked={compared.includes(venue.id)} disabled={!compared.includes(venue.id) && compared.length >= 3} onChange={() => setCompared(old => old.includes(venue.id) ? old.filter(id => id !== venue.id) : [...old, venue.id])} />Compare this space</label>
-          <Link to={`/client/new-inquiry?${query}&${new URLSearchParams({ preferredVenue: venue.name })}`}
+          <Link to={`/client/new-inquiry?${query}&${new URLSearchParams({ preferredVenue: venue.name, preferredVenueId: venue.id })}`}
             className="btn-outline" aria-label={`Start an inquiry for ${venue.name}`}>Start inquiry <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>
         </div>
       </li>)}
@@ -64,7 +64,7 @@ function VenueResults({ query, plan }) {
       <Link className="mt-3 block font-semibold text-emerald-800 underline" to={`/client/new-inquiry?${query}`}>Keep these requirements and ask AICC for alternatives</Link>
     </p>}
     {compared.length > 0 && <div className="client-venue-compare"><div><strong>{compared.length} of 3 spaces selected</strong><p>Compare capacity, facilities and the full venue window.</p></div><div><button type="button" className="btn-outline" onClick={() => setCompared([])}>Clear</button><button type="button" className="btn-primary" onClick={() => setComparisonOpen(true)}>Compare spaces <ArrowRightIcon className="h-4 w-4" /></button></div></div>}
-    <VenueComparisonDialog open={comparisonOpen} onClose={() => setComparisonOpen(false)} venues={venues.filter(venue => compared.includes(venue.id))} plan={{ ...plan, eventDate: plan.date, expectedAttendees: plan.attendees }} actionLabel="Continue with this space" onChoose={venue => navigate('/client/new-inquiry?' + query + '&' + new URLSearchParams({ preferredVenue: venue.name }))} />
+    <VenueComparisonDialog open={comparisonOpen} onClose={() => setComparisonOpen(false)} venues={venues.filter(venue => compared.includes(venue.id))} plan={{ ...plan, eventDate: plan.date, expectedAttendees: plan.attendees }} actionLabel="Continue with this space" onChoose={venue => navigate('/client/new-inquiry?' + query + '&' + new URLSearchParams({ preferredVenue: venue.name, preferredVenueId: venue.id }))} />
     {plan.date && <details open={!venues.length} className="disclosure-row"><summary>Why are other venues unavailable?</summary><div className="mt-4">
       {reasons.loading ? <p role="status" className="text-sm text-slate-600">Checking availability explanations…</p> : reasons.error ? <p role="alert" className="text-sm text-amber-900">Explanations could not be loaded. <button type="button" onClick={reasons.reload} className="underline">Try again</button></p> : <VenueAvailabilityReasons venues={reasons.data} />}
     </div></details>}
