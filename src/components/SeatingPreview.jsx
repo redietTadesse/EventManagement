@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { ArrowPathIcon, CubeTransparentIcon, ViewfinderCircleIcon } from '@heroicons/react/24/outline';
 import { SEATING, seatingCapacity } from '../utils/proposalBuilder';
 import { seatingModel, projectRoom } from '../utils/seatingModel';
@@ -16,11 +16,24 @@ const descriptions = {
 
 export function RoomDiagram({ layout, seatsPerTable, angle = 28, overhead = false }) {
   const name = SEATING.find(([key]) => key === layout)?.[1];
+  const blur = 'seating-shadow-' + useId().replace(/:/g, '');
   const model = useMemo(() => seatingModel(layout, seatsPerTable), [layout, seatsPerTable]);
   const room = useMemo(() => projectRoom(model, angle, overhead), [model, angle, overhead]);
   if (!name) return null;
+  // Shadows share a layer, so they arrive contiguously and a single blurred
+  // group covers all of them for the price of one filter.
+  const bands = [];
+  for (const face of room.faces) {
+    const last = bands[bands.length - 1];
+    if (last && last.shadow === Boolean(face.opacity)) last.faces.push(face);
+    else bands.push({ shadow: Boolean(face.opacity), faces: [face] });
+  }
+  const polygon = (face, index) => <polygon key={index} points={face.points} fill={face.fill} stroke={face.fill} strokeWidth=".36" strokeLinejoin="round" opacity={face.opacity} />;
   return <svg viewBox={room.viewBox} role="img" aria-label={name + ' seating with a stage at the front'}>
-    {room.faces.map((face, index) => <polygon key={index} points={face.points} fill={face.color} stroke={face.color} strokeWidth=".36" strokeLinejoin="round" />)}
+    <defs><filter id={blur} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.6" /></filter></defs>
+    {bands.map((band, index) => band.shadow
+      ? <g key={index} filter={`url(#${blur})`}>{band.faces.map(polygon)}</g>
+      : <g key={index}>{band.faces.map(polygon)}</g>)}
     <text x={room.stage[0]} y={room.stage[1]} textAnchor="middle" dominantBaseline="middle" fontSize="6" fontWeight="700" fill="white">STAGE</text>
   </svg>;
 }
