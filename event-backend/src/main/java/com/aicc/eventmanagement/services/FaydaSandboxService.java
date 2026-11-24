@@ -37,13 +37,13 @@ public class FaydaSandboxService {
     private final ObjectMapper json;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private final SecureRandom random = new SecureRandom();
-    private final javax.crypto.SecretKey ticketKey = Jwts.SIG.HS256.key().build();
+    private final javax.crypto.SecretKey ticketKey = Jwts.ENC.A256GCM.key().build();
 
     @Value("${FAYDA_CLIENT_ID:}") private String clientId;
     @Value("${FAYDA_PRIVATE_JWK:}") private String privateJwk;
     @Value("${FAYDA_REDIRECT_URI:}") private String redirectUri;
-    @Value("${FAYDA_ISSUER:}") private String issuer;
-    @Value("${FAYDA_JWKS_URI:}") private String jwksUri;
+    @Value("${FAYDA_ISSUER:" + HOST + "}") private String issuer;
+    @Value("${FAYDA_JWKS_URI:" + HOST + "/.well-known/jwks.json}") private String jwksUri;
     @Value("${FAYDA_ACR_VALUES:mosip:idp:acr:generated-code}") private String acrValues;
     @Value("${FAYDA_ASSERTION_AUDIENCE:}") private String assertionAudience;
 
@@ -67,14 +67,14 @@ public class FaydaSandboxService {
             String challenge = encode(MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII)));
             String ticket = Jwts.builder().subject(account).issuer(PURPOSE)
                     .claim("state", state).claim("nonce", nonce).claim("verifier", verifier)
-                    .expiration(Date.from(Instant.now().plusSeconds(600))).signWith(ticketKey).compact();
+                    .expiration(Date.from(Instant.now().plusSeconds(600))).encryptWith(ticketKey, Jwts.ENC.A256GCM).compact();
             String url = UriComponentsBuilder.fromUriString(HOST + "/authorize")
-                    .queryParam("client_id", clientId).queryParam("redirect_uri", redirectUri)
+                    .queryParam("client_id", "{client}").queryParam("redirect_uri", "{redirect}")
                     .queryParam("response_type", "code").queryParam("scope", "openid")
                     .queryParam("state", state).queryParam("nonce", nonce)
-                    .queryParam("acr_values", acrValues)
+                    .queryParam("acr_values", "{acr}")
                     .queryParam("code_challenge", challenge).queryParam("code_challenge_method", "S256")
-                    .build().encode().toUriString();
+                    .encode().buildAndExpand(Map.of("client", clientId, "redirect", redirectUri, "acr", acrValues)).toUriString();
             return new Journey(url, state, ticket);
         } catch (Exception failure) {
             throw verificationFailed();
@@ -87,15 +87,15 @@ public class FaydaSandboxService {
             throw verificationFailed();
         }
         try {
-            var attempt = Jwts.parser().verifyWith(ticketKey).requireIssuer(PURPOSE)
-                    .requireSubject(account).require("state", state).build().parseSignedClaims(ticket).getPayload();
+            var attempt = Jwts.parser().decryptWith(ticketKey).requireIssuer(PURPOSE)
+                    .requireSubject(account).require("state", state).build().parseEncryptedClaims(ticket).getPayload();
             String nonce = attempt.get("nonce", String.class);
             String verifier = attempt.get("verifier", String.class);
             JsonNode key = json.readTree(Base64.getDecoder().decode(privateJwk));
             var factory = KeyFactory.getInstance("RSA");
             var signer = (RSAPrivateKey) factory.generatePrivate(new RSAPrivateKeySpec(number(key, "n"), number(key, "d")));
             Instant now = Instant.now();
-            String assertion = Jwts.builder().header().keyId(key.path("kid").asText()).and()
+            String assertion = Jwts.builder().header().type("JWT").keyId(key.path("kid").asText()).and()
                     .issuer(clientId).subject(clientId)
                     .audience().add(assertionAudience.isBlank() ? TOKEN_ENDPOINT : assertionAudience).and()
                     .id(UUID.randomUUID().toString()).issuedAt(Date.from(now))
