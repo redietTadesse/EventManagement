@@ -25,6 +25,8 @@ public interface VendorBookedDateRepository extends JpaRepository<VendorBookedDa
 
     boolean existsByVendorIdAndBookedDate(Long vendorId, LocalDate date);
 
+    boolean existsByVendorIdAndBookedDateBetween(Long vendorId, LocalDate start, LocalDate end);
+
     @Transactional
     void deleteByVendorId(Long vendorId);
     @Query("SELECT vbd FROM VendorBookedDate vbd WHERE vbd.bookedDate BETWEEN :startDate AND :endDate")

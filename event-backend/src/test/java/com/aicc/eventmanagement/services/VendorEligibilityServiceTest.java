@@ -120,6 +120,23 @@ class VendorEligibilityServiceTest {
         assertThat(conflict.code()).isEqualTo("VENDOR_UNAVAILABLE");
     }
 
+    @Test
+    void checksBookedDatesAndAssignmentsAcrossAllEventDays() {
+        LocalDate lastDay = eventDate.plusDays(2);
+        Vendor vendor = vendor("av", lastDay.plusDays(1));
+        when(bookedDateRepository.existsByVendorIdAndBookedDateBetween(1L, eventDate, lastDay)).thenReturn(true);
+        assertThat(eligibilityService.evaluate(vendor, "av", eventDate, lastDay, 8L, "conference", Set.of()).code())
+                .isEqualTo("VENDOR_UNAVAILABLE");
+
+        when(bookedDateRepository.existsByVendorIdAndBookedDateBetween(1L, eventDate, lastDay)).thenReturn(false);
+        when(assignmentRepository.hasConflictingAssignmentInWindow(1L, eventDate, lastDay, 8L)).thenReturn(true);
+        assertThat(eligibilityService.evaluate(vendor, "av", eventDate, lastDay, 8L, "conference", Set.of()).code())
+                .isEqualTo("VENDOR_UNAVAILABLE");
+
+        assertThat(eligibilityService.evaluate(vendor("av", lastDay), "av", eventDate, lastDay,
+                8L, "conference", Set.of()).code()).isEqualTo("VENDOR_INSURANCE_INVALID");
+    }
+
     private Vendor vendor(String category, LocalDate insuranceExpiry) {
         return Vendor.builder().id(1L).companyName("Test Vendor").serviceCategory(category)
                 .isActive(true).insuranceExpiryDate(insuranceExpiry).build();

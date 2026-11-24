@@ -1,6 +1,9 @@
 package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Vendor;
+import com.aicc.eventmanagement.enums.SelectionReason;
+import com.aicc.eventmanagement.enums.IncidentReportStatus;
+import com.aicc.eventmanagement.entities.PostEventReport;
 import com.aicc.eventmanagement.repositories.PostEventReportRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
@@ -84,6 +87,32 @@ class VendorRankingServiceTest {
         when(assignmentRepository.findTriedVendorIds(8L, "av")).thenReturn(List.of(1L, 2L));
 
         assertThat(rankingService.selectForEvent(8L, "conference", "av", eventDate)).isEmpty();
+    }
+
+    @Test
+    void onlyConfirmedIncidentsReduceQualityAndPreviewKeepsTheClientRating() {
+        when(reportRepository.findByVendorIdAndCreatedAtAfter(eq(2L), any(LocalDateTime.class)))
+                .thenReturn(List.of(
+                        PostEventReport.builder().status(IncidentReportStatus.PENDING).build(),
+                        PostEventReport.builder().status(IncidentReportStatus.REJECTED).build(),
+                        PostEventReport.builder().status(IncidentReportStatus.CONFIRMED).build()));
+        var vendor = rankingService.previewForEvent(8L, "conference", "av", eventDate, null).eligible().get(0);
+
+        assertThat(vendor.rating()).isEqualTo(4.3);
+        assertThat(vendor.ratingTerm()).isCloseTo(0.38, within(0.0000001));
+        assertThat(vendor.score()).isCloseTo(0.88, within(0.0000001));
+    }
+
+    @Test
+    void equalTotalsWithDifferentContributionsAreExplainedAsATie() {
+        when(assignmentRepository.findTriedVendorIds(8L, "av")).thenReturn(List.of());
+        when(ratingService.calculateVendorRatings(anyList())).thenReturn(Map.of(1L, 4.3, 2L, 4.7));
+        when(assignmentRepository.countActiveAssignmentsByVendors(anyList()))
+                .thenReturn(java.util.Collections.singletonList(new Object[]{2L, 1L}));
+
+        var selection = rankingService.selectForEvent(8L, "conference", "av", eventDate).orElseThrow();
+        assertThat(selection.vendor()).isSameAs(first);
+        assertThat(selection.reason()).isEqualTo(SelectionReason.TIE_BREAK);
     }
 
     @Test

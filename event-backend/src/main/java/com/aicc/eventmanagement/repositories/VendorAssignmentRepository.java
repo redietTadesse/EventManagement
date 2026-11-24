@@ -153,7 +153,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "JOIN e.inquiry i " +
             "WHERE va.vendor.id = :vendorId " +
             "AND va.status = 'ACCEPTED' " +
-            "AND i.eventDate = :date")
+            "AND :date BETWEEN i.eventDate AND COALESCE(i.endDate, i.eventDate)")
     boolean hasActiveAssignmentOnDate(
             @Param("vendorId") Long vendorId,
             @Param("date") LocalDate date
@@ -164,7 +164,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "JOIN e.inquiry i " +
             "WHERE va.vendor.id = :vendorId " +
             "AND va.status IN ('PENDING', 'ACCEPTED') " +
-            "AND i.eventDate = :date")
+            "AND :date BETWEEN i.eventDate AND COALESCE(i.endDate, i.eventDate)")
     boolean hasConflictingAssignmentOnDate(
             @Param("vendorId") Long vendorId,
             @Param("date") LocalDate date
@@ -174,7 +174,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "JOIN va.event e JOIN e.inquiry i " +
             "WHERE va.vendor.id = :vendorId " +
             "AND va.status IN ('PENDING', 'ACCEPTED') " +
-            "AND i.eventDate = :date " +
+            "AND :date BETWEEN i.eventDate AND COALESCE(i.endDate, i.eventDate) " +
             "AND e.id <> :excludedEventId")
     boolean hasConflictingAssignmentOnDateExcludingEvent(
             @Param("vendorId") Long vendorId,
@@ -186,7 +186,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "JOIN va.event e JOIN e.inquiry i " +
             "WHERE va.vendor.id = :vendorId " +
             "AND va.status IN ('PENDING', 'ACCEPTED') " +
-            "AND i.eventDate = :date " +
+            "AND :date BETWEEN i.eventDate AND COALESCE(i.endDate, i.eventDate) " +
             "AND va.event.id != :eventId")
     boolean hasActiveAssignmentOnDateExcludingEvent(
             @Param("vendorId") Long vendorId,
@@ -199,6 +199,16 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             "AND va.status IN ('ACCEPTED', 'PENDING') " +
             "GROUP BY va.vendor.id")
     List<Object[]> countActiveAssignmentsByVendors(@Param("vendorIds") List<Long> vendorIds);
+
+    @Query("""
+            SELECT COUNT(va) > 0 FROM VendorAssignment va
+            JOIN va.event e JOIN e.inquiry i
+            WHERE va.vendor.id = :vendorId AND va.status IN ('PENDING', 'ACCEPTED')
+            AND i.eventDate <= :end AND COALESCE(i.endDate, i.eventDate) >= :start
+            AND (:eventId IS NULL OR e.id <> :eventId)
+            """)
+    boolean hasConflictingAssignmentInWindow(@Param("vendorId") Long vendorId,
+            @Param("start") LocalDate start, @Param("end") LocalDate end, @Param("eventId") Long eventId);
 
     @Query("SELECT va.vendor.id, COUNT(va) FROM VendorAssignment va " +
             "WHERE va.vendor.id IN :vendorIds " +
@@ -218,7 +228,7 @@ public interface VendorAssignmentRepository extends JpaRepository<VendorAssignme
             @Param("category") String category
     );
 
-    @Query("SELECT va.vendor.id FROM VendorAssignment va " +
+    @Query("SELECT DISTINCT va.vendor.id FROM VendorAssignment va " +
             "WHERE va.event.id = :eventId " +
             "AND va.serviceCategory = :category " +
             "AND va.vendor.id IS NOT NULL")

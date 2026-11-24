@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -60,7 +61,9 @@ public class ConflictResolutionService {
 
             for (VendorAssignment assignment : activeAssignments) {
                 LocalDate assignmentDate = assignment.getEvent().getInquiry().getEventDate();
-                if (assignmentDate.equals(date)) {
+                LocalDate endDate = assignment.getEvent().getInquiry().getEndDate();
+                LocalDate lastDay = endDate == null ? assignmentDate : endDate;
+                if (!date.isBefore(assignmentDate) && !date.isAfter(lastDay)) {
                     conflicts.add(new Conflict(
                         ConflictType.ACTIVE_ASSIGNMENT,
                         "Vendor is already assigned to " + assignment.getEvent().getName() +
@@ -121,7 +124,8 @@ public class ConflictResolutionService {
         String category = assignment.getServiceCategory();
         Long declinedVendorId = assignment.getVendor().getId();
 
-        return suggestAlternativesForEvent(category, eventDate, assignment.getEvent().getId(),
+        return suggestAlternativesForEvent(category, eventDate, assignment.getEvent().getInquiry().getEndDate(),
+                assignment.getEvent().getId(),
                 assignment.getEvent().getInquiry().getEventType(), declinedVendorId);
     }
 
@@ -151,12 +155,17 @@ public class ConflictResolutionService {
             Long eventId) {
 
         List<Conflict> conflicts = getVendorConflicts(vendorId, date);
-        String eventType = eventRepository.findById(eventId)
-                .map(event -> event.getInquiry().getEventType())
-                .orElse(null);
+        var inquiry = eventId == null ? null : eventRepository.findById(eventId)
+                .map(event -> event.getInquiry()).orElse(null);
+        String eventType = inquiry == null ? null : inquiry.getEventType();
+        LocalDate endDate = null;
+        if (inquiry != null && inquiry.getEndDate() != null) {
+            long durationDays = ChronoUnit.DAYS.between(inquiry.getEventDate(), inquiry.getEndDate());
+            endDate = date.plusDays(Math.max(0, durationDays));
+        }
         List<AlternativeVendor> alternatives = eventId == null
                 ? suggestAlternatives(category, date, vendorId)
-                : suggestAlternativesForEvent(category, date, eventId, eventType, vendorId);
+                : suggestAlternativesForEvent(category, date, endDate, eventId, eventType, vendorId);
 
         // Determine next steps
         String suggestedAction;
@@ -181,8 +190,8 @@ public class ConflictResolutionService {
     }
 
     private List<AlternativeVendor> suggestAlternativesForEvent(
-            String category, LocalDate date, Long eventId, String eventType, Long excludedVendorId) {
-        return rankingService.rankForEvent(eventId, eventType, category, date).stream()
+            String category, LocalDate date, LocalDate endDate, Long eventId, String eventType, Long excludedVendorId) {
+        return rankingService.rankForEvent(eventId, eventType, category, date, endDate).stream()
                 .filter(result -> !result.vendor().getId().equals(excludedVendorId))
                 .map(result -> toAlternative(result))
                 .toList();

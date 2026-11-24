@@ -3,6 +3,7 @@ package com.aicc.eventmanagement.services;
 
 import com.aicc.eventmanagement.entities.Vendor;
 import com.aicc.eventmanagement.enums.SelectionReason;
+import com.aicc.eventmanagement.enums.IncidentReportStatus;
 import com.aicc.eventmanagement.repositories.PostEventReportRepository;
 import com.aicc.eventmanagement.repositories.VendorAssignmentRepository;
 import com.aicc.eventmanagement.repositories.VendorRepository;
@@ -49,7 +50,8 @@ public class VendorRankingService {
             double score,
             double ratingTerm,
             double loadTerm,
-            double rotationTerm) {
+            double rotationTerm,
+            double rating) {
 
         public double qualityScore() {
             return ratingTerm / W_RATING;
@@ -61,10 +63,6 @@ public class VendorRankingService {
 
         public double rotationScore() {
             return rotationTerm / W_ROTATION;
-        }
-
-        public double rating() {
-            return qualityScore() * RATING_SCALE;
         }
     }
 
@@ -108,12 +106,17 @@ public class VendorRankingService {
             Set<Long> alreadyTried,
             String eventType) {
 
-        return evaluate(category, date, alreadyTried, null, eventType).ranked();
+        return rank(category, date, null, alreadyTried, eventType);
+    }
+
+    public List<Ranked> rank(String category, LocalDate date, LocalDate endDate, Set<Long> alreadyTried, String eventType) {
+        return evaluate(category, date, endDate, alreadyTried, null, eventType).ranked();
     }
 
     private RankResult evaluate(
             String category,
             LocalDate date,
+            LocalDate endDate,
             Set<Long> alreadyTried,
             Long eventId,
             String eventType) {
@@ -142,14 +145,9 @@ public class VendorRankingService {
             }
 
             VendorEligibilityService.EligibilityResult result =
-                    eligibilityService.evaluate(
-                            vendor,
-                            category,
-                            date,
-                            eventId,
-                            eventType,
-                            excluded
-                    );
+                    endDate == null
+                            ? eligibilityService.evaluate(vendor, category, date, eventId, eventType, excluded)
+                            : eligibilityService.evaluate(vendor, category, date, endDate, eventId, eventType, excluded);
 
             if (result.eligible()) {
                 candidates.add(vendor);
@@ -187,20 +185,20 @@ public class VendorRankingService {
 
         List<Ranked> ranked = new ArrayList<>();
 
+        LocalDateTime incidentCutoff = LocalDateTime.now().minusMonths(6);
         for (Vendor vendor : candidates) {
 
             long load = loads.getOrDefault(vendor.getId(), 0L);
 
-            double ratingTerm = ratingTerm(
-                    ratings.getOrDefault(vendor.getId(), 0.0)
-            );
+            double rating = ratings.getOrDefault(vendor.getId(), 0.0);
+            double ratingTerm = ratingTerm(rating);
 
             // Deduct points for recent incidents (past 6 months).
             long recentIncidents =
                     reportRepository.findByVendorIdAndCreatedAtAfter(
                             vendor.getId(),
-                            LocalDateTime.now().minusMonths(6)
-                    ).size();
+                            incidentCutoff
+                    ).stream().filter(report -> report.getStatus() == IncidentReportStatus.CONFIRMED).count();
 
             double incidentPenalty = Math.min(
                     recentIncidents * 0.05,
@@ -218,9 +216,7 @@ public class VendorRankingService {
                     assignmentHistory.getOrDefault(vendor.getId(), 0L)
             );
 
-            double score = (
-                    ratingTerm + loadTerm + rotationTerm
-            ) / W_TOTAL;
+            double score = Math.round((ratingTerm + loadTerm + rotationTerm) / W_TOTAL * 1000.0) / 1000.0;
 
             ranked.add(
                     new Ranked(
@@ -228,7 +224,8 @@ public class VendorRankingService {
                             score,
                             ratingTerm,
                             loadTerm,
-                            rotationTerm
+                            rotationTerm,
+                            rating
                     )
             );
         }
@@ -270,14 +267,19 @@ public class VendorRankingService {
             String eventType,
             String category,
             LocalDate date) {
+        return rankForEvent(eventId, eventType, category, date, null);
+    }
 
+    public List<Ranked> rankForEvent(
+            Long eventId, String eventType, String category, LocalDate date, LocalDate endDate) {
         Set<Long> tried = Set.copyOf(
-                assignmentRepository.findTriedVendorIds(eventId, category)
+                assignmentRepository.findTriedVendorIds(eventId, CategoryUtils.canonicalize(category))
         );
 
         return evaluate(
                 category,
                 date,
+                endDate,
                 tried,
                 eventId,
                 eventType
@@ -289,14 +291,12 @@ public class VendorRankingService {
             Long eventId,
             String eventType,
             String category,
-            LocalDate date) {
-
+            LocalDate date, LocalDate endDate) {
         Set<Long> tried = Set.copyOf(
-                assignmentRepository.findTriedVendorIds(eventId, category)
+                assignmentRepository.findTriedVendorIds(eventId, CategoryUtils.canonicalize(category))
         );
-
         return toDecisionPreview(
-                evaluate(category, date, tried, eventId, eventType)
+                evaluate(category, date, endDate, tried, eventId, eventType)
         );
     }
 
@@ -304,10 +304,9 @@ public class VendorRankingService {
     public DecisionPreview preview(
             String category,
             LocalDate date,
-            String eventType) {
-
+            LocalDate endDate, String eventType) {
         return toDecisionPreview(
-                evaluate(category, date, Set.of(), null, eventType)
+                evaluate(category, date, endDate, Set.of(), null, eventType)
         );
     }
 
@@ -338,6 +337,7 @@ public class VendorRankingService {
         return select(
                 category,
                 date,
+                null,
                 alreadyTried,
                 null,
                 null
@@ -347,6 +347,7 @@ public class VendorRankingService {
     private Optional<Selection> select(
             String category,
             LocalDate date,
+            LocalDate endDate,
             Set<Long> alreadyTried,
             Long eventId,
             String eventType) {
@@ -354,6 +355,7 @@ public class VendorRankingService {
         RankResult result = evaluate(
                 category,
                 date,
+                endDate,
                 alreadyTried,
                 eventId,
                 eventType
@@ -499,14 +501,18 @@ public class VendorRankingService {
             String eventType,
             String category,
             LocalDate date) {
+        return selectForEvent(eventId, eventType, category, date, null);
+    }
 
+    public Optional<Selection> selectForEvent(
+            Long eventId, String eventType, String category, LocalDate date, LocalDate endDate) {
         Set<Long> tried = Set.copyOf(
-                assignmentRepository.findTriedVendorIds(eventId, category)
+                assignmentRepository.findTriedVendorIds(eventId, CategoryUtils.canonicalize(category))
         );
-
         return select(
                 category,
                 date,
+                endDate,
                 tried,
                 eventId,
                 eventType
@@ -535,9 +541,7 @@ public class VendorRankingService {
         double rotationEdge =
                 winner.rotationTerm() - runnerUp.rotationTerm();
 
-        if (ratingEdge == 0.0
-                && loadEdge == 0.0
-                && rotationEdge == 0.0) {
+        if (winner.score() == runnerUp.score()) {
 
             return SelectionReason.TIE_BREAK;
         }

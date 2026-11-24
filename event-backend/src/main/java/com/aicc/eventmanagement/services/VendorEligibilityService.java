@@ -22,8 +22,16 @@ public class VendorEligibilityService {
 
     public EligibilityResult evaluate(Vendor vendor, String category, LocalDate eventDate,
                                      Long eventId, String eventType, Set<Long> excludedVendorIds) {
+        return evaluate(vendor, category, eventDate, null, eventId, eventType, excludedVendorIds);
+    }
+
+    public EligibilityResult evaluate(Vendor vendor, String category, LocalDate eventDate, LocalDate endDate,
+                                     Long eventId, String eventType, Set<Long> excludedVendorIds) {
         if (vendor == null) return ineligible("VENDOR_NOT_FOUND", "Vendor does not exist");
         if (eventDate == null) return ineligible("INVALID_EVENT_DATE", "Event date is required");
+        LocalDate lastDay = endDate == null ? eventDate : endDate;
+        if (lastDay.isBefore(eventDate)) return ineligible("INVALID_EVENT_DATE", "End date is before the event start");
+        boolean singleDay = eventDate.equals(lastDay);
         if (!vendor.isActive()) return ineligible("VENDOR_INACTIVE", "Vendor is inactive");
 
         String required = CategoryUtils.canonicalize(category);
@@ -45,16 +53,24 @@ public class VendorEligibilityService {
         // Missing expiry is allowed by the confirmed prototype policy. A recorded
         // expiry must be strictly after the event date to cover the full event day.
         if (vendor.getInsuranceExpiryDate() != null
-                && !vendor.getInsuranceExpiryDate().isAfter(eventDate)) {
-            return ineligible("VENDOR_INSURANCE_INVALID", "Insurance expires before the event date");
+                && !vendor.getInsuranceExpiryDate().isAfter(lastDay)) {
+            return ineligible("VENDOR_INSURANCE_INVALID", "Insurance does not cover the full event");
         }
-        if (bookedDateRepository.existsByVendorIdAndBookedDate(vendor.getId(), eventDate)) {
-            return ineligible("VENDOR_UNAVAILABLE", "Vendor has a booked date on the event date");
+        boolean booked = singleDay
+                ? bookedDateRepository.existsByVendorIdAndBookedDate(vendor.getId(), eventDate)
+                : bookedDateRepository.existsByVendorIdAndBookedDateBetween(vendor.getId(), eventDate, lastDay);
+        if (booked) {
+            return ineligible("VENDOR_UNAVAILABLE", "Vendor has a booked date during the event");
         }
 
-        boolean hasConflict = eventId == null
-                ? assignmentRepository.hasConflictingAssignmentOnDate(vendor.getId(), eventDate)
-                : assignmentRepository.hasConflictingAssignmentOnDateExcludingEvent(vendor.getId(), eventDate, eventId);
+        boolean hasConflict;
+        if (!singleDay) {
+            hasConflict = assignmentRepository.hasConflictingAssignmentInWindow(vendor.getId(), eventDate, lastDay, eventId);
+        } else if (eventId == null) {
+            hasConflict = assignmentRepository.hasConflictingAssignmentOnDate(vendor.getId(), eventDate);
+        } else {
+            hasConflict = assignmentRepository.hasConflictingAssignmentOnDateExcludingEvent(vendor.getId(), eventDate, eventId);
+        }
         if (hasConflict) {
             return ineligible("VENDOR_UNAVAILABLE", "Vendor has a conflicting pending or accepted assignment");
         }

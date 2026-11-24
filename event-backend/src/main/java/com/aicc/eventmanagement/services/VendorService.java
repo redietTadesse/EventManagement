@@ -392,7 +392,7 @@ public class VendorService {
                             : vendorRepository.findById(vendorId);
                     Vendor candidate = prefVendor.orElse(null);
                     VendorEligibilityService.EligibilityResult eligibility = eligibilityService.evaluate(
-                            candidate, category, eventDate, event.getId(), eventType, alreadyTried);
+                            candidate, category, eventDate, event.getInquiry().getEndDate(), event.getId(), eventType, alreadyTried);
                     if (!eligibility.eligible()) {
                         excludedPreferences.add(excludedPreference(vendorId, candidate, eligibility.reason()));
                         continue;
@@ -421,7 +421,7 @@ public class VendorService {
 
             if (assignment == null) {
                 Optional<VendorRankingService.Selection> selection =
-                        rankingService.selectForEvent(event.getId(), eventType, category, eventDate);
+                        rankingService.selectForEvent(event.getId(), eventType, category, eventDate, event.getInquiry().getEndDate());
 
                 if (selection.isPresent()) {
                     VendorRankingService.Selection s = selection.get();
@@ -467,7 +467,7 @@ public class VendorService {
     private void requireEligible(Vendor vendor, Event event, String category, Set<Long> excludedVendorIds) {
         ensureEventAcceptsAssignments(event);
         VendorEligibilityService.EligibilityResult result = eligibilityService.evaluate(
-                vendor, category, event.getInquiry().getEventDate(), event.getId(),
+                vendor, category, event.getInquiry().getEventDate(), event.getInquiry().getEndDate(), event.getId(),
                 event.getInquiry().getEventType(), excludedVendorIds);
         if (!result.eligible()) {
             throw new BusinessException(result.reason(), result.code());
@@ -702,7 +702,7 @@ public class VendorService {
 
         if (accepted) {
             VendorEligibilityService.EligibilityResult eligibility = eligibilityService.evaluate(
-                    assignment.getVendor(), assignment.getServiceCategory(), eventDate,
+                    assignment.getVendor(), assignment.getServiceCategory(), eventDate, assignment.getEvent().getInquiry().getEndDate(),
                     assignment.getEvent().getId(), assignment.getEvent().getInquiry().getEventType(),
                     Set.copyOf(assignmentRepository.findDeclinedVendorIds(
                             assignment.getEvent().getId(), assignment.getServiceCategory())));
@@ -758,7 +758,7 @@ public class VendorService {
         }
 
         Optional<VendorRankingService.Selection> selection =
-                rankingService.selectForEvent(event.getId(), event.getInquiry().getEventType(), category, eventDate);
+                rankingService.selectForEvent(event.getId(), event.getInquiry().getEventType(), category, eventDate, event.getInquiry().getEndDate());
 
         if (selection.isEmpty()) {
             flagCoordinatorAction(event, category, "No eligible untried vendor was available.");
@@ -1180,7 +1180,7 @@ public class VendorService {
         }
 
         VendorRankingService.DecisionPreview preview = rankingService.previewForEvent(
-                eventId, inquiry.getEventType(), category, eventDate);
+                eventId, inquiry.getEventType(), category, eventDate, inquiry.getEndDate());
         List<VendorDecisionPreviewResponse.EligibleVendor> eligible = new ArrayList<>();
         for (int index = 0; index < preview.eligible().size(); index++) {
             VendorRankingService.Ranked candidate = preview.eligible().get(index);
@@ -1234,6 +1234,7 @@ public class VendorService {
                                 vendor,
                                 assignment.getServiceCategory(),
                                 assignment.getEvent().getInquiry().getEventDate(),
+                                assignment.getEvent().getInquiry().getEndDate(),
                                 assignment.getEvent().getId(),
                                 assignment.getEvent().getInquiry().getEventType(),
                                 Set.copyOf(assignmentRepository.findTriedVendorIds(

@@ -71,6 +71,7 @@ class VendorServiceAssignmentSafetyTest {
                 anyString(),
                 any(),
                 any(),
+                any(),
                 anyString(),
                 anySet()
         )).thenReturn(
@@ -159,6 +160,7 @@ class VendorServiceAssignmentSafetyTest {
                 vendor,
                 "av",
                 event.getInquiry().getEventDate(),
+                event.getInquiry().getEndDate(),
                 1L,
                 "conference",
                 java.util.Set.of()
@@ -191,6 +193,7 @@ class VendorServiceAssignmentSafetyTest {
                 vendor,
                 "av",
                 event.getInquiry().getEventDate(),
+                event.getInquiry().getEndDate(),
                 1L,
                 "conference",
                 java.util.Set.of()
@@ -316,7 +319,8 @@ class VendorServiceAssignmentSafetyTest {
                 1L,
                 "conference",
                 "av",
-                event.getInquiry().getEventDate()
+                event.getInquiry().getEventDate(),
+                event.getInquiry().getEndDate()
         )).thenReturn(Optional.of(
                 new VendorRankingService.Selection(
                         replacement,
@@ -375,7 +379,7 @@ class VendorServiceAssignmentSafetyTest {
         VendorAssignment failed = VendorAssignment.builder()
                 .id(10L).event(event).vendor(oldVendor).vendorName(oldVendor.getCompanyName())
                 .serviceCategory("av").status(VendorAssignmentStatus.DECLINED).build();
-        when(rankingService.selectForEvent(1L, "conference", "av", event.getInquiry().getEventDate()))
+        when(rankingService.selectForEvent(1L, "conference", "av", event.getInquiry().getEventDate(), event.getInquiry().getEndDate()))
                 .thenReturn(Optional.empty());
 
         vendorService.advanceAfterFailedAttempt(failed, Role.VENDOR);

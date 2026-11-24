@@ -102,7 +102,7 @@ public class InquiryService {
         List<String> submitted = request.getRequestedCategories();
         List<String> requestedCategories = canonicalCategories(submitted);
         for (String category : CategoryUtils.externalVendorCategories(request.getEventType(), requestedCategories))
-            if (rankingService.rank(category, request.getEventDate(), Set.of(), request.getEventType()).isEmpty())
+            if (rankingService.rank(category, request.getEventDate(), request.getEndDate(), Set.of(), request.getEventType()).isEmpty())
                 unmet.add("No available vendor for " + category);
 
         Inquiry inquiry = workflowEngine.startInquiry(Inquiry.builder()
@@ -333,7 +333,7 @@ public class InquiryService {
         List<ConversionPreviewResponse.CategoryPreview> categoryPreviews = new ArrayList<>();
         for (String category : requiredCategories) {
             VendorRankingService.DecisionPreview decision = rankingService.preview(
-                    category, eventDate, inquiry.getEventType());
+                    category, eventDate, inquiry.getEndDate(), inquiry.getEventType());
             List<ConversionPreviewResponse.VendorCandidate> candidates = new ArrayList<>();
             for (int i = 0; i < Math.min(3, decision.eligible().size()); i++) {
                 VendorRankingService.Ranked r = decision.eligible().get(i);
@@ -638,7 +638,7 @@ public class InquiryService {
         List<VendorRecommendationResponse.CategoryRecommendation> categoryResults = new ArrayList<>();
         for (String category : categories) {
             List<VendorRankingService.Ranked> ranked = rankingService.rank(
-                    category, inquiry.getEventDate(), Set.of(), inquiry.getEventType());
+                    category, inquiry.getEventDate(), inquiry.getEndDate(), Set.of(), inquiry.getEventType());
             List<VendorRecommendationResponse.VendorOption> options = ranked.stream()
                     .limit(5)
                     .map(r -> VendorRecommendationResponse.VendorOption.builder()
