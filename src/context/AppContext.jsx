@@ -405,9 +405,9 @@ export const AppProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to load exceptions:', err);
       const [needsCoordinatorEvents, openAssignments, pendingProposals] = await Promise.all([
-        api.get('/events/status/NEEDS_COORDINATOR').then(res => res.data).catch(() => []),
-        api.get('/assignments/open').then(res => res.data).catch(() => []),
-        api.get('/inquiries/status/PROPOSAL_SENT').then(res => res.data).catch(() => []),
+        api.get('/events/status/NEEDS_COORDINATOR').then(res => res.data),
+        api.get('/assignments/open').then(res => res.data),
+        api.get('/inquiries/status/PROPOSAL_SENT').then(res => res.data),
       ]);
 
       const threeDaysAgo = new Date();

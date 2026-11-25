@@ -78,8 +78,8 @@ export default function ChangeDateModal({ onClose, eventId, currentDate, onDateC
     <div className="fixed inset-0 overflow-y-auto p-4">
       <div className="flex min-h-full items-center justify-center">
         <Dialog.Panel className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-          <div className="bg-[#142f32] p-5 text-white sm:p-6">
-            <p className="text-xs font-semibold uppercase tracking-widest text-[#efd392]">Event operations</p>
+          <div className="bg-brand-ink p-5 text-white sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand-peach">Event operations</p>
             <Dialog.Title className="mt-2 text-2xl font-semibold">Compare rescheduling options</Dialog.Title>
             <Dialog.Description className="mt-2 text-sm text-emerald-50">
               Current start date: {formatEventDate(currentDate)}. Check the venue and vendors for up to two alternatives before choosing a new date.

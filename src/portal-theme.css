@@ -1,0 +1,60 @@
+/* Shared workspace surfaces and navigation */
+.app-shell,.portal-access,.command-drawer {--aicc-ink:var(--color-brand-ink);--aicc-copper:var(--color-brand-action);--aicc-peach:#ffd1bb;--aicc-line:#ded8e5;--aicc-display:"Segoe UI",Inter,sans-serif}
+.app-shell.is-authenticated {background:radial-gradient(ellipse at 95% 0%,#e8dff3,transparent 35rem),var(--color-brand-paper);color:#251f30}
+.app-shell .command-mast,.command-drawer {background:linear-gradient(105deg,#181420,#302037 70%,#4a3040);color:white}
+.app-shell .command-navigation {background:#fffcff;border-color:var(--color-brand-border)}
+.app-shell .command-navigation a[aria-current=page] {background:#ede2f8;color:#573679;box-shadow:inset 0 -2px #9262af}
+.app-shell .account-avatar {background:#efd3e4;color:#35243c}
+.app-shell .desk-mast {isolation:isolate;position:relative;overflow:hidden;background:radial-gradient(ellipse at 83% 50%,#694466,#32233e 55%,var(--color-brand-ink));border:1px solid #69536d;border-radius:1.2rem;box-shadow:0 15px 38px -29px #261130}
+.app-shell .desk-mast .venue-light-field {opacity:.83;mask-image:linear-gradient(90deg,transparent,#000 65%)}
+.app-shell .desk-mast h1,.app-shell .page-heading h1,.portal-choice h2 {font-family:"Segoe UI",Inter,sans-serif;font-weight:710;letter-spacing:-.055em}
+.app-shell .btn-primary,.portal-access .btn-primary {background:var(--color-brand-action);border-color:var(--color-brand-action);color:white}
+.app-shell .btn-primary:hover,.portal-access .btn-primary:hover {background:#46295f}
+.app-shell .desk-mast .btn-primary {background:var(--color-brand-peach);border-color:var(--color-brand-peach);color:#362237}
+.app-shell .desk-mast .btn-outline {background:#fff7ff;color:#453146}
+.app-shell .view-tabs button[aria-selected=true] {color:#553276;border-color:#825a99}
+.app-shell .brief-decision {background:linear-gradient(112deg,#382641,#593850);color:white}
+.app-shell .brief-decision :is(a,button) {background:#ffdcc7;color:#38203a}
+.app-shell .booking-index button[aria-pressed=true] {background:#f0e6f5;border-inline-start-color:#8955a2}
+.app-shell .surface,.app-shell .desk-sheet {border-color:#ded7e3}
+.app-shell .page-heading {border-bottom:1px solid #dccfe3;padding-bottom:1rem}
+.app-shell .workspace-footer {border-top:1px solid #e1d7e4;color:#655768}
+.app-shell .workspace-content > * {animation:workspace-arrive .24s ease-out both}
+@keyframes workspace-arrive {from {opacity:.7;transform:translateY(4px)}to {opacity:1;transform:none}}
+.portal-access {background:radial-gradient(ellipse at 28% 50%,#593954,transparent 55%),linear-gradient(130deg,#1a1625,#282032 68%,#463049)}
+.portal-choice nav a {background:#231c2cca;transition:background .18s,transform .18s}
+.portal-choice nav a:hover {background:#3c304b;transform:translateX(2px)}
+.workspace-finder {display:grid;gap:.4rem;padding:.7rem 1rem;color:#f1e5fa;font-size:.84rem}
+.workspace-finder input {background:white;color:#241a2b;padding:.65rem;border-radius:.45rem;width:100%}
+.programme-guide {background:#302536;color:#fff4ef;padding:clamp(2rem,5vw,5rem) max(5vw,calc((100vw - 72rem)/2));display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.7rem,5vw,5rem)}
+.programme-guide h2 {font-size:clamp(2.5rem,5vw,4.8rem);line-height:1.02;margin:1rem 0 1.5rem}
+.programme-switch {display:grid;gap:.4rem}.programme-switch button {border-bottom:1px solid #77647e;padding:.7rem;text-align:left}
+.programme-switch button[aria-pressed=true] {background:#e9d6f5;color:#342238;border-radius:.4rem}
+.programme-guide article {padding:clamp(1.2rem,3vw,2rem);background:linear-gradient(125deg,#563849,#493351);border:1px solid #896682;border-radius:1rem;animation:workspace-arrive .3s ease-out}
+.programme-guide article h3 {font-size:1.55rem;font-weight:650}.programme-guide dt {color:#ffe0c9;font-weight:650;margin-top:.85rem}.programme-guide dd {line-height:1.5}.programme-guide a {display:inline-block;color:#ffe0c9;text-decoration:underline;margin-top:1rem}
+.planning-note,.explored-room-result {padding:1rem 1.3rem;border-left:4px solid #865b9e;background:#f0e6f8;color:#3f2b4b}
+.planning-note {max-width:70rem;margin:0 auto 2rem}
+@media(max-width:760px){.programme-guide {grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.app-shell .workspace-content > *,.programme-guide article {animation:none}.portal-choice nav a {transition:none}}
+.workspace-shortcuts {display:grid;gap:.35rem;padding:.6rem 1rem}.workspace-shortcuts p {font-size:.76rem;color:#ebdafa}.workspace-shortcuts a {display:flex;justify-content:space-between;padding:.58rem .75rem;border-radius:.4rem;background:#49394e;color:white;font-size:.9rem}
+.app-shell .plan-shelf,.app-shell .booking-index {background:#f5f0f7;border-color:#e0d5e5}
+.app-shell .shelf-item[aria-pressed=true] {border-color:#cdb9d9;box-shadow:inset 4px 0 #815598}
+.app-shell .desk-switch {background:#f1eaf3}.app-shell .desk-switch button[aria-pressed=true] {background:#4a315d;color:white}
+.app-shell .plan-brief>header,.app-shell .revenue-ledger {background:radial-gradient(ellipse at 93% 10%,#694259,transparent 70%),#2d2136}
+.app-shell .plan-brief>header h2,.app-shell .booking-brief h3,.app-shell .booking-desk .desk-heading h2 {font-family:"Segoe UI",Inter,sans-serif;font-weight:650;letter-spacing:-.045em}
+.app-shell .ledger-chart i {background:linear-gradient(0deg,#a588d9,#ffc6a9);transition:height .3s ease;transform-origin:bottom}
+.app-shell .ledger-chart span:not(.sr-only) {color:#f4e5f8;border-color:#ad93b5}
+.app-shell .ledger-total small,.app-shell .ledger-main button {color:#ffd8bb}
+.app-shell .view-tabs button,.app-shell .shelf-item,.app-shell .booking-index button {transition:background .15s,color .15s,box-shadow .15s}
+@media(prefers-reduced-motion:no-preference){
+  .app-shell [role=tabpanel]:not([hidden]),.app-shell .booking-brief,.app-shell .plan-brief {animation:workspace-arrive .2s ease-out}
+  .app-shell .ledger-chart i {animation:ledger-rise .35s ease-out}
+  @keyframes ledger-rise {from {transform:scaleY(.1)}to {transform:scaleY(1)}}
+}
+@media(prefers-reduced-motion:reduce){.app-shell :is(.ledger-chart i,.view-tabs button,.shelf-item,.booking-index button){transition:none}}
+.service-decision {display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;padding:1rem 1.3rem;background:var(--color-brand-wash);color:var(--color-brand-ink);border:1px solid var(--color-brand-border);border-inline-start:4px solid var(--color-brand-action);border-radius:.75rem}
+.service-decision>svg {width:1.5rem;height:1.5rem;color:var(--color-brand-action)}
+.service-decision div {flex:1 1 13rem}
+.service-decision p,.service-decision span {font-size:.83rem}
+.service-decision h2 {font-size:1.13rem;font-weight:700}
+.service-decision a svg {width:1rem;height:1rem}

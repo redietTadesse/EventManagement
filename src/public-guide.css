@@ -1,0 +1,122 @@
+.aicc-public {background:var(--color-brand-paper);color:#152e30}
+.aicc-public .public-header {background:#112b30;border-bottom:1px solid #ffffff24}
+.aicc-public .public-hero {display:grid;position:relative;isolation:isolate;max-width:none;width:100%;min-height:clamp(32rem,76svh,52rem);background:#122e33;align-content:end;color:white;overflow:hidden}
+.aicc-public .public-hero-photo {position:absolute;inset:0;z-index:-2}
+.aicc-public .public-hero-photo img {object-position:58% 45%;animation:venue-arrival 1.8s ease-out both}
+.aicc-public .public-hero-photo::after {content:'';position:absolute;inset:0;background:linear-gradient(90deg,#071c21ed,#0c2024ad 47%,transparent 87%),linear-gradient(0deg,#071c21a8,transparent 55%);pointer-events:none}
+.aicc-public .public-hero-photo figcaption {z-index:1;bottom:3.5rem;right:2vw}
+.aicc-public .public-hero-copy {grid-column:1/-1;width:min(100%,80rem);margin:auto;padding:4rem clamp(1.4rem,5vw,5rem) 6rem}
+.aicc-public .public-hero h1 {font:normal clamp(3rem,7.6vw,8rem)/.95 Georgia,serif;letter-spacing:-.065em;color:#fffaf0}
+.aicc-public .public-hero h1 em {color:#f3c487}
+.aicc-public .public-hero-copy>p,.aicc-public .public-hero-location {color:#f5eee1}
+.aicc-public .public-hero-actions .btn-primary {background:#ffd294;color:var(--color-brand-ink);border-color:#ffd294}
+.aicc-public .public-search-panel {border-radius:0;border-top-color:#c68b4c;background:var(--color-brand-paper)}
+.atlas-section {background:#122e32;color:#fcf5e7;padding:clamp(3rem,7vw,7rem) max(5vw,calc((100vw - 72rem)/2))}
+.atlas-inner {display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:clamp(2rem,5vw,6rem);align-items:center}
+.atlas-label {font-size:.75rem;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.atlas-intro h2,.organizer-library h2 {font:400 clamp(2.8rem,5vw,5.4rem)/1 Georgia,serif;letter-spacing:-.055em;margin:1rem 0 1.25rem}
+.atlas-intro h2 em {color:#f3c487}
+.atlas-intro>p:not(.atlas-label) {max-width:42ch;color:#d5e2df;line-height:1.65}
+.atlas-intro label {display:grid;gap:.4rem;margin-top:1.4rem;font-size:.85rem}
+.atlas-intro select {color:var(--color-brand-ink);background:#fffcf5;width:100%;border-radius:.3rem;padding:.7rem}
+.atlas-layouts,.library-filters {display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}
+.atlas-layouts button,.library-filters button {border:1px solid currentColor;border-radius:2rem;padding:.5rem .85rem;font-size:.88rem}
+.atlas-layouts button[aria-pressed=true] {background:#ffdcaa;color:#162f32}
+.atlas-intro a,.library-grid a {display:inline-block;text-decoration:underline;text-underline-offset:.25rem;font-weight:600;padding-block:.5rem}
+.atlas-drawing {background:#eff2e9;color:#173e42;border-radius:1rem;overflow:hidden;box-shadow:0 16px 55px #071c2240}
+.atlas-drawing header,.atlas-drawing figcaption {padding:1.3rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}
+.atlas-drawing header {border-bottom:1px solid #cbd8ce}
+.atlas-model {background-color:#e4ebe2;background-image:linear-gradient(#7a98851f 1px,transparent 1px),linear-gradient(90deg,#7a98851f 1px,transparent 1px);background-size:22px 22px;padding:1rem;animation:plan-in .4s ease-out}
+.atlas-model svg {width:100%;height:clamp(13rem,24vw,22rem)}
+.atlas-drawing figcaption strong {font:400 clamp(2.6rem,5vw,4.6rem)/1 Georgia,serif}.atlas-drawing figcaption span,.atlas-drawing small {display:block;font-size:.78rem}
+.atlas-drawing figcaption p {max-width:26ch;font-size:.9rem}.atlas-drawing small {margin-top:.5rem}
+.organizer-library {background:var(--color-brand-wash);padding:clamp(3rem,6vw,6rem) max(5vw,calc((100vw - 72rem)/2));color:var(--color-brand-ink)}
+.library-filters button[aria-pressed=true] {background:var(--color-brand-ink);color:#fff}
+.library-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin-top:1.7rem}
+.library-grid article {display:flex;flex-direction:column;align-items:start;background:var(--color-brand-paper);border-top:5px solid #956443;padding:1.4rem}
+.library-grid article:nth-child(even) {border-color:#47716a}.library-grid h3 {font:400 1.65rem/1.1 Georgia,serif;margin:1rem 0}.library-grid p {font-size:.93rem;line-height:1.55;margin-bottom:1.2rem}.library-grid a {font-size:.87rem;margin-top:auto}
+@keyframes venue-arrival {from {transform:scale(1.06)} to {transform:scale(1)}}
+@keyframes plan-in {from {opacity:.65;transform:translateY(4px)} to {opacity:1;transform:translateY(0)}}
+@media(max-width:850px){.library-grid {grid-template-columns:repeat(2,minmax(0,1fr))}.atlas-inner {grid-template-columns:1fr}.aicc-public .public-hero-copy {padding-bottom:4rem}.aicc-public .public-hero-photo figcaption {bottom:.65rem}}
+@media(max-width:540px){.library-grid {grid-template-columns:1fr}.aicc-public .public-hero {min-height:29rem}.atlas-drawing figcaption {align-items:start}.aicc-public .public-hero-photo::after {background:linear-gradient(0deg,#071c21f5,#071c2180)}}
+@media(prefers-reduced-motion:reduce){.aicc-public .public-hero-photo img,.atlas-model {animation:none}}
+/* Public venue identity */
+.festival-site {--ink:#211c36;--lavender:#c7b9ff;--acid:#e7ff68;--violet:#5640ac;background:#f6f4fb;color:var(--ink);font-family:Inter,"Segoe UI",sans-serif}
+.festival-site .public-header {background:var(--ink);color:white;border:0}
+.festival-site .public-header-inner {min-height:64px}
+.festival-site .atlas-section {background:var(--lavender);color:var(--ink);padding:clamp(2.4rem,5vw,5rem) max(5vw,calc((100vw - 78rem)/2));overflow:hidden}
+.festival-site .atlas-inner {grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(2rem,6vw,7rem)}
+.festival-site .atlas-label {letter-spacing:.1em;font-weight:750;font-size:.75rem}
+.festival-site h1,.festival-site h2,.festival-site .library-grid h3,.festival-site .atlas-drawing figcaption strong {font-family:Inter,"Segoe UI",sans-serif;font-style:normal;font-weight:780;letter-spacing:-.055em}
+.festival-site .atlas-intro h1 {font-size:clamp(4.5rem,8.2vw,8.5rem);line-height:.83;margin:1.3rem 0 1.55rem;color:var(--ink)}
+.festival-site .atlas-intro h1 em {font-style:normal;color:#503795}
+.festival-site .atlas-intro>p {color:var(--ink)}
+.festival-site .atlas-intro select {background:#efeaff;border:1px solid #70668a;border-radius:0;color:var(--ink)}
+.festival-site .atlas-layouts {gap:.4rem}
+.festival-site .atlas-layouts button {color:var(--ink);border-color:#6b5b95}
+.festival-site .atlas-layouts button[aria-pressed=true],.festival-site .library-filters button[aria-pressed=true] {background:var(--ink);color:white}
+.festival-site .atlas-intro a,.festival-site .btn-primary {background:var(--acid);color:var(--ink);border:1px solid var(--ink);border-radius:2rem;padding:.75rem 1.25rem;text-decoration:none}
+.festival-site .atlas-drawing {border:1px solid var(--ink);border-radius:1.25rem;box-shadow:7px 8px 0 #736397;background:#252037;color:white}
+.festival-site .atlas-drawing header {border-color:#52475f;font-size:1rem}.festival-site .atlas-drawing header span {font-variant-numeric:tabular-nums;color:#dfd5ff}
+.festival-site .atlas-model {background-color:#a193cc;background-image:radial-gradient(#625778 1px,transparent 1.4px),radial-gradient(ellipse at 50% 45%,#f3edff,#a193cc 80%);background-size:15px 15px,100% 100%;padding:0}
+.festival-site .atlas-model svg {height:clamp(15rem,25vw,24rem);filter:drop-shadow(0 10px 12px #534a7850)}
+.orbit-control {display:flex;align-items:center;gap:1rem;padding:.8rem 1.35rem;color:white;font-size:.8rem;border-bottom:1px solid #51475e}
+.orbit-control input {accent-color:var(--acid);width:min(16rem,60%);cursor:ew-resize}
+.festival-site .atlas-drawing figcaption {background:#252037;color:white}.festival-site .atlas-drawing figcaption strong {color:var(--acid)}
+.festival-site .public-search {margin:0 auto;padding-block:clamp(2rem,4vw,4rem)}
+.festival-site .public-search-panel {border:0;border-left:5px solid var(--violet);background:white;box-shadow:none}
+.festival-site #booking,.festival-site #visit {background:#ece7fb;border-color:#d7d0ec}
+.festival-site .organizer-library {background:var(--ink);color:#faf8ff}
+.festival-site .organizer-library em {color:var(--lavender);font-style:normal}
+.festival-site .library-filters button[aria-pressed=true] {background:var(--acid);color:var(--ink)}
+.festival-site .library-grid article {background:#393149;border:0;border-radius:.85rem;color:white}
+.festival-site .library-grid article:nth-child(even) {background:#473858}
+.festival-site .library-grid article a {color:var(--acid)}
+.festival-site .venue-panorama {margin:0;position:relative;background:var(--ink);color:white}
+.venue-panorama img {width:100%;height:clamp(15rem,34vw,34rem);object-fit:cover}
+.venue-panorama figcaption {padding:.85rem 5vw;display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;font-size:.8rem}
+.venue-panorama a {text-decoration:underline}
+.festival-site footer {background:var(--ink)}
+.festival-site :is(button,a,input,select):focus-visible {outline:3px solid #ee6e30;outline-offset:3px}
+@media(max-width:850px){.festival-site .atlas-inner {grid-template-columns:1fr}.festival-site .atlas-intro h1 br {display:none}.festival-site .atlas-intro h1 em::before {content:' '}.festival-site .atlas-intro h1 {font-size:clamp(3.3rem,10vw,5rem)}}
+/* The public programme uses luminous lines against a midnight background. */
+.festival-site {--ink:#171520;--acid:#ffc09f;--lavender:#dfbcff;--violet:#6144a4;background:var(--color-brand-paper)}
+.festival-site .public-header {background:#121119;border-bottom:1px solid #ffffff20}
+.festival-site .atlas-section {position:relative;isolation:isolate;background:radial-gradient(ellipse at 70% 62%,#462d59 0,transparent 56%),#13121c;color:#fff9f2;padding-block:clamp(3rem,7vw,7.6rem)}
+.venue-light-field {position:absolute;inset:0;width:100%;height:100%;z-index:-2;pointer-events:none}
+.festival-site .atlas-section::before {content:'';position:absolute;inset:0;background:linear-gradient(90deg,#13121cf2,#13121caa 28%,transparent 65%);z-index:-1}
+.festival-site .atlas-intro>p,.festival-site .atlas-intro label {color:#eee8f4}
+.festival-site .atlas-intro .atlas-label {color:#e3bdff;letter-spacing:.17em}
+.festival-site .atlas-intro h1 {font-family:"Arial Black",Arial,sans-serif;font-weight:900;font-size:clamp(4.7rem,8.3vw,8.9rem);letter-spacing:-.085em;color:#fff8f1;margin-bottom:1.55rem;line-height:.87}
+.festival-site .atlas-intro h1 em {color:#ffc6b2;background:linear-gradient(100deg,#c2a0ff,#ffc4ad 80%);background-clip:text;-webkit-text-fill-color:transparent}
+.festival-site .atlas-intro select {background:#221d2e;color:#fff8f3;border-color:#8a799b;border-radius:.55rem}
+.festival-site .atlas-layouts button {color:#eee6f6;background:#211b2b;border-color:#766780;transition:background .2s,transform .2s}
+.festival-site .atlas-layouts button[aria-pressed=true] {color:#201322;background:#eed6fc;border-color:#eed6fc}
+.festival-site .atlas-intro a {background:#ffe1d1;border-color:transparent;padding:.82rem 1.4rem}
+.festival-site .atlas-drawing {background:linear-gradient(140deg,#282236ed,#2d223cce 60%,#191622ef);color:white;border:1px solid #ae92c568;border-radius:1.5rem;box-shadow:0 28px 80px -18px #080510aa,inset 0 1px #ffffff24;overflow:hidden}
+.festival-site .atlas-drawing header {padding:1.3rem 1.6rem;border:0}.festival-site .atlas-drawing header strong {font-size:1.22rem;letter-spacing:-.035em}
+.festival-site .atlas-model {background:radial-gradient(ellipse at 52% 64%,#f3bdcf58 0,#ad78ea28 38%,transparent 70%);position:relative;isolation:isolate}
+.festival-site .atlas-model::before {content:'';position:absolute;inset:5% 4%;z-index:-1;background-image:linear-gradient(#c1a5dd35 1px,transparent 1px),linear-gradient(90deg,#c1a5dd35 1px,transparent 1px);background-size:22px 22px;transform:perspective(300px) rotateX(53deg);mask-image:radial-gradient(ellipse,#000 0,transparent 72%)}
+.festival-site .atlas-model svg {filter:drop-shadow(0 13px 12px #100b1fe6)}
+.festival-site .atlas-drawing figcaption {background:transparent;border-top:1px solid #ffffff24;padding-inline:1.6rem}
+.festival-site .atlas-drawing figcaption strong {font-variant-numeric:tabular-nums;color:#ffcfb7}
+.festival-site .orbit-control {border:0;color:#e1d1ed}
+.festival-site #booking {background:#ece6f3}.festival-site #booking li {background:transparent;border:0;border-radius:0;border-top:2px solid #87739d;padding-left:0}
+.festival-site #venues ul>li {background:#fffaf6;border-color:#d6c9d8;transition:transform .28s ease}
+.festival-site .organizer-library {background:#191520}
+.festival-site .library-grid article {background:linear-gradient(155deg,#422e51,#271f32);border:1px solid #675071;transition:transform .26s ease,background .26s}
+.festival-site .library-grid article:nth-child(even) {background:linear-gradient(155deg,#4a3543,#2c242c)}
+.festival-site .library-grid h3 {font-size:clamp(1.45rem,2vw,2.1rem)}
+.festival-site #visit {background:var(--color-brand-paper)}
+@media(hover:hover){.festival-site .library-grid article:hover,.festival-site #venues ul>li:hover {transform:translateY(-5px)}.festival-site .atlas-layouts button:hover {transform:translateY(-2px)}}
+@media(max-width:850px){.festival-site .atlas-intro h1 {font-size:clamp(3.3rem,10vw,5.5rem)}.festival-site .atlas-section::before {background:linear-gradient(180deg,#13121cdd,transparent)}}
+@media(prefers-reduced-motion:reduce){.festival-site *, .festival-site *::before {animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.atlas-intro .atlas-guests {margin:.9rem 0 1.15rem}
+.atlas-intro .atlas-guests input {color:#241b2d;background:#fffaff;border:1px solid #ad94bb;border-radius:.55rem;max-width:23rem}
+.atlas-fit {padding:1rem 1.6rem 1.4rem;border-top:1px solid #ffffff2b;background:#251c30;color:white;font-size:.9rem}
+.atlas-fit strong {color:#ffceb6}.atlas-fit small {display:block;color:#ddcfe5;margin-top:.55rem}
+.atlas-fill {height:.38rem;background:#514359;border-radius:1rem;overflow:hidden;margin:.65rem 0}
+.atlas-fill i {display:block;height:100%;background:linear-gradient(90deg,#ac86da,#ffd0b9);transition:width .28s ease}
+.atlas-fit button {padding:.45rem .55rem;text-decoration:underline;text-underline-offset:.2rem;color:#ffddca}
+.fit-options {display:flex;align-items:center;flex-wrap:wrap;gap:.2rem}
+@media(prefers-reduced-motion:reduce){.atlas-fill i {transition:none}}

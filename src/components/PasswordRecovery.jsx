@@ -27,7 +27,7 @@ export default function PasswordRecovery({ reset = false }) {
     } catch (err) { setError(err.response?.data?.message || 'Could not complete this request. Please try again.'); }
     finally { setBusy(false); }
   }
-  return <main className="flex min-h-screen items-center justify-center bg-[#f2f5f0] p-5"><section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
+  return <main className="flex min-h-screen items-center justify-center bg-brand-paper p-5"><section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
     <Link to="/" className="text-sm font-semibold tracking-widest text-emerald-900">AICC</Link>
     <h1 className="mt-7 text-2xl font-semibold">{reset ? 'Choose a new password' : 'Forgot your password?'}</h1>
     <p className="mb-6 mt-3 text-sm leading-relaxed text-slate-600">{reset ? 'This link works once and expires after 30 minutes. Your older sign-in sessions will end when the password changes.' : 'Enter your account’s email address. If it belongs to an active account, we’ll send a link to reset your password.'}</p>

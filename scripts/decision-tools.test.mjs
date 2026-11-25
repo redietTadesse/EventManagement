@@ -17,6 +17,8 @@ globalThis.addEventListener = dom.window.addEventListener.bind(dom.window);
 globalThis.removeEventListener = dom.window.removeEventListener.bind(dom.window);
 // jsdom has no layout engine; resize observations are outside these interaction checks.
 globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+// Decorative canvas drawing is outside the scope of these workflow checks.
+dom.window.HTMLCanvasElement.prototype.getContext = () => null;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 dom.window.scrollTo = () => {};
@@ -120,7 +122,10 @@ test('a visitor carries venue search criteria through client sign-in', async () 
     window.history.replaceState({}, '', '/');
     render(h(App));
     await user.type(screen.getByLabelText('Expected attendees'), '140');
-    await user.selectOptions(screen.getByLabelText('Seating setup'), 'CLASSROOM');
+    await user.selectOptions(screen.getByLabelText('Explore a room'), '4');
+    await user.click(screen.getByRole('button', {name:'Classroom'}));
+    await user.click(screen.getByRole('link', {name:/Plan with this layout/}));
+    assert.equal(screen.getByLabelText('Seating setup').value, 'CLASSROOM');
     await user.click(screen.getByRole('button', {name:'Find venues'}));
     assert.equal(window.location.pathname, '/login/client');
     await user.type(await screen.findByLabelText('Username'), 'democlient');
@@ -128,6 +133,7 @@ test('a visitor carries venue search criteria through client sign-in', async () 
     await user.click(screen.getByRole('button', {name:/^sign in$/i}));
     await waitFor(() => assert.equal(window.location.pathname, '/client/venues'));
     const query = new URLSearchParams(window.location.search);
+    assert.equal(query.get('exploredRoom'), 'Meeting Room 03');
     assert.equal(query.get('attendees'), '140');
     assert.equal(query.get('tableSetup'), 'CLASSROOM');
   } finally { authApi.defaults.adapter = oldAuth; }
@@ -170,6 +176,7 @@ function openWorkspace(role, data, path = '/' + role.toLowerCase() + '/dashboard
       return { data: onWrite(config), status:200, headers:{}, config };
     }
     const result = fixtures[config.url];
+    if (result instanceof Error) throw result;
     return { data: structuredClone(result ?? []), status: 200, statusText: 'OK', headers: {}, config };
   };
   localStorage.setItem('token', 'local-ui-fixture');
@@ -511,4 +518,72 @@ test('a competing claim refreshes the desk with the winning owner', async () => 
   await user.selectOptions(screen.getByLabelText('Show work for'), 'all');
   assert.ok(await screen.findByRole('heading', {name:'Other lead is handling this request'}));
   assert.equal(screen.queryByRole('button', {name:'Claim this work'}), null);
+});
+
+test('visitors compare published room capacities and filter organizer resources before signing in', async () => {
+  const user = userEvent.setup();
+  window.history.replaceState({}, '', '/');
+  render(h(App));
+  await user.selectOptions(await screen.findByLabelText('Explore a room'), '4');
+  await user.click(within(screen.getByRole('group', { name: 'Compare room layouts' })).getByRole('button', { name: 'Classroom' }));
+  assert.ok(screen.getByText('132'));
+  await user.click(screen.getByRole('button', { name: 'Exhibitors' }));
+  assert.ok(screen.getByRole('link', { name: /Read the exhibitor manual/ }));
+  assert.equal(screen.queryByRole('link', { name: /Read the summit guide/ }), null);
+});
+
+test('a visitor applies a meeting brief and sees the three-day venue window', async () => {
+  const user = userEvent.setup();
+  window.history.replaceState({}, '', '/');
+  render(h(App));
+  await user.click(screen.getByRole('link',{name:/Use this event format/}));
+  assert.equal(screen.getByLabelText('Event type').value,'meeting');
+  await user.type(screen.getByLabelText('Start date (optional)'),date);
+  await screen.findByText(/Estimated venue window:.*3 days/);
+});
+
+test('coordinator page search opens competing proposals from another workspace view', async () => {
+  const user = userEvent.setup();
+  openWorkspace('COORDINATOR', {});
+  await user.click(await screen.findByRole('button',{name:/All pages/}));
+  await user.type(screen.getByRole('searchbox',{name:'Find a page'}),'competing');
+  await user.click(screen.getByRole('link',{name:/Compare competing proposals/}));
+  assert.equal(window.location.search,'?view=overlaps');
+  assert.equal(screen.getByRole('tab',{name:'Competing proposals'}).getAttribute('aria-selected'),'true');
+});
+
+test('the public planner recovers a room shortfall and transfers the fitting plan', async () => {
+  const user = userEvent.setup();
+  window.history.replaceState({}, '', '/');
+  render(h(App));
+  await user.selectOptions(await screen.findByLabelText('Explore a room'),'4');
+  await user.click(screen.getByRole('button',{name:'Classroom'}));
+  await user.type(screen.getByLabelText('How many guests are coming?'),'140');
+  assert.ok(screen.getByText('8 seats short'));
+  assert.ok(screen.getByRole('button',{name:'Try theatre'}));
+  await user.click(screen.getByRole('button',{name:/View smallest fit · Meeting Room 05/}));
+  assert.ok(screen.getByText('60 seats to spare'));
+  await user.click(screen.getByRole('link',{name:/Plan with this layout/}));
+  assert.equal(screen.getByLabelText('Expected attendees').value,'140');
+  assert.equal(screen.getByLabelText('Seating setup').value,'CLASSROOM');
+});
+
+test('an unresolved vendor service surfaces ahead of the booking desk and opens the affected event', async () => {
+  openWorkspace('COORDINATOR', {
+    '/coordinator/action-required': {openAssignments:[{id:8,eventId:41,eventName:'Education Summit',serviceCategory:'Photography'}]},
+    '/inquiries':[{...inquiry,status:'INQUIRY_SUBMITTED'}],
+  });
+  const decision = within(await screen.findByRole('region',{name:'Service needing coordinator action'}));
+  assert.ok(decision.getByText('Education Summit'));
+  assert.ok(decision.getByText('Photography offer unclaimed'));
+  assert.equal(decision.getByRole('link',{name:'Review service offers'}).getAttribute('href'),'/coordinator/events/41?tab=vendors');
+});
+
+test('a failed follow-up source does not show a clear queue', async () => {
+  openWorkspace('COORDINATOR', {
+    '/coordinator/action-required': new Error('Unavailable'),
+    '/assignments/open': new Error('Unavailable'),
+  }, '/coordinator/dashboard?view=work');
+  assert.ok(await screen.findByRole('heading',{name:'Work is temporarily unavailable'}));
+  assert.equal(screen.queryByText('No work waiting in this queue'),null);
 });

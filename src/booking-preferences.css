@@ -9,14 +9,14 @@
 .vendor-choices fieldset {border:0;padding:0}
 .vendor-choices legend {font-weight:650;font-size:.85rem;margin-bottom:.35rem}
 .vendor-choices label {display:inline-flex;align-items:center;gap:.4rem;padding:.4rem .65rem;margin:0 .4rem .3rem 0;border:1px solid #cacccd;border-radius:.4rem;font-size:.85rem;cursor:pointer}
-.vendor-choices label:has(:checked) {background:#e3eeeb;border-color:#60837d}
-.vendor-choices input {width:1rem;height:1rem;accent-color:#37675f}
-.preference-summary,.crew-action {margin:1rem 0;padding:1rem 1.1rem;background:#f5f4ee;border-left:3px solid #8e7252;border-radius:0 .5rem .5rem 0}
+.vendor-choices label:has(:checked) {background:var(--color-brand-wash);border-color:var(--color-brand-action)}
+.vendor-choices input {width:1rem;height:1rem;accent-color:var(--color-brand-action)}
+.preference-summary,.crew-action {margin:1rem 0;padding:1rem 1.1rem;background:var(--color-brand-paper);border-left:3px solid var(--color-brand-action);border-radius:0 .5rem .5rem 0}
 .preference-summary h3,.preference-summary h2,.crew-action h2 {font-size:1.05rem;font-weight:650}
 .preference-summary p,.crew-action p {margin:.35rem 0;font-size:.87rem;line-height:1.55}
 .preference-summary small,.seating-preview>small {color:#56616a;font-size:.76rem}
-.client-room-pick {display:inline-block;color:#255a50;font-size:.78rem}
-.seating-preview {margin-top:1rem;border:1px solid #cfc7bb;border-radius:.75rem;overflow:hidden;background:#f8f5ef;padding:1rem;color:#243442;min-width:0}
+.client-room-pick {display:inline-block;color:var(--color-brand-action);font-size:.78rem}
+.seating-preview {margin-top:1rem;border:1px solid var(--color-brand-border);border-radius:.75rem;overflow:hidden;background:var(--color-brand-paper);padding:1rem;color:#243442;min-width:0}
 .seating-preview figcaption,.seating-controls,.crew-action {display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
 .seating-preview figcaption small,.crew-brief header small {font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:#52606b;font-weight:650}
 .seating-preview figcaption h3 {font:1.55rem Georgia,serif}

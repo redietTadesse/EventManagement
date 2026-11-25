@@ -1,3 +1,4 @@
+import VenueLightField from '../components/VenueLightField';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRightIcon, CalendarDaysIcon, PlusIcon } from '@heroicons/react/24/outline';
@@ -35,7 +36,7 @@ export default function ClientDashboard() {
   const failed = inquiries.error || events.error;
   const firstVisit = !loading && !failed && !plans.length;
   return <Layout title="My event plans"><div className="space-y-6">
-    <header className="desk-mast"><div><h1>My event plans</h1><span>{currentUser?.fullName || currentUser?.username}</span></div>
+    <header className="desk-mast"><VenueLightField/><div><h1>My event plans</h1><span>{currentUser?.fullName || currentUser?.username}</span></div>
       <div className="mast-actions"><Link className="btn-outline" to="/client/venues">Explore venues</Link><Link className="btn-primary" to="/client/new-inquiry"><PlusIcon/>Plan an event</Link></div></header>
     {failed && <p role="alert" className="desk-notice">Some of your plans could not be loaded. <button onClick={() => { inquiries.reload(); events.reload(); }}>Try again</button></p>}
     {loading ? <p role="status" className="desk-notice">Loading your plans…</p> : !firstVisit && <section className="plan-library" aria-label="Your plans">

@@ -2,10 +2,10 @@ import { EVENT_TYPES, MAX_ATTENDEES, tomorrowDateKey } from '../utils/eventPlan'
 
 const labelStyle = 'grid gap-1.5 text-sm font-semibold';
 
-export default function EventPlanForm({ plan, dateRequired = false, className, onSearch, children }) {
+export default function EventPlanForm({ plan, dateRequired = false, className, onSearch, onPlanChange, formRef, children }) {
   const earliestDate = tomorrowDateKey();
 
-  return <form className={className}
+  return <form ref={formRef} className={className}
     onSubmit={event => {
       event.preventDefault();
       const values = new FormData(event.currentTarget);
@@ -18,7 +18,10 @@ export default function EventPlanForm({ plan, dateRequired = false, className, o
       values.set('attendees', String(event.currentTarget.elements.namedItem('attendees').valueAsNumber));
       onSearch(new URLSearchParams([...values].filter(([, value]) => value)));
     }}
-    onChange={event => event.currentTarget.elements.namedItem('endDate').setCustomValidity('')}>
+    onChange={event => {
+      event.currentTarget.elements.namedItem('endDate').setCustomValidity('');
+      onPlanChange?.(Object.fromEntries(new FormData(event.currentTarget)));
+    }}>
     <label className={labelStyle}>
       Event type
       <select name="eventType" defaultValue={plan.eventType} className="w-full font-normal">

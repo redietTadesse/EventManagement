@@ -1,3 +1,4 @@
+import VenueLightField from '../components/VenueLightField';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
@@ -98,7 +99,7 @@ export default function VendorDashboard() {
   const rows = view === 'offers' ? responseQueue : upcoming;
   const selected = rows.find(item => item.id === selectedId) || rows[0];
   return <Layout title="Vendor overview"><div className="space-y-6">
-    <header className="desk-mast"><div><p>Vendor workspace</p><h1>Offers & commitments</h1><span>{profile?.companyName || currentUser?.fullName}</span></div>
+    <header className="desk-mast"><VenueLightField/><div><p>Vendor workspace</p><h1>Offers & commitments</h1><span>{profile?.companyName || currentUser?.fullName}</span></div>
       <div className="mast-actions"><Link className="btn-primary" to="/vendor/open">Find open requests <ArrowRightIcon/></Link></div></header>
     {isFlagged && <div className="rounded-xl border border-rose-300 bg-rose-50 p-5" role="alert"><h2 className="font-semibold text-rose-900">Your vendor account needs review</h2><p className="mt-2 text-sm text-rose-800">Your account has confirmed reports of missed events. AICC will review these before deciding on any account changes. Contact AICC with supporting information if a report is incorrect.</p></div>}
     {(profileError || assignmentsError) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">

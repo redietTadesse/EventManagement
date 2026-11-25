@@ -53,9 +53,9 @@ export function buildAttentionItems(exceptions = {}, inquiries = []) {
       .filter((event) => !assignmentsByEvent.has(String(event.id)))
       .map((event) => ({ id: `event:${event.id}:intervention`, title: event.name, detail: 'Coordinator intervention required', href: `/coordinator/events/${event.id}`, priority: 0, time: event.updatedAt || event.createdAt })),
     ...openAssignments.map((assignment) => ({ id: `assignment:${assignment.id}`, title: assignment.serviceCategory || 'Open vendor assignment', detail: assignment.eventName || 'Unclaimed assignment', href: `/coordinator/events/${assignment.eventId}`, priority: 0, time: assignment.createdAt })),
-    ...(exceptions.staleProposals || []).map((inquiry) => ({ id: `inquiry:${inquiry.id}:stale-proposal`, title: inquiry.clientName || inquiry.eventType, detail: 'Proposal awaiting follow-up', href: `/coordinator/inquiries/${inquiry.id}`, priority: 1, time: inquiry.updatedAt || inquiry.createdAt })),
+    ...(exceptions.staleProposals || []).map((inquiry) => ({ id: `inquiry:${inquiry.id}:stale-proposal`, title: inquiry.eventName || inquiry.clientName || inquiry.eventType, detail: 'Proposal awaiting follow-up', href: `/coordinator/inquiries/${inquiry.id}`, priority: 1, time: inquiry.updatedAt || inquiry.createdAt })),
     ...inquiries.filter((inquiry) => inquiry.status === 'INQUIRY_SUBMITTED')
-      .map((inquiry) => ({ id: `inquiry:${inquiry.id}`, title: inquiry.clientName, detail: `${inquiry.eventType} inquiry awaiting review`, href: `/coordinator/inquiries/${inquiry.id}`, priority: 2, time: inquiry.createdAt })),
+      .map((inquiry) => ({ id: `inquiry:${inquiry.id}`, title: inquiry.eventName || inquiry.clientName, detail: `${inquiry.eventType} inquiry awaiting review`, href: `/coordinator/inquiries/${inquiry.id}`, priority: 2, time: inquiry.createdAt })),
   ];
   const unique = new Map();
   for (const item of items.sort((left, right) => left.priority - right.priority)) {

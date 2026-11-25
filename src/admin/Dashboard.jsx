@@ -1,3 +1,4 @@
+import VenueLightField from '../components/VenueLightField';
 import UnmetDemand from './UnmetDemand';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
   }, []);
   useEffect(() => { if (tab === 'administration') load(); }, [tab, load]);
   return <Layout title="Management overview"><div className="space-y-6">
-    <header className="desk-mast"><div><p>Management workspace</p><h1>Business overview</h1><span>Payments, booking progress and demand for AICC venues</span></div></header>
+    <header className="desk-mast"><VenueLightField/><div><p>Management workspace</p><h1>Business overview</h1><span>Payments, booking progress and demand for AICC venues</span></div></header>
     <ViewTabs id="management" label="Management views" value={tab} onChange={setTab} items={[
       ['business','Business overview'], ['revenue','Revenue'], ['bookings','Bookings & team'], ['demand','Unmet requests'], ['administration','Administration'],
     ]} />

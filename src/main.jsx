@@ -12,3 +12,5 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
+import './public-guide.css';
+import './portal-theme.css';

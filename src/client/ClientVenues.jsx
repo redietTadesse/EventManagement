@@ -13,7 +13,7 @@ import { seatingCapacity } from '../utils/proposalBuilder';
 import VenueComparisonDialog from '../components/VenueComparisonDialog';
 const seats = (venue, setup) => !setup || setup === 'UNDECIDED' ? venue.capacity : seatingCapacity(venue, setup);
 
-function VenueResults({ query, plan }) {
+function VenueResults({ query, plan, exploredRoom }) {
   const [compared, setCompared] = useState([]);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const navigate = useNavigate();
@@ -40,6 +40,9 @@ function VenueResults({ query, plan }) {
         {plan.attendees && ` · ${Number(plan.attendees).toLocaleString()} attendees`}
       </p>
     </div>
+    {exploredRoom && <p className="explored-room-result">{venues.some(venue => venue.name === exploredRoom)
+      ? exploredRoom + (plan.date ? ' matches your dates and requirements.' : ' matches this search. Add dates to check availability.')
+      : exploredRoom + ' is outside the current results. Review the matching spaces below or change your criteria.'}</p>}
     {venues.length ? <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {venues.map(venue => <li key={venue.id} className="venue-explore-card surface flex flex-col gap-3 p-5">
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-indigo-50 text-indigo-700"><BuildingOffice2Icon className="h-6 w-6" aria-hidden="true" /></span>
@@ -86,12 +89,12 @@ export default function ClientVenues() {
       <PageHeader eyebrow="Client workspace" title="Find a space that fits your event."
         subtitle="Check your dates, compare up to three rooms, and keep your preferred space when you start an inquiry."
         action={<Link className="btn-primary" to={`/client/new-inquiry?${query}`}>Continue to inquiry <ArrowRightIcon className="h-4 w-4" aria-hidden="true" /></Link>} />
-      <EventPlanForm key={query} plan={plan} dateRequired onSearch={setParams}
+      <EventPlanForm key={query} plan={plan} dateRequired onSearch={next => { if (params.has('exploredRoom')) next.set('exploredRoom', params.get('exploredRoom')); setParams(next); }}
         className="surface grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3 xl:items-end">
         <button className="btn-primary" type="submit">Check availability</button>
       </EventPlanForm>
       <p className="text-sm text-slate-600">Availability can change until a coordinator verifies payment and reserves the venue. Choosing a space adds it as a preference in your inquiry.</p>
-      <VenueResults key={key} plan={plan} query={query} />
+      <VenueResults exploredRoom={params.get('exploredRoom')} key={key} plan={plan} query={query} />
     </div>
   </Layout>;
 }

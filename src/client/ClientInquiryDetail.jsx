@@ -132,10 +132,10 @@ export default function ClientInquiryDetail() {
           <StatusBadge status={status} />
         </div>
 
-        <section aria-labelledby="request-progress" className="overflow-hidden rounded-2xl border border-[#38605b] bg-[#142f32] text-white">
+        <section aria-labelledby="request-progress" className="overflow-hidden rounded-2xl border border-brand-border bg-brand-ink text-white">
           <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-7">
             <div className="max-w-lg">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[#efd392]">Your booking</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-brand-peach">Your booking</p>
               <h2 id="request-progress" className="mt-2 font-serif text-3xl">{progressTitle}</h2>
               <p className="mt-2 text-sm leading-relaxed text-emerald-50">{progressDescription}</p>
             </div>

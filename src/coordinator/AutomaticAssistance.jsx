@@ -24,13 +24,13 @@ export default function AutomaticAssistance() {
       <PageHeader eyebrow="Your work" title="Work the system does for you"
         subtitle="See the work the system has taken care of for your inquiries and events."
         action={<button type="button" className="btn-outline" onClick={resource.reload}><ArrowPathIcon className="h-4 w-4" />Refresh</button>} />
-      <section className="overflow-hidden rounded-2xl bg-[#173b3b] p-6 text-white sm:p-8">
+      <section className="overflow-hidden rounded-2xl bg-brand-ink p-6 text-white sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-5">
           <div className="max-w-xl"><p className="text-xs font-semibold uppercase tracking-widest text-emerald-200">Working in the background</p>
             <h2 className="mt-2 font-serif text-2xl">Vendor offers, booking reminders, preparation plans.</h2>
             <p className="mt-3 text-sm leading-relaxed text-emerald-50">You stay in control of decisions. Open any recorded action to see the related booking and decide what to do next.</p>
           </div>
-          <Link className="rounded-lg bg-white px-4 py-3 text-sm font-semibold text-[#173b3b] hover:bg-emerald-50" to="/coordinator/follow-ups">Manage booking reminders</Link>
+          <Link className="rounded-lg bg-white px-4 py-3 text-sm font-semibold text-brand-ink hover:bg-emerald-50" to="/coordinator/follow-ups">Manage booking reminders</Link>
         </div>
       </section>
 

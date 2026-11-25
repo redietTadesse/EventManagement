@@ -1,3 +1,4 @@
+import VenueLightField from '../components/VenueLightField';
 import ProposalOverlaps from './ProposalOverlaps';
 import BookingJourneyBoard from './BookingJourneyBoard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -84,6 +85,8 @@ export default function CoordinatorDashboard() {
   const attention = useMemo(() => buildAttentionItems(data.exceptions || {}, data.inquiries), [data.exceptions, data.inquiries]);
   const queue = buildOperationsQueue(attention, data.events);
 
+  const urgentService = queue.find(item => item.priority === 0);
+
   const events = data.events.filter((event) => eventFilter === 'ALL' || event.status === eventFilter);
   const nearestEvents = [...data.events].sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')).slice(0, 3);
 
@@ -95,7 +98,7 @@ export default function CoordinatorDashboard() {
   ];
 
   return <Layout title="Operations overview"><div className="space-y-6">
-    <header className="desk-mast booking-mast"><div><h1>Event operations</h1><span>{mine ? `My workload · ${mine.inquiries} inquiries and ${mine.events} events` : 'Bookings, venue dates and service commitments'}</span></div>
+    <header className="desk-mast booking-mast"><VenueLightField/><div><h1>Event operations</h1><span>{mine ? `My workload · ${mine.inquiries} inquiries and ${mine.events} events` : 'Bookings, venue dates and service commitments'}</span></div>
       <div className="mast-actions"><Link to="/coordinator/venue-schedule" className="btn-primary"><CalendarDaysIcon/>Venue schedule</Link>
         <button type="button" onClick={refresh} disabled={loading} className="btn-outline"><ArrowPathIcon className={loading ? 'animate-spin' : ''}/>Refresh</button>
         {workload.error && <button type="button" onClick={workload.reload}>Retry workload</button>}</div>
@@ -107,6 +110,12 @@ export default function CoordinatorDashboard() {
     {view === 'overlaps' && <section role="tabpanel" id="operations-panel-overlaps" aria-labelledby="operations-tab-overlaps"><ProposalOverlaps inquiries={data.inquiries} loaded={loaded.inquiries} error={sectionErrors.inquiries} refresh={refresh}/></section>}
     {view === 'work' && <section role="tabpanel" id="operations-panel-work" aria-labelledby="operations-tab-work" className="space-y-6"><OperationsQueue items={queue} loading={loading} incomplete={Boolean(sectionErrors.events || sectionErrors.exceptions || sectionErrors.inquiries)} /><IssueAttention /></section>}
     {view === 'progress' && <section role="tabpanel" id="operations-panel-progress" aria-labelledby="operations-tab-progress" className="booking-operations">
+      {urgentService && <section className="service-decision" aria-label="Service needing coordinator action">
+        <ExclamationTriangleIcon aria-hidden="true"/>
+        <div><p>Vendor follow-up across the team</p><h2>{urgentService.title || 'Event awaiting service coverage'}</h2>
+          <span>{urgentService.detail}</span></div>
+        <Link className="btn-primary" to={urgentService.href}>Review service offers <ArrowUpRightIcon aria-hidden="true"/></Link>
+      </section>}
       {claimNotice && <p role="status" className="desk-notice">{claimNotice}</p>}
       <BookingJourneyBoard onClaim={recordClaim} onConflict={refreshAfterConflict} inquiries={data.inquiries} currentUserId={state.currentUser?.id} loaded={loaded.inquiries} error={sectionErrors.inquiries} />
       <aside className="operations-rail" aria-label="Dates and follow-ups">
