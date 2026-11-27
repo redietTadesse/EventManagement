@@ -6,7 +6,7 @@ Venue rental is the current AICC activity reported to the team. Event organizati
 
 ## Run locally
 
-The frontend is a React/Vite application in `src/`. The Spring Boot API is in `event-backend/`. Use Java 17 or later, Maven, Node.js and npm. For a persistent local installation, use a MySQL database dedicated to the app.
+The frontend is a React/Vite application in `src/`. The Spring Boot API is in `event-backend/`. Use Java 21, Maven, Node.js and npm. For a persistent local installation, use a MySQL database dedicated to the app.
 
 Set the following in PowerShell from the repository root, using your local database settings:
 
